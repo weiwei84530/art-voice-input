@@ -13,7 +13,7 @@ user presses Backspace n times: key:BACK*3), dbl:MS (a double tap, each press MS
 continuous listening is on: WAV and 1s of silence reach the microphone; feed:WAV+WAV joins clips with 0.6s pauses),
 logshot:NAME (the 辨識紀錄 tab saved as <dir>/NAME.png), wait:SEC (silence for SEC seconds), tap0 (a tap; the next step starts once it is known to be one,
 while queued work still runs), racemove:WORD (the caret moves after the last WORD, at the end when empty, right
-before the next draft update reaches the document), type:TEXT (type TEXT in the menu's input box and press Enter). Settings are never saved; hotwords and smart picks live in <dir> (hotwords.test.json,
+before the next draft update reaches the document). Settings are never saved; hotwords and smart picks live in <dir> (hotwords.test.json,
 smart-picks.test.json, emptied at the start), never in the real files.
 """
 import json
@@ -216,7 +216,7 @@ def _steps(arg: str) -> list[str]:
 def menu() -> str:
     if not A.picker.isVisible():
         return ""
-    return f"   氣泡：{A.picker.candidates}"
+    return f"   氣泡：{A.picker.tabs}"
 
 
 def _last_row() -> str:
@@ -345,17 +345,8 @@ try:
                 rows = A.picker.candidates
                 i = int(step[5:]) - 1 if step.startswith("pick:") else rows.index(step[6:]) if step[6:] in rows else -1
                 if 0 <= i < len(rows):
-                    A.picker._pick(i)
+                    A.picker.pick(rows[i])
             pump(0.5)
-            print(f"[{step}] {'' if shown else '（沒有氣泡）'} → 文字框：{box.text[:box.caret] + '|' + box.text[box.caret:]!r}"
-                  f"  熱詞：{A.hotwords.bias()}")
-            continue
-        if step.startswith("type:"):
-            shown = A.picker.isVisible()
-            if shown:
-                A.picker.input.setText(step[5:])
-                A.picker._submit()
-            pump(0.6)
             print(f"[{step}] {'' if shown else '（沒有氣泡）'} → 文字框：{box.text[:box.caret] + '|' + box.text[box.caret:]!r}"
                   f"  熱詞：{A.hotwords.bias()}")
             continue

@@ -312,21 +312,25 @@ the 結束錄音 step that rules_version 5 had added on 2026-10-14; an Enter ste
 
 The one popup is the 選字 menu (`picker.py`, the pre-lean look; a redesign is planned). The 加入熱詞 notice with 撤銷
 lived a few hours: the user wants hotwords added quietly (they come from deliberate picks and typing).
-- **The menu** (reworked 2026-10-11, the user's design): no title row; on top an input box as tall as a row,
-  placeholder 輸入加入詞庫 (輸入加入熱詞 until 2026-10-13). A click there activates the menu (WS_EX_NOACTIVATE is lifted, SetForegroundWindow) so an
-  input method works; Enter hides it, gives focus back to the window that had it and, 150ms later, replaces the
-  selection with the text like a pick and makes it a hotword at the cap (a single character is learned as a smart
-  pick instead); Esc closes. No timeout: any click outside the menu or key in another window closes it (mouse /
-  keyboard hooks; clicks in it and keys typed into it leave the session and the terminal selection alone), and an
-  activated menu closes when it loses focus. Not yet tried with a real IME and a terminal selection.
-- **選字** (command): the menu under the selection. One Chinese character: what the smart picks decide here, what
-  was picked for it before, then same-sounding characters. A Chinese word: homophones (`candidates.ranked`), the same reading with tones
-  first (the user's choice, 2026-10-11), then without tones, then fuzzy; within each: hotwords by weight (lowered ones last), common
-  words (frequency ≥ 5, since McBopomofo lists obscure entries like 逆號 at 1), frequency. English (2026-10-13):
-  first up to 4 known terms that sound like the selection (`sounds.py`; the user's list, ticked packs, terms on
-  screen: clock code → Claude Code, lanchin → LangChain, Deepsec → DeepSeek; 20 of 24 TTS mishearings first, 23
-  in the menu), then the spellings below. No threshold separates mishearings from ordinary words (commit ~ ComfyUI
-  scores like clock ~ Claude), so an ordinary word gets a few look-alikes above its spellings.
+- **The menu** (`picker.py`, redesigned 2026-10-16, the user's design): no input box (words are typed on the 詞庫
+  tab's 詞庫列表 instead, 200% as before); candidates in tabs by how close they sound, the pointer over a tab opens
+  it, empty tabs left out. The tabs sit on the side away from the selection (under the menu when it opens below,
+  on top when it flips above near the screen bottom), so the pointer coming from the selection reaches the
+  candidates first. A grid filled top to bottom, then left to right: 4x4 per tab for one Chinese character, 2x5 for
+  words and English; the grid keeps the tallest tab's size so hovering tabs does not resize it. No timeout: any
+  click outside the menu or key closes it.
+- **選字** (command; `App._menu_tabs`): Chinese (`candidates.ranked`): 同音 (the same reading with tones), 不同聲調,
+  模糊音; a single character's smart pick here and earlier picks first in their tab, then common before rare; a
+  word's hotwords first by weight. English: 近音字 (one word only; `sounds.near`: common English words that sound
+  alike, and the known terms ranked with them a little ahead: the user's choice), 詞庫 (known terms by
+  `sounds.alike`: the user's list, ticked packs, terms on screen: clock code → Claude Code, Deepsec → DeepSeek), 大小寫
+  (`memory.variants`, the most picked style first, hotwords among them first). Near sounds (2026-10-16):
+  `voiceinput/dict/english.tsv.gz` (`dev/build_english.py`): the 30k most frequent English words (wordfreq, data CC
+  BY-SA 4.0) that CMUdict (BSD) lists, with their ARPAbet pronunciations, plus the rest of CMUdict with frequency 0
+  (only to know how a selected word is said). Scored mostly by a weighted phoneme edit distance (vowels, voicing
+  pairs, m/n, l/r cost half) when the selection is in CMUdict, else by the consonant skeleton and letters; a
+  frequent word goes first among near equals; written in the selection's case. Bleep → Blip, Sleep, Bleed …;
+  ~0.2-0.35s per menu. A short blocklist keeps insults out.
 - **English spelling after recognition** (`spelling.py`, 2026-10-13, the user's choice): X-ASR often hears a term
   right and spells it its own way (Deep Seek, Notebook LM, fine tune). After `format_text`, a run of English words
   whose letters equal a known term's (user list, ticked packs, on-screen terms) is written as the term; case alone

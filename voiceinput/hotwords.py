@@ -2,7 +2,7 @@
 
 One list (DATA_DIR/hotword-list.json, shown on the 詞庫 tab; the UI calls hotwords 詞庫 since 2026-10-13). 100% leaves recognition alone, 200% pulls hardest
 toward the word, 0% pushes hardest away from it; the scores behind the percentages are not shown.
-- typed (source "manual"): a word typed in the 選字 menu's input box; 200%, never changed by picks.
+- typed (source "manual"): a word typed on the 詞庫 tab (in the 選字 menu until 2026-10-16); 200%, never changed by picks.
 - 選字: picking a word of two or more characters (or English) in the menu raises it by 30% and lowers the word it
   replaced by 30%, so swapping 程式 and 城市 back and forth returns both to 100% (where they leave the list).
 - ✕ on the 詞庫 tab puts a word back where it would be unlisted; the −/+ buttons that moved a word by 10% were
@@ -134,7 +134,7 @@ class Hotwords:
             return {w: p for w, p in out.items() if p != NEUTRAL}
 
     def add(self, word: str) -> bool:
-        """A word typed in the 選字 menu: a hotword at 200% (a picked one is promoted). False if not eligible."""
+        """A word typed on the 詞庫 tab: a hotword at 200% (a picked one is promoted). False if not eligible."""
         word = word.strip()
         if not eligible(word):
             return False

@@ -25,9 +25,8 @@ recognizer's 。？！ or gets 。 (a spoken mark is typed instead). Moving the 
 not typed yet is decoded again at the new caret. Other gestures work while listening.
 
 The one popup (picker.py) is the 選字 candidate menu; it came back 2026-10-11 after the lean branch removed every
-popup, and a redesign is planned (the 加入熱詞 notice with 撤銷 lived for a few hours the same day). Its input box
-takes a typed word, which replaces the selection and becomes a hotword. The second opinion (SenseVoice + suspects.py) is
-commented out below.
+popup and was redesigned 2026-10-16 (tabs by how close the candidates sound, no input box). The second opinion
+(SenseVoice + suspects.py) is commented out below.
 """
 import logging
 import os
@@ -56,6 +55,7 @@ from .memory import Memory, is_latin, situation
 from .mute import Muter
 from .output import backspace, paste_text, press_chord, press_delete
 from .overlay import Overlay
+from . import picker as picker_mod
 from .picker import Picker
 from .reading import reading_key
 from .rules import DOUBLE, HOLD, TAP
@@ -82,7 +82,6 @@ _NO_RECORD = "目前沒有任何操作會錄音，無法語音輸入。請到「
 # or Kalimba's tail moved the bars and Woodblock (0.19s) was muted before it was heard
 _CUE_LATENCY = 0.25
 _STEP_GAP = 0.03           # seconds between the steps of an operation
-_MENU_ROWS = 8
 _DRAFT_MAX = 60            # seconds: a longer draft is committed at a pause (decoding it again gets slow)
 _TAP_MAX = 0.6             # seconds: a press no hold operation takes, released sooner, is a tap
 _SPACED = re.compile(r"[A-Za-z0-9]")
@@ -128,7 +127,7 @@ class App(QObject):
     key_down = Signal(str, float)            # key name, time
     key_up = Signal(str, float)
     main = Signal(object)                    # run a callable on the Qt main thread (keystrokes, clipboard, UI)
-    candidates_ready = Signal(object, list)  # Selection, rows for the 選字 menu
+    candidates_ready = Signal(object, list)  # Selection, the 選字 menu's tabs
     record = Signal(dict)         # one transcript log entry for the settings window
     status = Signal(str)
 
@@ -181,7 +180,6 @@ class App(QObject):
         self.overlay.pill = self.cfg.show_indicator
         self.picker = Picker()
         self.picker.picked.connect(self.on_menu_pick)
-        self.picker.typed.connect(self.on_menu_typed)
         self.picker.closed.connect(self._forget_menu)
         self._picker_hwnd = int(self.picker.winId())
         self.settings = SettingsDialog(self.cfg, self.hotwords, self.memory)
@@ -216,6 +214,7 @@ class App(QObject):
         self.worker.submit(self._load_model_job)
         # self.bg.submit(self._load_second_job)
         candidates.preload()   # the disfluency pass uses the dictionary
+        sounds.preload_english()   # 選字's near sounds for English
         if self.cfg.autostart:
             self._set_autostart()   # re-register so the entry follows the app if its folder was moved
         if not self._could_record:
@@ -232,11 +231,7 @@ class App(QObject):
             return True
 
     def _on_other_key(self, vk: int):
-        """Keyboard hook thread: a key the user pressed (injected keys never get here). Typing in the 選字 menu's
-        input box leaves the target app alone; any other key closes the menu."""
-        import ctypes
-        if ctypes.windll.user32.GetForegroundWindow() == self._picker_hwnd:
-            return
+        """Keyboard hook thread: a key the user pressed (injected keys never get here); it closes the 選字 menu."""
         self.session.on_input()
         term_watcher.forget()
         self.main.emit(self.picker.dismiss)
@@ -1309,50 +1304,60 @@ class App(QObject):
         log.info("candidates for %r on %s", sel.text, sel.app)
         self._menu = ("pick", sel)
         self.picker.show_loading(sel.text.strip(), sel.rect)
-        threading.Thread(target=lambda: self.candidates_ready.emit(sel, self._menu_words(sel, terms)), daemon=True).start()
+        threading.Thread(target=lambda: self.candidates_ready.emit(sel, self._menu_tabs(sel, terms)), daemon=True).start()
 
-    def _menu_words(self, sel, terms=()) -> list[str]:
-        """Rows for the selection. One Chinese character: what the smart picks decide here, everything picked for it
-        before, then same-sounding characters. A Chinese word: same-sounding words, the same reading first; hotwords
-        first among equals, heaviest first. English: up to 4 known terms that sound like it (sounds.py: the user's
-        list, ticked term packs, terms on screen), then ways of writing it, the most picked style first (the
+    def _menu_tabs(self, sel, terms=()) -> list[tuple[str, list[str]]]:
+        """The menu's tabs for the selection, by how close they sound (the user's design, 2026-10-16); empty ones
+        left out. Chinese: 同音 (the same reading with tones), 不同聲調, 模糊音 (candidates.ranked); a single
+        character's smart pick here and earlier picks first in their tab, hotwords first among a word's. English:
+        近音字 (common English words and known terms that sound like one word, sounds.near), 詞庫 (known terms:
+        the user's list, ticked packs, terms on screen), 大小寫 (ways of writing it, the most picked style first,
         hotwords among them first)."""
         text = sel.text.strip()
+        tabs = []
         try:
             if is_latin(text):
-                rows = self.memory.ordered_variants(text)
                 known = self._known_terms(terms)
-            elif len(text) == 1:
-                rows = candidates.homophones(text)
+                if len(text.split()) == 1:
+                    tabs.append(("近音字", sounds.near(text, known, picker_mod.WORDS[0] * picker_mod.WORDS[1])))
+                tabs.append(("詞庫", sounds.alike(text, known, limit=10)))
+                forms = self.memory.ordered_variants(text)
+                weights = self.hotwords.weights_for(forms)
+                forms.sort(key=lambda w: -weights.get(w, 0))   # stable: the rest keep their order
+                tabs.append(("大小寫", forms))
             else:
-                # the same reading first (the user's choice, 2026-10-11: before common words of another tone), then
-                # without tones, fuzzy; within each, hotwords by weight, common words, frequency
                 found = candidates.ranked(text)
-                key = reading_key(text)
-                for h in self.hotwords.items:
-                    if h.word != text and h.word not in found and reading_key(h.word) == key:
-                        found[h.word] = (0, 0)
-                weights = self.hotwords.weights_for(found)
-                rows = sorted(found, key=lambda w: (found[w][0], -weights.get(w, 0),
-                                                    -found[w][1] < candidates.COMMON, found[w][1]))
-            if len(text) == 1:
-                key = reading_key(text)
-                line = sel.before + sel.text + sel.after
-                start = len(sel.before) + sel.text.index(text)
-                left, right = situation(line, start, start + 1)
-                rows = [self.memory.lookup(key, left, right, single=True)] + self.memory.values(key) + rows
-            elif is_latin(text):
-                weights = self.hotwords.weights_for(rows)
-                rows.sort(key=lambda w: -weights.get(w, 0))   # stable: the rest keep their order
-                rows = sounds.alike(text, known) + rows
+                if len(text) == 1:
+                    key = reading_key(text)
+                    line = sel.before + sel.text + sel.after
+                    start = len(sel.before) + sel.text.index(text)
+                    left, right = situation(line, start, start + 1)
+                    first = [self.memory.lookup(key, left, right, single=True)] + self.memory.values(key)
+                    order = lambda w: (-found[w][1] < candidates.COMMON, found[w][1])
+                else:
+                    key = reading_key(text)
+                    for h in self.hotwords.items:
+                        if h.word != text and h.word not in found and reading_key(h.word) == key:
+                            found[h.word] = (0, 0)
+                    first = []
+                    weights = self.hotwords.weights_for(found)
+                    order = lambda w: (-weights.get(w, 0), -found[w][1] < candidates.COMMON, found[w][1])
+                for rank, name in enumerate(("同音", "不同聲調", "模糊音")):
+                    words = sorted((w for w in found if found[w][0] == rank), key=order)
+                    mine = [w for w in first if w and (found.get(w, (0,))[0] == rank)]
+                    tabs.append((name, mine + words))
         except Exception:
             log.exception("candidates failed")
-            rows = []
+            tabs = []
         out = []
-        for w in rows:
-            if w and w != text and w not in out:
-                out.append(w)
-        return out[:_MENU_ROWS]
+        for name, words in tabs:
+            seen = []
+            for w in words:
+                if w and w != text and w not in seen:
+                    seen.append(w)
+            if seen:
+                out.append((name, seen))
+        return out
 
     def _known_terms(self, terms) -> list[str]:
         """English terms 選字 may offer for a misheard word: the user's list (highest 優先度 first), the ticked term
@@ -1360,33 +1365,25 @@ class App(QObject):
         listed = sorted((h for h in self.hotwords.items if is_latin(h.word)), key=lambda h: -h.pct)
         return [h.word for h in listed] + [w for w in self.hotwords.pack_pct if is_latin(w)] + list(terms)
 
-    def on_candidates(self, sel, words: list):
+    def on_candidates(self, sel, tabs: list):
         if self._menu and self._menu[0] == "pick" and self._menu[1] is sel and self.picker.isVisible():
-            self.picker.show_candidates(sel.text.strip(), words)
+            self.picker.show_candidates(sel.text.strip(), tabs)
 
     def _forget_menu(self):
         self._menu = None
 
-    def on_menu_pick(self, row: int):
-        menu, words = self._menu, self.picker.candidates
-        self._menu = None
-        if menu and menu[0] == "pick" and 0 <= row < len(words):
-            self._apply_pick(menu[1], words[row])
-
-    def on_menu_typed(self, word: str):
-        """Text typed in the menu's input box: once focus is back in the app, it replaces the selection like a pick
-        and becomes a hotword at the highest weight (single characters are learned as smart picks instead)."""
+    def on_menu_pick(self, word: str):
         menu = self._menu
         self._menu = None
-        if menu and menu[0] == "pick":
-            QTimer.singleShot(150, lambda: self._apply_pick(menu[1], word, typed=True))
+        if menu and menu[0] == "pick" and word:
+            self._apply_pick(menu[1], word)
 
-    def _apply_pick(self, sel, word: str, typed: bool = False):
+    def _apply_pick(self, sel, word: str):
         """A pick replaces the selection. A single character is learned with its context (smart picks); a word
         gains hotword weight and the word it replaced loses some."""
         text = sel.text.strip()
         lead = sel.text.index(text)
-        log.info("menu %s: %s -> %s", "typed" if typed else "pick", text, word)
+        log.info("menu pick: %s -> %s", text, word)
         if sel.term is not None:
             self.overlay.hide_now()
         pasted = _paste_over(sel, sel.text[:lead] + word + sel.text[lead + len(text):])
@@ -1399,15 +1396,13 @@ class App(QObject):
         start = len(sel.before) + lead
         self.memory.record(line, start, start + len(text), word)
         if self.cfg.save_recordings:
-            recordings.note("typed" if typed else "pick", before=text, after=word, line=line)
+            recordings.note("pick", before=text, after=word, line=line)
         self.hotwords.picked(text, word)
-        if typed and self.hotwords.add(word):
-            log.info("hotword typed: %s", word)
         self._suggest_pack(word)
         self.settings.refresh_hotwords()
         self.session.replaced_selection(sel.before, word, foreground())
         self.record.emit({"time": time.strftime("%H:%M:%S"), "kind": "選字", "main": f"{text} → {word}", "copy": word,
-                          "steps": [("選單輸入", word, None)] if typed else []})
+                          "steps": []})
 
     # --- settings / status ---
     def on_status(self, text: str):

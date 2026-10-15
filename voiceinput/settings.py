@@ -452,9 +452,19 @@ class SettingsDialog(QDialog):
         no_packs.hide()
         self._pack_stamp = None
 
+        # typing a word here replaced the 選字 menu's input box (2026-10-16, the user's choice): 200%, like before
+        self.hw_input = QLineEdit(placeholderText="輸入詞語加入詞庫")
+        self.hw_input.returnPressed.connect(self._add_hotword)
+        add = QPushButton("加入")
+        add.clicked.connect(self._add_hotword)
+        hw_top = QVBoxLayout()
+        add_row = QHBoxLayout()
+        add_row.addWidget(self.hw_input, 1)
+        add_row.addWidget(add)
+        hw_top.addLayout(add_row)
+        hw_top.addLayout(self._sort_row(HOTWORD_SORTS, "hotword_sort"))
         self.hw_list, self.hw_empty, hw_body = _card_list(
-            "詞庫裡還沒有詞。選字時選了詞語（被換掉的詞也會列出，優先度較低），或在選字選單的輸入框輸入文字，就會加到這裡。",
-            self._sort_row(HOTWORD_SORTS, "hotword_sort"))
+            "詞庫裡還沒有詞。選字時選了詞語（被換掉的詞也會列出，優先度較低），或在上面輸入詞語，就會加到這裡。", hw_top)
         self.pick_list, self.pick_empty, pick_body = _card_list(
             "還沒有記下的字。用選字換掉單一個中文字，就會記下它前後的字，之後在同樣的前後文自動換成那個字。",
             self._sort_row(PICK_SORTS, "pick_sort"))
@@ -648,6 +658,17 @@ class SettingsDialog(QDialog):
 
     def _remove_alias(self, word: str, alias: str):
         self.hotwords.remove_alias(word, alias)
+        self.refresh_hotwords()
+
+    def _add_hotword(self):
+        word = self.hw_input.text().strip()
+        if not word:
+            return
+        if not self.hotwords.add(word):
+            QToolTip.showText(self.hw_input.mapToGlobal(self.hw_input.rect().bottomLeft()), "單一個中文字不能加入詞庫",
+                              self.hw_input)
+            return
+        self.hw_input.clear()
         self.refresh_hotwords()
 
     def _remove_hotword(self, word: str):

@@ -8,8 +8,11 @@ vowels, a doubled letter. A short acronym is read as letter names first (CNS -> 
 on the TTS mishearings of the AI pack (dev experiment 2026-10-13): 20 of 22 targets first, Claude for clock and
 Gemini for Jimmy second; ordinary words (email, meeting) get look-alikes scoring up to ~0.67.
 """
+import gzip
 import re
+import threading
 from difflib import SequenceMatcher
+from pathlib import Path
 
 THRESHOLD = 0.6
 
@@ -72,3 +75,100 @@ def alike(heard: str, terms, limit: int = 4) -> list[str]:
         if s >= THRESHOLD:
             scored.append((-s, i, term))
     return [t for _, _, t in sorted(scored)[:limit]]
+
+
+# --- common English words that sound alike (2026-10-16, the user's request: 選字 on an English word should offer
+# near sounds, not only known terms) ---
+_ENGLISH = Path(__file__).resolve().parent / "dict" / "english.tsv.gz"
+_VOWELS = set("AA AE AH AO AW AY EH ER EY IH IY OW OY UH UW".split())
+_PAIRS = {frozenset(p) for p in ("B P", "D T", "G K", "V F", "Z S", "ZH SH", "DH TH", "JH CH", "M N", "N NG",
+                                 "TH F", "DH D", "L R", "W V", "S SH", "Z ZH")}
+_english: list | None = None   # [(word, zipf, pronunciations, key)]
+_by_word: dict = {}
+_english_lock = threading.Lock()
+
+
+def _load_english() -> list:
+    global _english
+    with _english_lock:
+        if _english is None:
+            rows = []
+            with gzip.open(_ENGLISH, "rt", encoding="utf-8") as f:
+                for line in f:
+                    word, zipf, prons = line.rstrip("\n").split("\t")
+                    prons = [p.split() for p in prons.split("|")]
+                    if zipf == "0":   # only how a selected word is said
+                        _by_word[word] = (word, 0, prons, "")
+                    else:
+                        rows.append((word, int(zipf) / 100, prons, key(word)))
+            _by_word.update((r[0], r) for r in rows)
+            _english = rows
+        return _english
+
+
+def preload_english():
+    threading.Thread(target=_load_english, daemon=True).start()
+
+
+def _phone_cost(a: str, b: str) -> float:
+    if a == b:
+        return 0
+    if a in _VOWELS and b in _VOWELS:
+        return 0.5
+    return 0.5 if frozenset((a, b)) in _PAIRS else 1
+
+
+def _phone_distance(a: list, b: list) -> float:
+    prev = [j * 1.0 for j in range(len(b) + 1)]
+    for i, ca in enumerate(a, 1):
+        cur = [float(i)]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + _phone_cost(ca, cb)))
+        prev = cur
+    return prev[-1]
+
+
+def _by_phones(pa: list, pb: list) -> float:
+    return max(1 - _phone_distance(x, y) / max(len(x), len(y)) for x in pa for y in pb)
+
+
+def _cased(word: str, like: str) -> str:
+    """word written in the case of like: all capitals, a capital first, or lower case."""
+    letters = [c for c in like if c.isalpha()]
+    if len(letters) > 1 and all(c.isupper() for c in letters):
+        return word.upper()
+    return word.capitalize() if like[:1].isupper() else word
+
+
+def near(heard: str, known=(), limit: int = 10) -> list[str]:
+    """Words that sound like one English word heard, best first: common English words (english.tsv.gz) and the
+    known terms together (the user's choice, 2026-10-16), a known term a little ahead at the same similarity.
+    Common words are compared by their pronunciations when heard is in the list too, and always by the consonant
+    skeleton and the letters; a more frequent word goes first among near equals. Never heard itself."""
+    h = heard.strip()
+    low = h.lower()
+    if not re.fullmatch(r"[A-Za-z]+", h):
+        return []
+    rows = _load_english()
+    kh = key(h)
+    mine = _by_word.get(low)
+    scored = {}
+    for word, zipf, prons, k in rows:
+        if word == low or abs(len(k) - len(kh)) > 2 or abs(len(word) - len(low)) > 4:
+            continue
+        by_key = 1 - _distance(kh, k) / max(len(kh), len(k), 1)
+        if by_key < 0.5:
+            continue
+        by_letters = SequenceMatcher(None, low, word).ratio()
+        if mine is not None:   # how both are said, mostly; the letters break ties
+            s = 0.75 * _by_phones(mine[2], prons) + 0.25 * by_letters
+        else:
+            s = max(by_key * 0.9, by_letters)
+        if s >= THRESHOLD:
+            scored[word] = (s + zipf * 0.01, _cased(word, h))
+    for term in dict.fromkeys(known):   # written as known (claude is a common word too: Claude once)
+        if term.lower() != low:
+            s = similarity(h, term) + 0.12
+            if s >= THRESHOLD + 0.12:
+                scored[term.lower()] = (max(s, scored.get(term.lower(), (0,))[0]), term)
+    return [w for _, w in sorted(scored.values(), key=lambda sw: -sw[0])[:limit]]
