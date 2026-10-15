@@ -92,7 +92,19 @@ for mod in (appmod, output):
 appmod.backspace = box.back
 appmod.press_delete = box.delete
 appmod.press_chord = box.keys
-appmod.press_key = box.keys
+
+
+def _press_key(vk, n=1):
+    """Left moves the caret, Delete deletes after it; others are printed."""
+    if vk == 0x25:
+        box.caret = max(0, box.caret - n)
+    elif vk == 0x2E:
+        box.text = box.text[:box.caret] + box.text[box.caret + n:]
+    else:
+        box.keys(*([vk] * n))
+
+
+appmod.press_key = _press_key
 appmod.foreground = session.foreground = lambda: HWND
 appmod.Hotkeys.start = lambda self: None           # no real hotkey / keyboard hook
 replayed = []                                      # gestures given back to the key (key name per press)

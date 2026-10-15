@@ -87,17 +87,46 @@ def focus_info():
         key = (ctypes.windll.user32.GetForegroundWindow(), tuple(el.GetRuntimeId() or ()))
         rect = None
         if editable:
+            pattern = el.GetCurrentPattern(U.UIA_TextPatternId)
+            pattern = pattern.QueryInterface(U.IUIAutomationTextPattern) if pattern else None
             if _proc_name(el.CurrentProcessId) in _TERMINALS or el.CurrentClassName == "TermControl":
-                pattern = el.GetCurrentPattern(U.UIA_TextPatternId)
-                cursor = _term_cursor(pattern.QueryInterface(U.IUIAutomationTextPattern)) if pattern else None
+                cursor = _term_cursor(pattern) if pattern else None
                 if cursor is not None:
-                    rect = _char_rect(*cursor)
+                    x, y, w, h = _char_rect(*cursor)
+                    rect = (x, y, 0, h)
+            elif pattern:
+                rect = _caret_rect(pattern, U)
             if rect is None:
                 r = el.CurrentBoundingRectangle
                 rect = (r.left, r.top, r.right - r.left, r.bottom - r.top)
         return editable, key, rect
     except Exception:
         return None, None, None
+
+
+def _caret_rect(pattern, U):
+    """(x, y, 0, h) of the caret, physical pixels: the right edge of the character before it, else the left edge of
+    the one after it (an empty degenerate range has no rectangle)."""
+    try:
+        ranges = pattern.GetSelection()
+        if ranges.Length < 1:
+            return None
+        r = ranges.GetElement(0).Clone()
+        r.MoveEndpointByRange(U.TextPatternRangeEndpoint_Start, r, U.TextPatternRangeEndpoint_End)
+        before = r.Clone()
+        if before.MoveEndpointByUnit(U.TextPatternRangeEndpoint_Start, U.TextUnit_Character, -1):
+            flat = list(before.GetBoundingRectangles() or [])
+            if len(flat) >= 4 and before.GetText(-1) not in ("\r", "\n", "\r\n"):
+                x, y, w, h = flat[-4:]
+                return (x + w, y, 0, h)
+        after = r.Clone()
+        if after.MoveEndpointByUnit(U.TextPatternRangeEndpoint_End, U.TextUnit_Character, 1):
+            flat = list(after.GetBoundingRectangles() or [])
+            if len(flat) >= 4:
+                return (flat[0], flat[1], 0, flat[3])
+    except Exception:
+        pass
+    return None
 
 
 def focus_editable() -> bool | None:

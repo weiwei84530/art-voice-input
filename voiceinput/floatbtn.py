@@ -1,11 +1,11 @@
-"""The floating microphone button (2026-10-16, the user's request; a 一般 checkbox): always on top while listening is
-off, a click turns listening on. It never takes focus, so the text goes to the window that had it, as with the
-key. Dragged, it stays where it was dropped; its place is kept as a fraction of the screen, and it shows on the
+"""The floating microphone button (2026-10-16, the user's request; on_focus "float"): on top, fading in while listening
+is off and the focus is where text can be typed; a click turns listening on. It never takes focus, so the text goes
+to the window that had it, as with the key. Dragged, it stays where it was dropped; its place is kept as a fraction of the screen, and it shows on the
 screen the pointer is on at that same place (the user has three screens).
 """
 import ctypes
 
-from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QPoint, QPointF, QPropertyAnimation, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
@@ -14,9 +14,9 @@ _GWL_EXSTYLE, _WS_EX_NOACTIVATE, _WS_EX_TOPMOST = -20, 0x08000000, 0x8
 
 
 class Bubble(QWidget):
-    """The small microphone bubble next to a text box the focus just came into (on_focus "bubble", 2026-10-16, the
-    user's request): a click turns listening on; it goes after 5s, when the focus leaves or listening starts. Never
-    takes focus."""
+    """The small microphone bubble right of the caret of a text box the focus just came into (on_focus "bubble",
+    2026-10-16, the user's requests): a click turns listening on; it follows the caret, and goes when the user types,
+    the focus leaves or listening starts (it stays while nothing happens). Never takes focus."""
     clicked = Signal()
     SIZE = 28
 
@@ -27,14 +27,13 @@ class Bubble(QWidget):
         self.setFixedSize(self.SIZE, self.SIZE)
         self.setToolTip("開啟麥克風")
         self._hover = False
-        self._timer = QTimer(self, singleShot=True, interval=5000, timeout=self.hide)
 
     def hwnd(self) -> int:
         return int(self.winId())
 
     def show_by(self, rect):
-        """rect: (x, y, w, h) in physical pixels of the text box or the terminal cursor; the bubble goes right of
-        its bottom end, kept on screen."""
+        """rect: (x, y, w, h) in physical pixels of the caret (w 0) or, unknown, the text box; the bubble goes just
+        right of it, centered on a caret's line, kept on screen."""
         x, y, w, h = (int(v) for v in rect)
         p, ratio = _logical(x + w, y + h)
         screen = QGuiApplication.screenAt(p) or QGuiApplication.primaryScreen()
@@ -45,7 +44,6 @@ class Bubble(QWidget):
         hwnd = self.hwnd()
         u32 = ctypes.windll.user32
         u32.SetWindowLongW(hwnd, _GWL_EXSTYLE, u32.GetWindowLongW(hwnd, _GWL_EXSTYLE) | _WS_EX_NOACTIVATE | _WS_EX_TOPMOST)
-        self._timer.start()
 
     def paintEvent(self, e):
         p = QPainter(self)
@@ -57,12 +55,10 @@ class Bubble(QWidget):
 
     def enterEvent(self, e):
         self._hover = True
-        self._timer.stop()
         self.update()
 
     def leaveEvent(self, e):
         self._hover = False
-        self._timer.start()
         self.update()
 
     def mouseReleaseEvent(self, e):
@@ -111,6 +107,7 @@ class FloatButton(QWidget):
         self._dragged = False
         self._hover = False
         self._follow = QTimer(self, interval=300, timeout=self._follow_pointer)
+        self._fade = QPropertyAnimation(self, b"windowOpacity", self, duration=180, startValue=0.0, endValue=1.0)
 
     def hwnd(self) -> int:
         return int(self.winId())
@@ -119,7 +116,10 @@ class FloatButton(QWidget):
         if not self.isVisible():
             self._screen = None
             self._follow_pointer()
+            self.setWindowOpacity(0.0)
             self.show()
+            self._fade.stop()
+            self._fade.start()   # fades in (the user's request: it shows when text can be typed)
             hwnd = self.hwnd()
             u32 = ctypes.windll.user32
             u32.SetWindowLongW(hwnd, _GWL_EXSTYLE, u32.GetWindowLongW(hwnd, _GWL_EXSTYLE)

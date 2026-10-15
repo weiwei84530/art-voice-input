@@ -6,8 +6,9 @@ dictation is done by pressing Backspace up to the edit point and pasting the new
 terminals included (Claude Code), because it needs neither UI Automation nor a selection. Any key press or mouse
 click from the user ends the buffer: the caret may have moved.
 
-復原 (a double tap or saying it) takes back the last change VoiceInput made, up to UNDO_DEPTH of them, while they
-are still right before the caret (the user's request, 2026-10-14; one, the last dictation, from 2026-10-04): typed
+復原 (a double tap or saying it) takes back the last change VoiceInput made, one each time, all of them while the
+caret has not moved (unlimited since 2026-10-16, the user's request; 3 from 2026-10-14; one, the last dictation, from
+2026-10-04): typed
 text, a punctuation mark, a new line, text spoken over a selection (the selection comes back), a deleted
 selection. A draft counts each pause's update as a change (the user's request, 2026-10-15: a whole draft at once
 took back what was said long before).
@@ -16,7 +17,6 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-UNDO_DEPTH = 3
 
 
 def foreground() -> int:
@@ -39,6 +39,7 @@ class Step:
     before: str             # the buffer before the change
     after: str              # the buffer right after it
     utterances: list        # Session.utterances before the change, restored when it is deleted
+    tail: int = 0           # characters it also put after the caret (左右輸入文字), deleted with it
 
 
 class Session:
@@ -73,8 +74,14 @@ class Session:
             self.hwnd, self.dirty = hwnd, False
             return u
 
+    def wrapped(self, left: str, right: str, hwnd: int):
+        """Record left + right pasted with the caret moved back between them."""
+        with self._lock:
+            self.dictated(left, None, hwnd)
+            self.history[-1].tail = len(right)
+
     def _push(self, step: Step):
-        self.history = (self.history + [step])[-UNDO_DEPTH:]
+        self.history.append(step)
 
     def replaced_selection(self, before: str, new: str, hwnd: int, undo_to: str | None = None):
         """Record an edit of a selection: the caret now follows new, with before (rest of the line) ahead.

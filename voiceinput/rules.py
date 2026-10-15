@@ -21,6 +21,7 @@ MOUSE, KEY, SPEECH = "mouse", "key", "speech"
 TAP, DOUBLE, HOLD = "tap", "double", "hold"
 ANY, DICTATED, SELECTION = "any", "dictated", "selection"
 COMMAND, KEYS, TEXT, WAIT = "command", "keys", "text", "wait"
+WRAP = "wrap"   # 左右輸入文字 (2026-10-16): value [left, right], typed around the caret or the selection
 RECORD, DELETE_SELECTION, DELETE_DICTATION = "record", "delete_selection", "delete_dictation"
 PICK = "pick"
 STOP = "stop"        # 結束錄音: listening off (送出 did it by default 2026-10-14/15)
@@ -36,8 +37,9 @@ _ADD_HOTWORD = "add_hotword"   # 加入熱詞, removed 2026-10-11: hotwords are 
 # double tap on a selection that deletes it, 8 adds the spoken 撤銷 (復原) and 刪除 (Backspace), 9 makes 送出 leave
 # listening on (the user's request, 2026-10-15: the microphone stays on, the key turns it off), 10: the simple
 # editor (simplify: hold on a selection = 選字 and the spoken 括號 dropped, 2026-10-16), 11 adds the spoken 結束
-# (結束錄音, the user's request the same day), 12 adds 全選 / 複製 / 剪下 / 貼上 (commands) and drops 貼上 = Alt+V
-VERSION = 12
+# (結束錄音, the user's request the same day), 12 adds 全選 / 複製 / 剪下 / 貼上 (commands) and drops 貼上 = Alt+V,
+# 13 brings the spoken 括號 back as 左右輸入文字 （ ）
+VERSION = 13
 
 _PUNCT = re.compile(r"[\s，。、！？；：,.!?;:…]+")
 
@@ -93,6 +95,7 @@ def defaults(key: str = "mouse_middle", newline: bool = True, send: bool = True)
             Rule(SPEECH, phrase="剪下", steps=[Step(COMMAND, CUT)]),
             Rule(SPEECH, phrase="貼上", steps=[Step(COMMAND, PASTE)]),
             Rule(SPEECH, phrase="標點", steps=[Step(TEXT, "- ")]),
+            Rule(SPEECH, phrase="括號", steps=[Step(WRAP, ["（", "）"])]),
             Rule(SPEECH, phrase="空白", steps=[Step(KEYS, "Space")])]
     return out
 
@@ -167,6 +170,8 @@ def upgrade(rules: list[Rule], version: int) -> list[Rule]:
                 r.steps.pop()
     if version < 11 and not any(r.source == SPEECH and normalize(r.phrase) == "結束" for r in rules):
         rules.append(Rule(SPEECH, phrase="結束", steps=[Step(COMMAND, STOP)]))
+    if version < 13 and not any(r.source == SPEECH and normalize(r.phrase) == "括號" for r in rules):
+        rules.append(Rule(SPEECH, phrase="括號", steps=[Step(WRAP, ["（", "）"])]))
     if version < 12:
         rules[:] = [r for r in rules if not (r.source == SPEECH and normalize(r.phrase) == "貼上"
                                              and [(st.type, st.value) for st in r.steps] == [(KEYS, "Alt+V")])]
@@ -203,7 +208,7 @@ def spoken_ok(rule: Rule) -> bool:
     if rule.source != SPEECH or len(rule.steps) != 1:
         return False
     st = rule.steps[0]
-    return st.type in (KEYS, TEXT) or st.type == COMMAND and st.value in (UNDO, STOP) + EDIT_COMMANDS
+    return st.type in (KEYS, TEXT, WRAP) or st.type == COMMAND and st.value in (UNDO, STOP) + EDIT_COMMANDS
 
 
 def simplify(rules: list[Rule]) -> list[Rule]:

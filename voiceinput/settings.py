@@ -22,7 +22,8 @@ from .keys import KEY_TRIGGERS, MOUSE_TRIGGERS, combo_text, is_modifier
 from .rules import Rule, Step
 
 GESTURES = [(rules.TAP, "按一下"), (rules.DOUBLE, "連按兩下"), (rules.HOLD, "按住")]
-SPOKEN_ACTIONS = [(rules.KEYS, "按鍵"), (rules.TEXT, "輸入文字"), (rules.UNDO, "復原"), (rules.STOP, "結束錄音"),
+SPOKEN_ACTIONS = [(rules.KEYS, "按鍵"), (rules.TEXT, "輸入文字"), (rules.WRAP, "左右輸入文字"), (rules.UNDO, "復原"),
+                  (rules.STOP, "結束錄音"),
                   (rules.SELECT_ALL, "全選"), (rules.COPY, "複製"), (rules.CUT, "剪下"), (rules.PASTE, "貼上")]
 _COMMAND_NOTES = {rules.UNDO: "收回 VoiceInput 剛做的修改", rules.STOP: "關閉麥克風（不按 Enter）",
                   rules.SELECT_ALL: "全選（終端機裡無法全選）", rules.COPY: "複製選取的文字",
@@ -299,13 +300,13 @@ class SettingsDialog(QDialog):
         self.spin.setToolTip("講完一段、程式還在辨識時，錄音指示的紅點外會有一圈在轉")
         self.show_pill = QCheckBox("錄音時顯示指示器（底部的小膠囊）")
         self.show_pill.setToolTip("關掉後，麥克風開著只靠提示音和螢幕邊緣光暈（有開的話）提醒你")
-        self.float_btn = QCheckBox("顯示浮動麥克風按鈕")
-        self.float_btn.setToolTip("麥克風關著時，畫面最上層有一個圓形按鈕，點它開啟麥克風（文字打到原本的視窗）；"
-                                  "可以拖曳，會出現在滑鼠所在的螢幕")
-        self.on_focus = QComboBox(toolTip="游標放進輸入框（含終端機）時：顯示一個小麥克風氣泡，點了開始錄音；或直接開麥克風，"
-                                          "游標離開到不能打字的地方（網頁空白處、按鈕、桌面）時關掉。用按鍵關掉後，換到別的輸入框才會再自動開")
+        self.on_focus = QComboBox(toolTip="游標放進輸入框（含終端機）時：游標旁出現小麥克風氣泡（一打字就收起來）；"
+                                          "或出現可拖動的浮動按鈕（不能打字的地方會隱藏，拖到哪就留在哪）；"
+                                          "或直接開麥克風，離開到網頁空白處、按鈕、桌面時關掉，用按鍵關掉後要換個輸入框才會再自動開。"
+                                          "點氣泡或按鈕開始錄音，文字打到原本的輸入框")
         self.on_focus.addItem("不做事", "")
-        self.on_focus.addItem("顯示語音氣泡", "bubble")
+        self.on_focus.addItem("游標旁顯示語音氣泡", "bubble")
+        self.on_focus.addItem("顯示可拖動的浮動按鈕", "float")
         self.on_focus.addItem("自動開麥克風（離開時關閉）", "listen")
         self.highlight = QCheckBox("還沒定稿的草稿以反白標示（實驗）")
         self.highlight.setToolTip("講話時還會再修正的字疊一層藍色反白，定稿後消失；只是畫在上面，不會真的選取文字")
@@ -346,7 +347,6 @@ class SettingsDialog(QDialog):
         form.addRow("", self.stop_on_send)
         form.addRow("", self.spin)
         form.addRow("", self.show_pill)
-        form.addRow("", self.float_btn)
         form.addRow("", self.highlight)
         form.addRow("", self.autostart)
         form.addRow("開發測試", audio_row)
@@ -365,7 +365,7 @@ class SettingsDialog(QDialog):
         self.on_focus.currentIndexChanged.connect(self._apply)
         self.auto_off.currentIndexChanged.connect(self._apply)
         self.glow.currentIndexChanged.connect(self._glow_changed)
-        for box in (self.punct, self.period_comma, self.describe, self.send_on_stop, self.stop_on_send, self.spin, self.show_pill, self.float_btn, self.highlight,
+        for box in (self.punct, self.period_comma, self.describe, self.send_on_stop, self.stop_on_send, self.spin, self.show_pill, self.highlight,
                     self.autostart,
                     self.mute, self.keep_audio):
             box.toggled.connect(self._apply)
@@ -383,7 +383,6 @@ class SettingsDialog(QDialog):
         self.stop_on_send.setChecked(self.cfg.stop_on_send)
         self.spin.setChecked(self.cfg.spin_while_decoding)
         self.show_pill.setChecked(self.cfg.show_indicator)
-        self.float_btn.setChecked(self.cfg.float_button)
         self.on_focus.setCurrentIndex(max(0, self.on_focus.findData(self.cfg.on_focus)))
         self.highlight.setChecked(self.cfg.highlight_draft)
         self.keep_audio.setChecked(self.cfg.save_recordings)
@@ -422,7 +421,6 @@ class SettingsDialog(QDialog):
         self.cfg.stop_on_send = self.stop_on_send.isChecked()
         self.cfg.spin_while_decoding = self.spin.isChecked()
         self.cfg.show_indicator = self.show_pill.isChecked()
-        self.cfg.float_button = self.float_btn.isChecked()
         self.cfg.on_focus = self.on_focus.currentData()
         self.cfg.highlight_draft = self.highlight.isChecked()
         self.cfg.save_recordings = self.keep_audio.isChecked()
@@ -884,6 +882,7 @@ class SettingsDialog(QDialog):
             edit = QLineEdit(row[0], placeholderText="要說的話")
             edit.textEdited.connect(lambda t, r=row: (r.__setitem__(0, t), self._rules_edited()))
             kind = _combo(SPOKEN_ACTIONS, row[2] if row[1] == rules.COMMAND else row[1])
+            kind.setMinimumContentsLength(6)
             kind.currentIndexChanged.connect(lambda _, k=kind, r=row: self._own_type(r, k.currentData()))
             if row[1] == rules.KEYS:
                 value = KeyCapture(row[2])
@@ -891,6 +890,19 @@ class SettingsDialog(QDialog):
             elif row[1] == rules.TEXT:
                 value = QLineEdit(row[2], placeholderText="要輸入的文字")
                 value.textEdited.connect(lambda t, r=row: (r.__setitem__(2, t), self._rules_edited()))
+            elif row[1] == rules.WRAP:
+                # two boxes: what goes left and right of the caret, or of the selected text
+                pair = list(row[2]) if isinstance(row[2], (list, tuple)) and len(row[2]) == 2 else ["", ""]
+                row[2] = pair
+                value = QWidget()
+                h = QHBoxLayout(value)
+                h.setContentsMargins(0, 0, 0, 0)
+                h.setSpacing(4)
+                for k, hint in ((0, "左邊"), (1, "右邊")):
+                    box = QLineEdit(pair[k], placeholderText=hint)
+                    box.textEdited.connect(lambda t, r=row, k=k: (r[2].__setitem__(k, t), self._rules_edited()))
+                    h.addWidget(box)
+                value.setToolTip("說出時在游標左右加入這兩段文字，游標留在中間；有選取文字時加在選取的文字兩邊")
             else:
                 value = QLabel(_COMMAND_NOTES.get(row[2], ""))
                 value.setStyleSheet("color: gray")
@@ -956,7 +968,7 @@ class SettingsDialog(QDialog):
 
     def _own_type(self, row: list, kind: str):
         row[1], row[2] = (rules.COMMAND, kind) if kind in (rules.UNDO, rules.STOP) + rules.EDIT_COMMANDS \
-            else (kind, "")
+            else (kind, ["", ""]) if kind == rules.WRAP else (kind, "")
         self._rules_edited()
         self._draw_rules()
 

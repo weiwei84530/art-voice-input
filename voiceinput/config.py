@@ -27,13 +27,12 @@ class Config:
     spin_while_decoding: bool = True   # the indicator's red dot spins while speech is being decoded
     glow: str = ""                 # glow.py style along the screen's edges while listening, "" for none
     show_indicator: bool = True    # the recording indicator (the pill); off, the glow and the sounds remain
-    # a floating microphone button, on top while listening is off; a click turns it on (the user's request,
-    # 2026-10-16); float_pos: its place as fractions of the screen's free range (floatbtn.py)
-    float_button: bool = True
+    # the floating microphone button's place (on_focus "float"), as fractions of the screen's free range
     float_pos: list = field(default_factory=lambda: [0.98, 0.88])
     # when the focus comes into a text box (2026-10-16, the user's requests): "" nothing, "bubble" a small microphone
-    # bubble next to it (a click listens), "listen" listening turns on, and off when the focus leaves for a place
-    # where nothing can be typed
+    # bubble by the caret (a click listens), "float" the draggable floating button, shown only while text can be
+    # typed where the focus is, "listen" listening turns on, and off when the focus leaves for a place where nothing
+    # can be typed
     on_focus: str = ""
     # the draft drawn as if selected (highlight.py), an experiment (the user's request, 2026-10-16)
     highlight_draft: bool = False
@@ -67,6 +66,8 @@ class Config:
             return cls()
         known = {k: v for k, v in data.items() if k in cls.__dataclass_fields__ and k not in ("rules", "rules_version")}
         cfg = cls(**known)
+        if data.get("float_button", False) and not data.get("on_focus"):
+            cfg.on_focus = "float"   # the floating button's checkbox (2026-10-16, a few hours) became this choice
         cfg.gesture_time = min(max(float(cfg.gesture_time), GESTURE_TIME_RANGE[0]), GESTURE_TIME_RANGE[1])
         if "rules" in data:
             cfg.rules = rules.simplify(rules.upgrade(rules.migrate([rules.Rule.from_dict(d) for d in data["rules"]]),

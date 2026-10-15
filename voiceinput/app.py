@@ -55,7 +55,7 @@ from .keys import MOUSE_TRIGGERS, combo_vks
 from .listen import LEAD, Listener
 from .memory import Memory, is_latin, situation
 from .mute import Muter
-from .output import backspace, copy_text, paste_text, press_chord, press_delete, restore_now
+from .output import backspace, copy_text, paste_text, press_chord, press_delete, press_key, restore_now
 from .overlay import Overlay
 from . import picker as picker_mod
 from .picker import Picker
@@ -63,7 +63,7 @@ from .reading import reading_key
 from .rules import DOUBLE, HOLD, TAP
 from .selection import (Context, ContextProbe, focus_info, move_cursor_after, term_watcher,
                         terminal_in_front)
-from .session import UNDO_DEPTH, Session, foreground
+from .session import Session, foreground
 from .settings import SettingsDialog
 from .textfmt import format_text, to_traditional
 
@@ -289,6 +289,7 @@ class App(QObject):
         self.session.on_input()
         term_watcher.forget()
         self.main.emit(self.picker.dismiss)
+        self.main.emit(self.bubble.hide)   # typing: the bubble is in the way (the user's request, 2026-10-16)
         self.main.emit(self._caret_left)
 
     def _on_picker(self, pt) -> bool:
@@ -613,8 +614,9 @@ class App(QObject):
 
     # --- the floating button and leaving text (2026-10-16) ---
     def _update_float(self):
-        """Main thread: the floating button shows while listening is off, when the setting says so."""
-        if self.cfg.float_button and not self._listening and not self._quitting:
+        """Main thread: in on_focus "float" the floating button fades in while listening is off and the focus is
+        where text can be typed (the user's request, 2026-10-16: listening is for editing text)."""
+        if self.cfg.on_focus == "float" and self._box is not None and not self._listening and not self._quitting:
             self.float_btn.appear()
         else:
             self.float_btn.vanish()
@@ -710,11 +712,14 @@ class App(QObject):
                 log.info("listen: on, the focus is in a text box")
                 if self._listen_now("focus", quiet=True):
                     self._box_auto = True
-            elif mode == "bubble" and new and not self._listening and rect:
-                self.bubble.show_by(rect)
+            elif mode == "bubble" and not self._listening and rect and (new or self.bubble.isVisible()):
+                self.bubble.show_by(rect)   # a new box, or following the caret
+            elif mode == "float":
+                self._update_float()
             return
         was, self._box = self._box, None
         self.bubble.hide()
+        self._update_float()
         if mode == "listen" and was is not None and self._listening:
             log.info("listen: off, the focus left the text box")
             self._stop_listen(send=False, by_focus=True)
@@ -1294,6 +1299,9 @@ class App(QObject):
                     else:
                         self._on_main(lambda: self._delete_selection(press, press.probe.result()))
                     continue
+                if step.type == rules.WRAP:
+                    self._on_main(lambda v=step.value: self._wrap(press, v, sel if press.key == "listen" else None))
+                    continue
                 if step.type == rules.COMMAND and step.value in rules.EDIT_COMMANDS:
                     self._on_main(lambda c=step.value: self._edit_command(press, c, sel))
                     continue
@@ -1356,6 +1364,20 @@ class App(QObject):
             s.changed(s.buffer[:-1])
         else:
             s.on_input()
+
+    def _wrap(self, press: _Press, value, sel):
+        """Main thread: 左右輸入文字 (2026-10-16, the user's request): left and right typed around the selection, or
+        around the caret, which stays between them; 復原 takes it back as one change."""
+        left, right = (list(value) + ["", ""])[:2] if isinstance(value, (list, tuple)) else (str(value or ""), "")
+        if not left and not right:
+            return
+        if sel is not None:
+            self._replace_selection(press, sel, left + sel.text + right)
+            return
+        paste_text(left + right)
+        if right:
+            press_key(0x25, len(right))   # Left: back between them
+        self.session.wrapped(left, right, foreground())
 
     def _replace_selection(self, press: _Press, sel, text: str):
         """Main thread: text typed over a terminal selection."""
@@ -1428,7 +1450,7 @@ class App(QObject):
 
     def undo(self):
         """Main thread, 復原 (and 刪除剛輸入的文字): take back VoiceInput's last change while it is still right before
-        the caret: up to session.UNDO_DEPTH of them, one each time; a draft's are its pauses' updates. After one,
+        the caret: all of them while the caret has not moved, one each time; a draft's are its pauses' updates. After one,
         what is left of the draft (or of the draft the last commit typed) is a draft again, its text fixed (decoded
         again, the audio taken back would come back): speech goes on after it, and a command or the end of
         listening gives it its sentence end (the user's choice, 2026-10-15: 細節 was left without its 。 after
@@ -1440,7 +1462,7 @@ class App(QObject):
             # a tray notice, so 復原 doing nothing is not a mystery (the user's request, 2026-10-15)
             moved = s.dirty or s.hwnd != foreground()
             self._notify("無法復原：游標移動、點擊或打字之後就不能再復原了" if moved and s.history else
-                         f"沒有可以復原的了（最多復原 {UNDO_DEPTH} 步）")
+                         "沒有可以復原的了")
             return
         d = self._draft
         if d is not None and d.placed and step.after.endswith(d.typed):
@@ -1459,6 +1481,8 @@ class App(QObject):
         backspace(n)
         if tail:
             paste_text(tail)
+        if step.tail:   # the right half of 左右輸入文字, after the caret
+            press_key(0x2E, step.tail)
         s.deleted_last(step)
         self._committed = None
         rest = ""

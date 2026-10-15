@@ -259,15 +259,16 @@ every 5s, not while decoding). The user sees listening as a switch now: on, it t
 mouse's edits until turned off.
 錄音時顯示指示器 (`show_indicator`, a 一般 checkbox, on by default; the user's request, 2026-10-15): off, the pill is
 not shown (the glow, the sounds and the tray icon still are).
-顯示浮動麥克風按鈕 (`float_button`, a 一般 checkbox, on by default; `floatbtn.py`, the user's request 2026-10-16):
-a round button on top of everything while listening is off; a click turns listening on like a tap of the key
-(`App._float_clicked`, a press named "button"; the key or 送出 turns it off). It never takes focus, so the text goes to
-the window that had it; clicks on it are not caret moves (mouse hook). Dragged, it stays there: its place is kept as
-fractions of the screen's free range (`float_pos`) and it shows at that place on the screen the pointer is on.
 游標進到輸入框時 (`on_focus`, a 一般 drop-down, 2026-10-16, the user's requests; it replaced the same evening's
-"turn listening off when another window comes to the front / a click leaves the text box" checkbox): 不做事, 顯示語音氣泡
-(`floatbtn.Bubble`: a small microphone right of the text box's bottom end, or of a terminal's cursor; a click
-listens; it goes after 5s, when the focus leaves or listening starts), or 自動開麥克風（離開時關閉）. Every 0.3s
+"turn listening off when another window comes to the front / a click leaves the text box" checkbox): 不做事,
+游標旁顯示語音氣泡 (`floatbtn.Bubble`: a small microphone just right of the caret (`selection._caret_rect`: the right
+edge of the character before it) or a terminal's cursor; a click listens; it follows the caret and stays while
+nothing happens, and goes when the user types, the focus leaves or listening starts), 顯示可拖動的浮動按鈕
+(`floatbtn.FloatButton`, the floating button's checkbox of a few hours before, migrated: a round button on top,
+fading in only while the focus is where text can be typed and listening is off, hidden elsewhere (the user's
+request: listening is for editing text); a click listens like a tap of the key; it never takes focus and clicks on it
+are not caret moves; dragged, it stays where it was dropped (`float_pos`, fractions of the screen's free range) on the
+screen the pointer is on), or 自動開麥克風（離開時關閉）. Every 0.3s
 (`App._watch_focus`, one thread for UI Automation) `selection.focus_info` reads the focused control: whether text can
 be typed there (`focus_editable`, measured in Chrome: a textarea or search box is a writable Edit, a contenteditable
 box such as ChatGPT's or Claude.ai's a focusable Group with a TextPattern and no ValuePattern, blank page the
@@ -330,8 +331,8 @@ operation that records turns listening off; quitting no longer waits up to 10s f
 thread.
 
 復原 (the command; a double tap and the spoken 復原 by default, the user's request 2026-10-14, replacing the
-double-tap deletes: rules_version 6 turns them into it) takes back VoiceInput's last change, up to three
-(`session.UNDO_DEPTH`, `Session.history`), one per use, while they are still right before the caret: typed text or a
+double-tap deletes: rules_version 6 turns them into it) takes back VoiceInput's last change, all of them while the
+caret has not moved (`Session.history`, unlimited since 2026-10-16, the user's request; three before), one per use, while they are still right before the caret: typed text or a
 draft (dropped, so it is not typed again at the commit), a punctuation mark, a new line (Shift+Enter is recorded as
 "\n"), text spoken over a selection (the selection comes back), a deleted selection. A double tap on a
 selection still deletes it (rules_version 7 adds that rule back, the user's request). A draft's changes are its pauses'
@@ -366,6 +367,12 @@ borrowed is put back first (`output.restore_now`), or its restore 0.4s later wou
 operation's Backspace / Delete or text step acts on a terminal selection instead of the cursor (the user's request:
 in Claude Code a mouse selection leaves the cursor where it was, so 刪除 deleted there; Claude Code's question box
 row "❯ 3. …" counts as an input box). Not yet tried in a real terminal.
+
+左右輸入文字 (`rules.WRAP`, a spoken action with two boxes, 2026-10-16, the user's design; the default 括號 = （ ）,
+rules_version 13): left and right typed around the caret, which is moved back between them (Left keys), one change
+for 復原 (`Session.wrapped`; `Step.tail` counts the characters after the caret it deletes with Delete); with text
+selected (any app) they go around the selection. Dictating between them gets no added 。 (the caret has text on
+both sides).
 
 ## 選字, smart picks and hotwords (2026-10-11, reworked the same day)
 
