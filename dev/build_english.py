@@ -20,7 +20,8 @@ OUT = Path(__file__).resolve().parent.parent / "voiceinput" / "dict" / "english.
 # never offered: a near sound of an ordinary word should not be an insult
 _BLOCK = {"shit", "fuck", "fucking", "fucked", "cunt", "bitch", "dick", "cock", "pussy", "slut", "whore", "nigger",
           "nigga", "fag", "faggot", "retard", "retarded", "asshole", "bastard", "damn", "piss", "tits", "boobs",
-          "porn", "sex", "sexy", "rape", "nazi", "dildo", "anal", "penis", "vagina", "horny", "cum", "jizz"}
+          "porn", "sex", "sexy", "rape", "raped", "nazi", "lynch", "lynching", "cumming", "dildo", "anal", "penis",
+          "vagina", "horny", "cum", "jizz"}
 
 
 def main():

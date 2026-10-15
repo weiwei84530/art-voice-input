@@ -4,7 +4,7 @@ place of the focused app, so nothing is typed into real windows. Audio comes fro
   .venv\Scripts\python.exe dev\headless.py <dir> step,step,...
 
 Each step is a wav name in <dir>/wav (the hotkey held while it is spoken), sel:WORD (select the last WORD in the
-box), click (the user clicks: ends what the app knows about the text), tap (one tap of the hotkey), undo / tap2
+box), mousesel:WORD (the same with the mouse: the 選字 menu may open while listening), click (the user clicks: ends what the app knows about the text), tap (one tap of the hotkey), undo / tap2
 (double tap), toggle:WAV (tap, speak, tap),
 hotkey:NAME (the key or button the next steps press, default mouse_middle), rules:default (the default operations), rules:norecord (every operation that records removed),
 rule:JSON (add an operation, rules.Rule.from_dict), at:WORD (put the caret right after the last WORD; at: puts it at
@@ -246,6 +246,16 @@ while time.monotonic() - t0 < 120 and not A.recognizer:
 pump(2)
 try:
     for step in _steps(sys.argv[2]):
+        if step.startswith("mousesel:"):   # the user selects the last WORD with the mouse (a drag)
+            w = step[9:]
+            i = box.text.rfind(w)
+            box.sel, box.caret = (i, i + len(w)), i + len(w)
+            user_input()
+            A._pick_gen += 1
+            A._auto_pick()
+            pump(1.0)
+            print(f"[滑鼠選取 {w}]{menu()}")
+            continue
         if step.startswith("sel:"):
             w = step[4:]
             i = box.text.rfind(w)

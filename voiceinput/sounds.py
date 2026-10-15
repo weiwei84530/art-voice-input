@@ -140,11 +140,23 @@ def _cased(word: str, like: str) -> str:
     return word.capitalize() if like[:1].isupper() else word
 
 
+def _near_score(low: str, kh: str, mine, word: str, prons) -> float:
+    """How much word sounds like the heard word low (consonant skeleton kh, pronunciations mine or None)."""
+    k = key(word)
+    by_key = 1 - _distance(kh, k) / max(len(kh), len(k), 1)
+    if by_key < 0.5:
+        return 0.0
+    by_letters = SequenceMatcher(None, low, word.lower()).ratio()
+    if mine is not None and prons:   # how both are said, mostly; the letters break ties
+        return 0.75 * _by_phones(mine[2], prons) + 0.25 * by_letters
+    return max(by_key * 0.9, by_letters)
+
+
 def near(heard: str, known=(), limit: int = 10) -> list[str]:
     """Words that sound like one English word heard, best first: common English words (english.tsv.gz) and the
     known terms together (the user's choice, 2026-10-16), a known term a little ahead at the same similarity.
-    Common words are compared by their pronunciations when heard is in the list too, and always by the consonant
-    skeleton and the letters; a more frequent word goes first among near equals. Never heard itself."""
+    Compared by pronunciations when both are in CMUdict, else by the consonant skeleton and the letters; a more
+    frequent word goes first among near equals. Never heard itself."""
     h = heard.strip()
     low = h.lower()
     if not re.fullmatch(r"[A-Za-z]+", h):
@@ -156,19 +168,14 @@ def near(heard: str, known=(), limit: int = 10) -> list[str]:
     for word, zipf, prons, k in rows:
         if word == low or abs(len(k) - len(kh)) > 2 or abs(len(word) - len(low)) > 4:
             continue
-        by_key = 1 - _distance(kh, k) / max(len(kh), len(k), 1)
-        if by_key < 0.5:
-            continue
-        by_letters = SequenceMatcher(None, low, word).ratio()
-        if mine is not None:   # how both are said, mostly; the letters break ties
-            s = 0.75 * _by_phones(mine[2], prons) + 0.25 * by_letters
-        else:
-            s = max(by_key * 0.9, by_letters)
+        s = _near_score(low, kh, mine, word, prons)
         if s >= THRESHOLD:
             scored[word] = (s + zipf * 0.01, _cased(word, h))
     for term in dict.fromkeys(known):   # written as known (claude is a common word too: Claude once)
-        if term.lower() != low:
-            s = similarity(h, term) + 0.12
-            if s >= THRESHOLD + 0.12:
-                scored[term.lower()] = (max(s, scored.get(term.lower(), (0,))[0]), term)
+        t = term.lower()
+        if t == low or not re.fullmatch(r"[a-z]+", t):
+            continue
+        s = _near_score(low, kh, mine, t, _by_word.get(t, (0, 0, None))[2])
+        if s >= THRESHOLD:
+            scored[t] = (max(s + 0.08, scored.get(t, (0,))[0]), term)
     return [w for _, w in sorted(scored.values(), key=lambda sw: -sw[0])[:limit]]

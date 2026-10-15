@@ -331,6 +331,10 @@ lived a few hours: the user wants hotwords added quietly (they come from deliber
   pairs, m/n, l/r cost half) when the selection is in CMUdict, else by the consonant skeleton and letters; a
   frequent word goes first among near equals; written in the selection's case. Bleep → Blip, Sleep, Bleed …;
   ~0.2-0.35s per menu. A short blocklist keeps insults out.
+- **The menu opens by itself while listening** (`App._auto_pick`, 2026-10-16, the user's request: no key needed):
+  a left-button drag or double click (mouse only: a keyboard selection may be editing) that selects up to 4
+  Chinese characters or 3 English words, read 80ms after the button comes up (UIA, or the terminal watcher). A
+  longer selection is left for speech to replace. Speech typed over the selection closes the menu.
 - **English spelling after recognition** (`spelling.py`, 2026-10-13, the user's choice): X-ASR often hears a term
   right and spells it its own way (Deep Seek, Notebook LM, fine tune). After `format_text`, a run of English words
   whose letters equal a known term's (user list, ticked packs, on-screen terms) is written as the term; case alone

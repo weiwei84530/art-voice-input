@@ -85,6 +85,27 @@ _STEP_GAP = 0.03           # seconds between the steps of an operation
 _DRAFT_MAX = 60            # seconds: a longer draft is committed at a pause (decoding it again gets slow)
 _TAP_MAX = 0.6             # seconds: a press no hold operation takes, released sooner, is a tap
 _SPACED = re.compile(r"[A-Za-z0-9]")
+_PICK_ZH = re.compile(r"[㐀-䶿一-鿿]{1,4}")
+_PICK_EN = re.compile(r"[A-Za-z][\w'.+-]*(?: [\w'.+-]+){0,2}")
+
+
+def _pickable(text: str) -> bool:
+    """Short enough for the 選字 menu to open by itself: up to 4 Chinese characters or 3 English words."""
+    t = text.strip()
+    return bool(_PICK_ZH.fullmatch(t) or _PICK_EN.fullmatch(t) and t.isascii())
+
+
+def _double_click_time() -> float:
+    import ctypes
+    return ctypes.windll.user32.GetDoubleClickTime() / 1000
+
+
+def foreground_pid() -> int:
+    import ctypes
+    import ctypes.wintypes
+    pid = ctypes.wintypes.DWORD()
+    ctypes.windll.user32.GetWindowThreadProcessId(ctypes.windll.user32.GetForegroundWindow(), ctypes.byref(pid))
+    return pid.value
 
 
 @dataclass
@@ -168,6 +189,7 @@ class App(QObject):
         self._load_packs()
         self.memory = Memory()
         self._menu = None                        # ("pick", Selection) while the 選字 menu is up
+        self._pick_gen = 0                       # mouse presses so far: a selection read late is dropped
 
         self.icon_idle = make_icon(QColor(235, 235, 235) if self._dark_taskbar() else QColor(40, 40, 40))
         self.icon_rec = make_icon(QColor(255, 69, 58))
@@ -250,6 +272,7 @@ class App(QObject):
         drags may select text in a terminal (selection.TermWatcher). Our own clicks (injected) are skipped."""
         from pynput import mouse
         downs = {0x201, 0x204, 0x207, 0x20B}   # left / right / middle / x button down
+        clicks = {"down": None, "n": 0, "at": 0.0, "pt": None}   # the left button, for _auto_pick
 
         def on_event(msg, data):
             if data.flags & 1:   # LLMHF_INJECTED
@@ -262,12 +285,28 @@ class App(QObject):
                 self.main.emit(self.picker.dismiss)   # a click anywhere else closes it
                 self.session.on_input()
                 self.main.emit(self._caret_left)
+                self._pick_gen += 1
                 if msg == 0x201:
                     term_watcher.mouse_down(data.pt.x, data.pt.y)
+                    clicks["down"] = (data.pt.x, data.pt.y)
                 else:
                     term_watcher.forget()
+                    clicks["down"] = None
             elif msg == 0x202:
                 term_watcher.mouse_up(data.pt.x, data.pt.y)
+                down, clicks["down"] = clicks["down"], None
+                if down is not None and self._listening:
+                    x, y = data.pt.x, data.pt.y
+                    if abs(down[0] - x) + abs(down[1] - y) > 4:
+                        clicks["n"] = 0
+                        self.main.emit(self._auto_pick)   # a drag
+                    else:
+                        now, pt = time.monotonic(), clicks["pt"]
+                        near = pt is not None and abs(pt[0] - x) + abs(pt[1] - y) <= 4
+                        clicks["n"] = clicks["n"] + 1 if near and now - clicks["at"] <= _double_click_time() else 1
+                        clicks["at"], clicks["pt"] = now, (x, y)
+                        if clicks["n"] >= 2:
+                            self.main.emit(self._auto_pick)   # a double (or triple) click
             return False   # never passed on to pynput's (unused) callbacks: keeps the hook cheap
         listener = mouse.Listener(win32_event_filter=on_event)
         listener.daemon = True
@@ -630,6 +669,7 @@ class App(QObject):
             if d.sel is not None:
                 if d.sel.term is not None:
                     self.overlay.hide_now()
+                self._close_menu()   # the selection the menu was for is replaced
                 pasted = _paste_over(d.sel, text)
                 self._overlay_idle()
                 if not pasted:
@@ -790,6 +830,7 @@ class App(QObject):
             log.info("typed: %s", typed)
             s = self.session
             if sel is not None:
+                self._close_menu()
                 if sel.term is not None:
                     self.overlay.hide_now()
                 pasted = _paste_over(sel, typed)
@@ -1295,6 +1336,24 @@ class App(QObject):
         if self.picker.isVisible():
             self.picker.hide()
         self._menu = None
+
+    def _auto_pick(self):
+        """Main thread: while listening, a mouse drag or double click that selects a short word opens the 選字
+        menu by itself (the user's request, 2026-10-16: no key needed): up to 4 Chinese characters or 3 English
+        words; a longer selection is left for speech to replace. Mouse selections only: a keyboard selection may be
+        editing."""
+        gen = self._pick_gen
+
+        def probed(ctx):
+            sel = ctx.selection
+            if gen != self._pick_gen or not self._listening or self._press is not None or self._menu is not None:
+                return
+            if sel is None or not _pickable(sel.text) or foreground_pid() == os.getpid():
+                return
+            log.info("auto pick: %r", sel.text)
+            self._open_candidates(sel, ctx.terms)
+        # the app updates its selection after the button comes up
+        QTimer.singleShot(80, lambda: gen == self._pick_gen and self._when_probed(ContextProbe(), probed))
 
     def _open_candidates(self, sel, terms=()):
         """選字: the candidate menu for the selection, under it. terms: English terms on screen."""
