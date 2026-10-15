@@ -301,6 +301,8 @@ class SettingsDialog(QDialog):
         self.off_unfocused = QCheckBox("切換到其他視窗時自動關閉麥克風")
         self.off_unfocused.setToolTip("最近一次打字的視窗（還沒打字時是開麥克風時的視窗）不在最前面時關掉麥克風，不按 Enter；"
                                       "VoiceInput 自己的視窗不算")
+        self.highlight = QCheckBox("還沒定稿的草稿以反白標示（實驗）")
+        self.highlight.setToolTip("講話時還會再修正的字疊一層藍色反白，定稿後消失；只是畫在上面，不會真的選取文字")
         self.glow = QComboBox(toolTip="麥克風開著時，螢幕四周亮起一圈光，講話時會變亮；選了會先亮一下讓你看")
         self.glow.addItem("關閉", "")
         for st in glowmod.STYLES:
@@ -339,6 +341,7 @@ class SettingsDialog(QDialog):
         form.addRow("", self.show_pill)
         form.addRow("", self.float_btn)
         form.addRow("", self.off_unfocused)
+        form.addRow("", self.highlight)
         form.addRow("", self.autostart)
         form.addRow("開發測試", audio_row)
         page = QWidget()
@@ -355,7 +358,7 @@ class SettingsDialog(QDialog):
         self.commit_at.currentIndexChanged.connect(self._apply)
         self.auto_off.currentIndexChanged.connect(self._apply)
         self.glow.currentIndexChanged.connect(self._glow_changed)
-        for box in (self.punct, self.period_comma, self.describe, self.send_on_stop, self.stop_on_send, self.spin, self.show_pill, self.float_btn, self.off_unfocused,
+        for box in (self.punct, self.period_comma, self.describe, self.send_on_stop, self.stop_on_send, self.spin, self.show_pill, self.float_btn, self.off_unfocused, self.highlight,
                     self.autostart,
                     self.mute, self.keep_audio):
             box.toggled.connect(self._apply)
@@ -375,6 +378,7 @@ class SettingsDialog(QDialog):
         self.show_pill.setChecked(self.cfg.show_indicator)
         self.float_btn.setChecked(self.cfg.float_button)
         self.off_unfocused.setChecked(self.cfg.off_on_window_change)
+        self.highlight.setChecked(self.cfg.highlight_draft)
         self.keep_audio.setChecked(self.cfg.save_recordings)
         self.start_sound.setCurrentIndex(max(0, self.start_sound.findData(self.cfg.start_sound)))
         self.stop_sound.setCurrentIndex(max(0, self.stop_sound.findData(self.cfg.stop_sound)))
@@ -413,6 +417,7 @@ class SettingsDialog(QDialog):
         self.cfg.show_indicator = self.show_pill.isChecked()
         self.cfg.float_button = self.float_btn.isChecked()
         self.cfg.off_on_window_change = self.off_unfocused.isChecked()
+        self.cfg.highlight_draft = self.highlight.isChecked()
         self.cfg.save_recordings = self.keep_audio.isChecked()
         self.cfg.start_sound = self.start_sound.currentData()
         self.cfg.stop_sound = self.stop_sound.currentData()

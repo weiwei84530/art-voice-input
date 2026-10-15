@@ -47,6 +47,7 @@ from .asr import SAMPLE_RATE, Recognizer
 from .config import Config
 from .floatbtn import FloatButton
 from .glow import EdgeGlow
+from .highlight import DraftMarks, draft_rects
 from .logbook import LogBook, esc
 from .hotwords import Hotwords
 from .hotkey import Hotkeys
@@ -219,6 +220,10 @@ class App(QObject):
         self._listen_began = 0.0
         self._away = 0                           # window checks in a row that found another window in front
         self._focus_timer = QTimer(self, interval=500, timeout=self._check_window)
+        self.marks = DraftMarks()                # the draft drawn as if selected (highlight_draft)
+        self._marks_pool = ThreadPoolExecutor(max_workers=1)   # UI Automation reads for it
+        self._marks_busy = False
+        self._marks_timer = QTimer(self, interval=150, timeout=self._mark_draft)
         self.picker = Picker()
         self.picker.picked.connect(self.on_menu_pick)
         self.picker.closed.connect(self._forget_menu)
@@ -579,6 +584,7 @@ class App(QObject):
         self._update_float()
         self._start_hwnd, self._listen_began, self._away = foreground(), time.monotonic(), 0
         self._focus_timer.start()
+        self._marks_timer.start()
         if self.cfg.mute_while_recording:
             QTimer.singleShot(int(wait * 1000), lambda: self.muter.mute() if self._listening else None)
         with self._early_lock:
@@ -620,6 +626,32 @@ class App(QObject):
     def _float_moved(self, fx: float, fy: float):
         self.cfg.float_pos = [round(fx, 4), round(fy, 4)]
         self.cfg.save()
+
+    def _mark_draft(self):
+        """Main thread, every 0.15s while listening: the draft's place read again (it changes as it is retyped, the
+        window scrolls) and the boxes drawn there (highlight.py)."""
+        d = self._draft
+        if not self.cfg.highlight_draft or d is None or not d.placed or not d.typed or self._moved() \
+                or foreground() != self.session.hwnd:
+            self.marks.hide()
+            return
+        if self._marks_busy:
+            return
+        self._marks_busy = True
+        text = d.typed
+
+        def read():
+            rects = draft_rects(text)
+
+            def show():
+                self._marks_busy = False
+                now = self._draft
+                if rects and now is d and now.typed == text and not self._moved() and self._listening:
+                    self.marks.show(rects)
+                else:
+                    self.marks.hide()
+            self.main.emit(show)
+        self._marks_pool.submit(read)
 
     def _check_window(self):
         """Main thread, every 0.5s while listening: when another window is in front than the one text was last typed
@@ -663,6 +695,8 @@ class App(QObject):
         self.tray.setIcon(self.icon_idle)
         self.overlay.hide_overlay()
         self._focus_timer.stop()
+        self._marks_timer.stop()
+        self.marks.hide()
         self._update_float()
         done = self.cfg.stop_sound and self.cfg.stop_sound_at == "done"
         if not done:
@@ -793,6 +827,7 @@ class App(QObject):
         """Main thread: the caret moved away from the draft. It stays as typed; speech from `at` (default: the
         speech under way) starts a new draft."""
         d = self._draft
+        self.marks.hide()
         log.info("draft left as typed: %s", d.typed if d else "")
         if d is not None and d.placed and d.typed:   # never committed: logged as it stands
             self.book.frozen(d.typed)
@@ -872,6 +907,7 @@ class App(QObject):
                 if logged and command is None:
                     self.book.committed(before, d.typed, added, by_stop=final)
             self._draft = None
+            self.marks.hide()
             self._draft_start = at
             self.listener.keep(at)
             if d is not None:

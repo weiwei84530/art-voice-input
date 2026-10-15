@@ -268,6 +268,16 @@ last typed in during this listening (`Session.edited_at`), or before anything wa
 listening began, twice in a row, listening turns off without Enter. VoiceInput's own windows do not count. It
 replaced, the same evening, a check of whether the focused control takes text (UI Automation control types), which
 missed too often in the user's apps.
+還沒定稿的草稿以反白標示（實驗） (`highlight_draft`, a 一般 checkbox, off by default; `highlight.py`, the user's
+request 2026-10-16, after an underline was declined on 10-15): while listening, every 0.15s (`App._mark_draft`) the
+draft's place is read on a thread (`highlight.draft_rects`: the characters before the caret, checked to be the draft's
+text; in Windows Terminal the input box rows walked back from the cursor, borders and row-end padding left out) and
+click-through selection-blue boxes are drawn there (`DraftMarks`); hidden when the draft is committed or left, the
+caret moves, or another window is in front. Measured with `dev/highlight_spike.py` / `.html` (no typing: a page with
+a textarea and a contenteditable box, the caret placed by UIA): exact in Chrome (two wrapped rows, ~13ms a read) and
+in a Windows Terminal prompt laid out like Claude Code's (three indented rows, 10-30ms); a wrong text draws nothing.
+Not tried: Notepad (the user's was open; a new file would be a tab in it), LINE, Electron apps, scrolling while
+drafting, and with the user's real voice.
 An operation starting with Backspace (the spoken 刪除) gets no added sentence end when the draft showed none: it
 deleted that mark and seemed to do nothing.
 螢幕邊緣光暈 (`glow`, `glow.py`, the 一般 tab, off by default; the user's request, 2026-10-15, like Siri's): a glow
