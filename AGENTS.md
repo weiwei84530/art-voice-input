@@ -152,6 +152,16 @@ seconds, the recognizer's own text and the formatting steps only with 顯示技�
 
 ## Custom operations (自訂操作, 2026-10-11)
 
+Since 2026-10-16 the tab is a simple editor (the user's design; the card editor with steps, situations and any
+command was removed): 按鍵, three rows of [key or 不使用] [按一下 / 連按兩下 / 按住] + what it does: 開關麥克風,
+復原, 刪除選取的文字（有選取時） (`rules.KEY_ROWS`); 口說, four built-in rows 說「…」就會 換行 (Shift+Enter) / 送出
+(Enter) / 復原 / 刪掉前一個字 (Backspace) whose phrase box takes several phrases separated by 、 (empty: off;
+`rules.SPOKEN`), then the user's own rows (one step: 按鍵 captured or 輸入文字) and ＋ 新增口說操作. Clashes are
+listed in red under each part. The rules format is unchanged; `rules.simplify` (on every load, rules_version 10)
+keeps only what the editor can show: the spoken 括號 (two steps) and hold on a selection = 選字 (the menu opens by
+itself while listening) were dropped, the user's choice. The rest of this section describes the rule engine,
+which still supports more than the editor offers.
+
 `rules.py`, stored as `rules` in config.json; they replaced the single hotkey setting and the 換行 / 送出 switches
 (migrated by `Config.load`). A rule: trigger (滑鼠鍵: middle / upper / lower side button; 鍵盤鍵: CapsLock, right Alt,
 right Ctrl, Insert, ScrollLock, Pause, F1-F24; 說出: an utterance that is exactly the phrase) → 按法 (按一下 / 連按兩下

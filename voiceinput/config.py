@@ -59,8 +59,8 @@ class Config:
         cfg = cls(**known)
         cfg.gesture_time = min(max(float(cfg.gesture_time), GESTURE_TIME_RANGE[0]), GESTURE_TIME_RANGE[1])
         if "rules" in data:
-            cfg.rules = rules.upgrade(rules.migrate([rules.Rule.from_dict(d) for d in data["rules"]]),
-                                      data.get("rules_version", 1))
+            cfg.rules = rules.simplify(rules.upgrade(rules.migrate([rules.Rule.from_dict(d) for d in data["rules"]]),
+                                                     data.get("rules_version", 1)))
         else:   # before custom operations (2026-10-11): one hotkey and the 換行 / 送出 switches
             cfg.rules = rules.defaults(data.get("hotkey", "mouse_middle"), data.get("newline_command", True),
                                        data.get("send_command", True))

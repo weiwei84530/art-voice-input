@@ -30,8 +30,9 @@ _ADD_HOTWORD = "add_hotword"   # 加入熱詞, removed 2026-10-11: hotwords are 
 # config rules_version: 2 added the tap on a selection that opens 選字, 3 a tap that listens, 4 dropped 連續聽寫,
 # 5 makes 送出 stop listening, 6 turns the double-tap deletes into 復原 and adds the spoken 復原, 7 brings back the
 # double tap on a selection that deletes it, 8 adds the spoken 撤銷 (復原) and 刪除 (Backspace), 9 makes 送出 leave
-# listening on (the user's request, 2026-10-15: the microphone stays on, the key turns it off)
-VERSION = 9
+# listening on (the user's request, 2026-10-15: the microphone stays on, the key turns it off), 10: the simple
+# editor (simplify: hold on a selection = 選字 and the spoken 括號 dropped, 2026-10-16)
+VERSION = 10
 
 _PUNCT = re.compile(r"[\s，。、！？；：,.!?;:…]+")
 
@@ -66,14 +67,14 @@ class Rule:
 
 def defaults(key: str = "mouse_middle", newline: bool = True, send: bool = True) -> list[Rule]:
     """The user's own setup (2026-10-14, their request): tap to listen until the next tap; double tap (or say 復原)
-    to take back the last change, on a selection to delete it; hold on a selection for 選字; spoken 換行 / 送出 press Shift+Enter / Enter (listening
-    goes on: the key turns it off; 送出 stopped it 2026-10-14/15), 標點 types "- ", 括號 types （） with the caret inside, 貼上 presses Alt+V, 空白 presses Space;
-    撤銷 is 復原 too, 刪除 presses Backspace (2026-10-15)."""
+    to take back the last change, on a selection to delete it; spoken 換行 / 送出 press Shift+Enter / Enter (listening
+    goes on: the key turns it off; 送出 stopped it 2026-10-14/15), 標點 types "- ", 貼上 presses Alt+V, 空白 presses
+    Space; 撤銷 is 復原 too, 刪除 presses Backspace (2026-10-15). Hold on a selection for 選字 and the spoken 括號
+    were dropped with the simple editor (2026-10-16): the menu opens by itself while listening."""
     source = MOUSE if key.startswith("mouse") else KEY
     out = [Rule(source, key, gesture=TAP, steps=[Step(COMMAND, RECORD)]),
-           Rule(source, key, gesture=DOUBLE, when=SELECTION, steps=[Step(COMMAND, DELETE_SELECTION)]),
            Rule(source, key, gesture=DOUBLE, steps=[Step(COMMAND, UNDO)]),
-           Rule(source, key, gesture=HOLD, when=SELECTION, steps=[Step(COMMAND, PICK)])]
+           Rule(source, key, gesture=DOUBLE, when=SELECTION, steps=[Step(COMMAND, DELETE_SELECTION)])]
     if newline:
         out.append(Rule(SPEECH, phrase="換行", steps=[Step(KEYS, "Shift+Enter")]))
     if send:
@@ -82,7 +83,6 @@ def defaults(key: str = "mouse_middle", newline: bool = True, send: bool = True)
             Rule(SPEECH, phrase="撤銷", steps=[Step(COMMAND, UNDO)]),
             Rule(SPEECH, phrase="刪除", steps=[Step(KEYS, "Backspace")]),
             Rule(SPEECH, phrase="標點", steps=[Step(TEXT, "- ")]),
-            Rule(SPEECH, phrase="括號", steps=[Step(TEXT, "（）"), Step(KEYS, "Left")]),
             Rule(SPEECH, phrase="貼上", steps=[Step(KEYS, "Alt+V")]),
             Rule(SPEECH, phrase="空白", steps=[Step(KEYS, "Space")])]
     return out
@@ -157,6 +157,59 @@ def upgrade(rules: list[Rule], version: int) -> list[Rule]:
                     and [(st.type, st.value) for st in r.steps] == [(KEYS, "Enter"), (COMMAND, STOP)]:
                 r.steps.pop()
     return rules
+
+
+# The simple editor (自訂操作, 2026-10-16, the user's design): one row per thing a key does, one per spoken phrase.
+# Keys: (command, situation, label); a row is one rule, or none when 不使用.
+KEY_ROWS = [(RECORD, ANY, "開關麥克風"), (UNDO, ANY, "復原"), (DELETE_SELECTION, SELECTION, "刪除選取的文字（有選取時）")]
+# Spoken: (id, its one step, what it does); one rule per phrase in the row. Other phrases are the user's own rows:
+# one step, keys or text.
+SPOKEN = [("newline", (KEYS, "Shift+Enter"), "換行"), ("send", (KEYS, "Enter"), "送出"),
+          ("undo", (COMMAND, UNDO), "復原"), ("backspace", (KEYS, "Backspace"), "刪掉前一個字")]
+PHRASES = re.compile(r"[、,，/／;；]+")
+
+
+def phrases(text: str) -> list[str]:
+    """復原、撤銷 -> [復原, 撤銷]"""
+    return [p.strip() for p in PHRASES.split(text) if p.strip()]
+
+
+def key_rule(rules: list[Rule], command: str, when: str) -> Rule | None:
+    """The rule of a key row: a key or button whose steps are that command alone (錄音: any rule that records)."""
+    for r in rules:
+        if r.enabled and r.source != SPEECH and r.when == when:
+            if command == RECORD and r.record_index() is not None or                     [(st.type, st.value) for st in r.steps] == [(COMMAND, command)]:
+                return r
+    return None
+
+
+def spoken_kind(rule: Rule) -> str | None:
+    """The built-in spoken row a speech rule belongs to (SPOKEN id), "" for the user's own row (one key or text
+    step), None when the simple editor cannot show it (several steps, another command)."""
+    if rule.source != SPEECH or len(rule.steps) != 1:
+        return None
+    st = rule.steps[0]
+    for kind, step, _ in SPOKEN:
+        if (st.type, st.value) == step:
+            return kind
+    return "" if st.type in (KEYS, TEXT) else None
+
+
+def simplify(rules: list[Rule]) -> list[Rule]:
+    """The rules the simple editor can show (2026-10-16): the key rows' rules (a recording rule's other steps
+    dropped) and enabled speech rules of one step, for any situation, the first of a phrase; the rest is dropped
+    (hold on a selection = 選字, the spoken 括號 of two steps)."""
+    out = []
+    for command, when, _ in KEY_ROWS:
+        r = key_rule(rules, command, when)
+        if r is not None:
+            out.append(Rule(r.source, r.key, gesture=r.gesture, when=when, steps=[Step(COMMAND, command)]))
+    seen = set()
+    for r in rules:
+        if r.enabled and spoken_kind(r) is not None and normalize(r.phrase) and normalize(r.phrase) not in seen:
+            seen.add(normalize(r.phrase))
+            out.append(Rule(SPEECH, phrase=r.phrase, steps=[Step(r.steps[0].type, r.steps[0].value)]))
+    return out
 
 
 def normalize(phrase: str) -> str:

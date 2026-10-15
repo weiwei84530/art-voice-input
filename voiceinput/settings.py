@@ -10,8 +10,8 @@ from pypinyin import lazy_pinyin
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QImage, QPainter, QPen, QTextDocument
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
-                               QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-                               QPushButton, QScrollArea, QSizePolicy, QSpinBox, QTabWidget, QTextBrowser, QToolButton,
+                               QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+                               QPushButton, QScrollArea, QSizePolicy, QTabWidget, QTextBrowser, QToolButton,
                                QToolTip, QVBoxLayout, QWidget)
 
 from . import audio, cues, hotwords, packs, recordings, rules
@@ -21,14 +21,7 @@ from .memory import BOUNDARY
 from .keys import KEY_TRIGGERS, MOUSE_TRIGGERS, combo_text, is_modifier
 from .rules import Rule, Step
 
-SOURCES = [(rules.MOUSE, "滑鼠鍵"), (rules.KEY, "鍵盤鍵"), (rules.SPEECH, "說出")]
 GESTURES = [(rules.TAP, "按一下"), (rules.DOUBLE, "連按兩下"), (rules.HOLD, "按住")]
-SITUATIONS = [(rules.ANY, "不限"), (rules.DICTATED, "剛輸入完"), (rules.SELECTION, "有選取文字")]
-STEP_TYPES = [(rules.COMMAND, "命令"), (rules.KEYS, "按鍵"), (rules.TEXT, "輸入文字"), (rules.WAIT, "等待")]
-COMMANDS = [(rules.RECORD, "錄音"), (rules.STOP, "結束錄音"), (rules.UNDO, "復原"), (rules.PICK, "選字"),
-            (rules.DELETE_SELECTION, "刪除選取的文字"),
-            (rules.DELETE_DICTATION, "刪除剛輸入的文字")]
-_STEP_DEFAULTS = {rules.COMMAND: rules.DELETE_SELECTION, rules.KEYS: "", rules.TEXT: "", rules.WAIT: 100}
 
 HOTWORD_SORTS = [("weight", "優先度（高→低）"), ("name", "名稱 A→Z"), ("name_desc", "名稱 Z→A"),
                  ("date", "日期（新→舊）"), ("date_old", "日期（舊→新）")]
@@ -93,11 +86,6 @@ class _NoWheelCombo(QComboBox):
         _scroll_instead(self, e)
 
 
-class _NoWheelSpin(QSpinBox):
-    def wheelEvent(self, e):
-        _scroll_instead(self, e)
-
-
 def _combo(items, value, tip="") -> QComboBox:
     c = _NoWheelCombo()
     for key, label in items:
@@ -157,6 +145,31 @@ def _date_label(added: str) -> QLabel:
     """The date of an entry; the time, kept for sorting (2026-10-14), only in the tooltip."""
     label = QLabel(added[:10], toolTip=f"加入時間：{added}")
     label.setStyleSheet("color: gray")
+    return label
+
+
+def _clear_layout(layout):
+    while layout.count():
+        item = layout.takeAt(0)
+        w = item.widget()
+        if w is not None:
+            w.hide()
+            w.deleteLater()
+        elif item.layout() is not None:
+            _clear_layout(item.layout())
+
+
+def _heading(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setStyleSheet("font-weight: bold")
+    return label
+
+
+def _problem_label() -> QLabel:
+    label = QLabel()
+    label.setStyleSheet("color: #d9534f")
+    label.setWordWrap(True)
+    label.hide()
     return label
 
 
@@ -753,195 +766,201 @@ class SettingsDialog(QDialog):
         self.log.setHtml("".join(group(g) for g in reversed(self._log_sessions)))
         self.log.verticalScrollBar().setValue(0)
 
-    # --- 自訂操作: one card per rule ---
+    # --- 自訂操作: the simple editor (2026-10-16, the user's design): a row per thing a key does, a row per phrase ---
     def _gesture_time_changed(self, value: float):
         if not self._loading:
             self.cfg.gesture_time = round(value, 2)
             self._save()
 
     def _rules_page(self) -> QWidget:
-        add = QPushButton("＋ 新增操作", clicked=self._add_rule)
         reset = QPushButton("還原預設", clicked=self._reset_rules)
         self.gesture_time = QDoubleSpinBox(decimals=2, singleStep=0.05, suffix=" 秒", minimum=GESTURE_TIME_RANGE[0],
                                            maximum=GESTURE_TIME_RANGE[1], value=self.cfg.gesture_time)
-        self.gesture_time.setToolTip("按著超過這個時間算「按住」；放開後在這個時間內再按一次算「連按兩下」。"
-                                     "也是按住時錄音提示出現的時間")
+        self.gesture_time.setToolTip("按著超過這個時間算「按住」；放開後在這個時間內再按一次算「連按兩下」")
         self.gesture_time.valueChanged.connect(self._gesture_time_changed)
-        top = QHBoxLayout()
-        top.addWidget(add)
-        top.addSpacing(16)
-        top.addWidget(QLabel("按住／連按判定時間"))
-        top.addWidget(self.gesture_time)
-        top.addStretch()
-        top.addWidget(reset)
 
-        self.cards = QVBoxLayout()
-        self.cards.setSpacing(6)
+        self.rules_body = QVBoxLayout()
+        self.rules_body.setSpacing(6)
         inner = QWidget()
         v = QVBoxLayout(inner)
-        v.setContentsMargins(0, 0, 0, 0)
-        v.addLayout(self.cards)
+        v.setContentsMargins(0, 0, 8, 0)
+        v.addLayout(self.rules_body)
         v.addStretch(1)
         self.rules_scroll = QScrollArea(widgetResizable=True, frameShape=QFrame.NoFrame)
         self.rules_scroll.setWidget(inner)
+        self.rules_scroll.viewport().setAutoFillBackground(False)
+        inner.setAutoFillBackground(False)
 
+        bottom = QHBoxLayout()
+        bottom.addWidget(QLabel("按住／連按判定時間"))
+        bottom.addWidget(self.gesture_time)
+        bottom.addStretch()
+        bottom.addWidget(reset)
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.addLayout(top)
         layout.addWidget(self.rules_scroll, 1)
+        layout.addLayout(bottom)
         return page
 
     def refresh_rules(self):
+        """Rows from cfg.rules: the key rows, the built-in spoken rows, the user's own spoken rows."""
+        rs = self.cfg.rules
+        self._keys = {}
+        for command, when, _ in rules.KEY_ROWS:
+            r = rules.key_rule(rs, command, when)
+            self._keys[command] = [r.key if r else "", r.gesture if r else rules.TAP]
+        spoken = {kind: [] for kind, _, _ in rules.SPOKEN}
+        self._own = []   # [phrase, step type, value]
+        for r in rs:
+            kind = rules.spoken_kind(r) if r.enabled else None
+            if kind:
+                spoken[kind].append(r.phrase)
+            elif kind == "":
+                self._own.append([r.phrase, r.steps[0].type, r.steps[0].value])
+        self._spoken = {k: "、".join(v) for k, v in spoken.items()}
+        self._draw_rules()
+
+    def _draw_rules(self):
         bar = self.rules_scroll.verticalScrollBar()
         pos = bar.value()
-        while self.cards.count():
-            w = self.cards.takeAt(0).widget()
-            w.setParent(None)
-            w.deleteLater()
-        self._problem_labels = []
-        for rule in self.cfg.rules:
-            self.cards.addWidget(self._rule_card(rule))
-        self._show_problems()
-        bar.setValue(pos)
-
-    def _changed(self, rebuild: bool = False):
-        """A rule was edited: save, and redraw the cards when their layout changes."""
-        self._save()
-        if rebuild:
-            self.refresh_rules()
-        else:
-            self._show_problems()
-
-    def _show_problems(self):
-        for rule, label in self._problem_labels:
-            text = "、".join(rules.problems(rule, self.cfg.rules))
-            label.setText(f"⚠ {text}" if text else "")
-            label.setVisible(bool(text))
-
-    def _rule_card(self, rule: Rule) -> QFrame:
-        card = QFrame(objectName="card")
-        card.setStyleSheet(_CARD_STYLE)
-        v = QVBoxLayout(card)
-        v.setContentsMargins(8, 6, 6, 6)
-        v.setSpacing(4)
-
-        enabled = QCheckBox(checked=rule.enabled, toolTip="啟用")
-        enabled.toggled.connect(lambda on: (setattr(rule, "enabled", on), self._changed()))
-        source = _combo(SOURCES, rule.source, "觸發方式")
-        source.currentIndexChanged.connect(lambda _: self._set_source(rule, source.currentData()))
-        head = QHBoxLayout()
-        head.addWidget(enabled)
-        head.addWidget(source)
-        if rule.source == rules.SPEECH:
-            phrase = QLineEdit(rule.phrase, placeholderText="完整說出的話，例如：送出")
-            phrase.setToolTip("整句只說這些話時才執行（標點、空白不計）")
-            phrase.textEdited.connect(lambda t: (setattr(rule, "phrase", t.strip()), self._changed()))
-            head.addWidget(phrase, 1)
-        else:
-            names = MOUSE_TRIGGERS.items() if rule.source == rules.MOUSE else (
-                (k, label) for k, (label, _) in KEY_TRIGGERS.items())
-            key = _combo(names, rule.key)
-            key.currentIndexChanged.connect(lambda _: (setattr(rule, "key", key.currentData()), self._changed()))
-            gesture = _combo(GESTURES, rule.gesture, "按法")
+        _clear_layout(self.rules_body)
+        self.rules_body.addWidget(_heading("按鍵"))
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        keys = [("", "不使用")] + [(k, f"滑鼠{label}") for k, label in MOUSE_TRIGGERS.items()] + \
+            [(k, label) for k, (label, _) in KEY_TRIGGERS.items()]
+        for i, (command, _, label) in enumerate(rules.KEY_ROWS):
+            state = self._keys[command]
+            key = _combo(keys, state[0])
+            gesture = _combo(GESTURES, state[1])
+            gesture.setEnabled(bool(state[0]))
+            key.currentIndexChanged.connect(
+                lambda _, k=key, g=gesture, st=state: (st.__setitem__(0, k.currentData()),
+                                                       g.setEnabled(bool(k.currentData())), self._rules_edited()))
             gesture.currentIndexChanged.connect(
-                lambda _: (setattr(rule, "gesture", gesture.currentData()), self._changed()))
-            head.addWidget(key, 1)
-            head.addWidget(gesture)
-        when = _combo(SITUATIONS, rule.when, "情境：什麼時候才執行")
-        when.currentIndexChanged.connect(lambda _: (setattr(rule, "when", when.currentData()), self._changed()))
-        head.addWidget(when)
-        remove = QPushButton("✕", toolTip="刪除這條操作", clicked=lambda: self._remove_rule(rule))
-        remove.setFixedWidth(28)
-        head.addWidget(remove)
-        v.addLayout(head)
+                lambda _, g=gesture, st=state: (st.__setitem__(1, g.currentData()), self._rules_edited()))
+            grid.addWidget(key, i, 0)
+            grid.addWidget(gesture, i, 1)
+            grid.addWidget(QLabel(label), i, 2)
+        grid.setColumnStretch(3, 1)
+        self.rules_body.addLayout(grid)
+        self.key_problems = _problem_label()
+        self.rules_body.addWidget(self.key_problems)
 
-        for i, step in enumerate(rule.steps):
-            v.addLayout(self._step_row(rule, i, step))
-        add = QPushButton("＋ 新增步驟", flat=True, clicked=lambda: self._add_step(rule))
+        self.rules_body.addSpacing(8)
+        self.rules_body.addWidget(_heading("口說"))
+        note = QLabel("整句只說這些話時才執行。可以填好幾種說法，用「、」分開；清空就不使用。")
+        note.setStyleSheet("color: gray")
+        note.setWordWrap(True)
+        self.rules_body.addWidget(note)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(6)
+        for i, (kind, _, label) in enumerate(rules.SPOKEN):
+            edit = QLineEdit(self._spoken[kind], placeholderText="不使用")
+            edit.textEdited.connect(lambda t, k=kind: (self._spoken.__setitem__(k, t), self._rules_edited()))
+            grid.addWidget(QLabel("說「"), i, 0)
+            grid.addWidget(edit, i, 1)
+            grid.addWidget(QLabel("」就會"), i, 2)
+            grid.addWidget(QLabel(label), i, 3, 1, 3)
+        n = len(rules.SPOKEN)
+        if self._own:
+            own = QLabel("自訂")
+            own.setStyleSheet("color: gray")
+            grid.addWidget(own, n, 0, 1, 6)
+        for j, row in enumerate(self._own):
+            i = n + 1 + j
+            edit = QLineEdit(row[0], placeholderText="要說的話")
+            edit.textEdited.connect(lambda t, r=row: (r.__setitem__(0, t), self._rules_edited()))
+            kind = _combo([(rules.KEYS, "按鍵"), (rules.TEXT, "輸入文字")], row[1])
+            kind.currentIndexChanged.connect(lambda _, k=kind, r=row: self._own_type(r, k.currentData()))
+            if row[1] == rules.KEYS:
+                value = KeyCapture(row[2])
+                value.captured.connect(lambda t, r=row: (r.__setitem__(2, t), self._rules_edited()))
+            else:
+                value = QLineEdit(row[2], placeholderText="要輸入的文字")
+                value.textEdited.connect(lambda t, r=row: (r.__setitem__(2, t), self._rules_edited()))
+            value.setMinimumWidth(90)
+            grid.addWidget(QLabel("說「"), i, 0)
+            grid.addWidget(edit, i, 1)
+            grid.addWidget(QLabel("」就會"), i, 2)
+            grid.addWidget(kind, i, 3)
+            grid.addWidget(value, i, 4)
+            grid.addWidget(_remove_button("刪除這條", lambda _=False, r=row: self._remove_own(r)), i, 5)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(4, 1)
+        self.rules_body.addLayout(grid)
+        add = QPushButton("＋ 新增口說操作", flat=True, clicked=self._add_own)
         add_row = QHBoxLayout()
-        add_row.addSpacing(24)
         add_row.addWidget(add)
         add_row.addStretch()
-        v.addLayout(add_row)
+        self.rules_body.addLayout(add_row)
+        self.spoken_problems = _problem_label()
+        self.rules_body.addWidget(self.spoken_problems)
+        self._show_problems()
+        QTimer.singleShot(0, lambda: bar.setValue(pos))
 
-        problem = QLabel()
-        problem.setStyleSheet("color: #d9534f")
-        problem.setWordWrap(True)
-        v.addWidget(problem)
-        self._problem_labels.append((rule, problem))
-        return card
+    def _collect_rules(self) -> list:
+        out = []
+        for command, when, _ in rules.KEY_ROWS:
+            key, gesture = self._keys[command]
+            if key:
+                source = rules.MOUSE if key in MOUSE_TRIGGERS else rules.KEY
+                out.append(Rule(source, key, gesture=gesture, when=when, steps=[Step(rules.COMMAND, command)]))
+        for kind, (step_type, value), _ in rules.SPOKEN:
+            for phrase in rules.phrases(self._spoken[kind]):
+                out.append(Rule(rules.SPEECH, phrase=phrase, steps=[Step(step_type, value)]))
+        for phrase, step_type, value in self._own:
+            out.append(Rule(rules.SPEECH, phrase=phrase.strip(), steps=[Step(step_type, value)]))
+        return out
 
-    def _step_row(self, rule: Rule, i: int, step: Step) -> QHBoxLayout:
-        row = QHBoxLayout()
-        row.addSpacing(24)
-        row.addWidget(QLabel(f"{i + 1}."))
-        kind = _combo(STEP_TYPES, step.type)
-        kind.currentIndexChanged.connect(lambda _: self._set_step_type(step, kind.currentData()))
-        row.addWidget(kind)
-        if step.type == rules.COMMAND:
-            value = _combo(COMMANDS, step.value)
-            value.currentIndexChanged.connect(lambda _: self._set_value(step, value.currentData()))
-        elif step.type == rules.KEYS:
-            value = KeyCapture(step.value)
-            value.captured.connect(lambda t: self._set_value(step, t))
-        elif step.type == rules.TEXT:
-            value = QLineEdit(step.value, placeholderText="要輸入的文字")
-            value.textEdited.connect(lambda t: self._set_value(step, t))
-        else:
-            value = _NoWheelSpin(minimum=0, maximum=10000, singleStep=50, suffix=" 毫秒", value=int(step.value or 0))
-            value.valueChanged.connect(lambda n: self._set_value(step, n))
-        row.addWidget(value, 1)
-        for text, tip, delta in (("↑", "上移", -1), ("↓", "下移", 1)):
-            b = QPushButton(text, toolTip=tip, clicked=lambda _=False, d=delta: self._move_step(rule, i, d))
-            b.setFixedWidth(28)
-            b.setEnabled(0 <= i + delta < len(rule.steps))
-            row.addWidget(b)
-        remove = QPushButton("✕", toolTip="刪除這個步驟", clicked=lambda: self._remove_step(rule, i))
-        remove.setFixedWidth(28)
-        row.addWidget(remove)
-        return row
+    def _rules_edited(self):
+        self.cfg.rules = self._collect_rules()
+        self._save()
+        self._show_problems()
 
-    def _set_source(self, rule: Rule, source: str):
-        rule.source = source
-        if source == rules.MOUSE and rule.key not in MOUSE_TRIGGERS:
-            rule.key = next(iter(MOUSE_TRIGGERS))
-        elif source == rules.KEY and rule.key not in KEY_TRIGGERS:
-            rule.key = next(iter(KEY_TRIGGERS))
-        self._changed(rebuild=True)
+    def _show_problems(self):
+        """Clashes the rows cannot show on their own; a rule with a problem is skipped (rules.problems)."""
+        rs = self.cfg.rules
+        keys = []
+        if not self._keys[rules.RECORD][0]:
+            keys.append("「開關麥克風」不使用時無法語音輸入")
+        names = dict(GESTURES)
+        labels = {c: label for c, _, label in rules.KEY_ROWS}
+        for i, (a, wa, _) in enumerate(rules.KEY_ROWS):
+            for b, wb, _ in rules.KEY_ROWS[i + 1:]:
+                if self._keys[a][0] and self._keys[a] == self._keys[b] and wa == wb:
+                    keys.append(f"「{labels[a]}」和「{labels[b]}」是同一個鍵{names[self._keys[a][1]]}，"
+                                f"只有「{labels[a]}」會生效")
+        spoken = []
+        for r in rs:
+            if r.source == rules.SPEECH:
+                text = "、".join(rules.problems(r, rs))
+                if text:
+                    spoken.append(f"「{r.phrase or '（空白）'}」：{text}")
+        for label, items in ((self.key_problems, keys), (self.spoken_problems, spoken)):
+            label.setText("\n".join(f"⚠ {t}" for t in items))
+            label.setVisible(bool(items))
 
-    def _set_step_type(self, step: Step, kind: str):
-        step.type, step.value = kind, _STEP_DEFAULTS[kind]
-        self._changed(rebuild=True)
+    def _own_type(self, row: list, kind: str):
+        row[1], row[2] = kind, ""
+        self._rules_edited()
+        self._draw_rules()
 
-    def _set_value(self, step: Step, value):
-        step.value = value
-        self._changed()
-
-    def _move_step(self, rule: Rule, i: int, delta: int):
-        j = i + delta
-        rule.steps[i], rule.steps[j] = rule.steps[j], rule.steps[i]
-        self._changed(rebuild=True)
-
-    def _remove_step(self, rule: Rule, i: int):
-        del rule.steps[i]
-        self._changed(rebuild=True)
-
-    def _add_step(self, rule: Rule):
-        rule.steps.append(Step(rules.KEYS, ""))
-        self._changed(rebuild=True)
-
-    def _add_rule(self):
-        self.cfg.rules.append(Rule(rules.MOUSE, "mouse_x2", gesture=rules.TAP, steps=[Step(rules.KEYS, "")]))
-        self._changed(rebuild=True)
+    def _add_own(self):
+        self._own.append(["", rules.KEYS, ""])
+        self._rules_edited()
+        self._draw_rules()
         bar = self.rules_scroll.verticalScrollBar()
-        QTimer.singleShot(0, lambda: bar.setValue(bar.maximum()))
+        QTimer.singleShot(50, lambda: bar.setValue(bar.maximum()))
 
-    def _remove_rule(self, rule: Rule):
-        self.cfg.rules.remove(rule)
-        self._changed(rebuild=True)
+    def _remove_own(self, row: list):
+        self._own.remove(row)
+        self._rules_edited()
+        self._draw_rules()
 
     def _reset_rules(self):
         if QMessageBox.question(self, "還原預設", "把自訂操作還原成預設？目前的設定會被取代。") == QMessageBox.Yes:
             self.cfg.rules = rules.defaults()
-            self._changed(rebuild=True)
+            self._save()
+            self.refresh_rules()
 

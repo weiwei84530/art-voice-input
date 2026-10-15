@@ -11,8 +11,8 @@ goes through the smart picks (memory.py, single characters only); words are left
 
 What the mouse buttons and keys do is set by custom operations (rules.py, 2026-10-11). The defaults
 (rules.defaults, the user's setup): tap the middle button to listen; double click it to take back VoiceInput's last
-change (復原), on a selection to delete it; hold it on a selection for 選字; spoken 換行, 送出, 復原 / 撤銷, 刪除
-(Backspace) and a few more. Gestures no operation takes are given back to the key.
+change (復原), on a selection to delete it; spoken 換行, 送出, 復原 / 撤銷, 刪除 (Backspace) and a few more. While
+listening, a short mouse selection opens 選字 by itself. Gestures no operation takes are given back to the key.
 
 Recording is continuous listening (listen.py; on the continuous-mic branch since 2026-10-14 the one way, the
 user's choice: no cutting the recording to say a command). Every pause ends a piece: said alone, an operation's
