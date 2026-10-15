@@ -128,6 +128,21 @@ def paste_text(text: str) -> None:
     _restore_timer.start()
 
 
+def restore_now() -> None:
+    """Main thread: put back the clipboard a paste borrowed, now (before 複製 / 剪下 / 貼上 use it: the restore 0.4s
+    after a paste would overwrite what they copied, and 貼上 would paste our own text)."""
+    if _restore_timer is not None and _restore_timer.isActive():
+        _restore_timer.stop()
+        _restore_timer.timeout.emit()
+
+
+def copy_text(text: str) -> None:
+    """Main thread: text on the clipboard (複製 of a terminal selection)."""
+    restore_now()
+    if not _set_clipboard(text):
+        QGuiApplication.clipboard().setText(text)
+
+
 def press_delete() -> None:
     """Delete the target app's current selection."""
     _settle()

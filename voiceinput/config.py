@@ -31,10 +31,10 @@ class Config:
     # 2026-10-16); float_pos: its place as fractions of the screen's free range (floatbtn.py)
     float_button: bool = True
     float_pos: list = field(default_factory=lambda: [0.98, 0.88])
-    # listening turns off when another window comes to the front than the one text was last typed in (or, before
-    # anything was typed, the one in front when listening began), or a click puts the focus where nothing can be
-    # typed after the caret was in a text box; the user's requests, 2026-10-16
-    off_on_window_change: bool = False
+    # when the focus comes into a text box (2026-10-16, the user's requests): "" nothing, "bubble" a small microphone
+    # bubble next to it (a click listens), "listen" listening turns on, and off when the focus leaves for a place
+    # where nothing can be typed
+    on_focus: str = ""
     # the draft drawn as if selected (highlight.py), an experiment (the user's request, 2026-10-16)
     highlight_draft: bool = False
     # minutes without speech after which listening turns itself off, 0 never (the user's request, 2026-10-15: a

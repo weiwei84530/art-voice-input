@@ -45,7 +45,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 from . import autostart, candidates, cues, edit, models, packs, paths, recordings, rules, sounds, spelling
 from .asr import SAMPLE_RATE, Recognizer
 from .config import Config
-from .floatbtn import FloatButton
+from .floatbtn import Bubble, FloatButton
 from .glow import EdgeGlow
 from .highlight import DraftMarks, draft_rects
 from .logbook import LogBook, esc
@@ -55,13 +55,14 @@ from .keys import MOUSE_TRIGGERS, combo_vks
 from .listen import LEAD, Listener
 from .memory import Memory, is_latin, situation
 from .mute import Muter
-from .output import backspace, paste_text, press_chord, press_delete
+from .output import backspace, copy_text, paste_text, press_chord, press_delete, restore_now
 from .overlay import Overlay
 from . import picker as picker_mod
 from .picker import Picker
 from .reading import reading_key
 from .rules import DOUBLE, HOLD, TAP
-from .selection import Context, ContextProbe, focus_editable, move_cursor_after, term_watcher
+from .selection import (Context, ContextProbe, focus_info, move_cursor_after, term_watcher,
+                        terminal_in_front)
 from .session import UNDO_DEPTH, Session, foreground
 from .settings import SettingsDialog
 from .textfmt import format_text, to_traditional
@@ -215,12 +216,16 @@ class App(QObject):
         self.float_btn = FloatButton(self.cfg.float_pos)
         self.float_btn.clicked.connect(self._float_clicked)
         self.float_btn.moved.connect(self._float_moved)
-        self._float_hwnd = self.float_btn.hwnd()
-        self._start_hwnd = 0                     # the window in front when listening began
-        self._listen_began = 0.0
-        self._away = 0                           # window checks in a row that found another window in front
-        self._caret_seen = False                 # the focus was where text can be typed while listening
-        self._focus_timer = QTimer(self, interval=500, timeout=self._check_window)
+        self.bubble = Bubble()
+        self.bubble.clicked.connect(lambda: self._listen_now("bubble"))
+        self._own_hwnds = {self.float_btn.hwnd(), self.bubble.hwnd()}   # clicks on these are not caret moves
+        self._box = None                         # the text box the focus is in (on_focus), its identity
+        self._box_quiet = False                  # listening was turned off by hand in it: not on again by itself
+        self._box_auto = False                   # listening was turned on by the focus
+        self._focus_busy = False
+        self._focus_pool = ThreadPoolExecutor(max_workers=1)   # its UI Automation reads (one COM object per thread)
+        self._focus_timer = QTimer(self, interval=300, timeout=self._watch_focus)
+        self._focus_timer.start()
         self.marks = DraftMarks()                # the draft drawn as if selected (highlight_draft)
         self._marks_pool = ThreadPoolExecutor(max_workers=1)   # UI Automation reads for it
         self._marks_busy = False
@@ -295,12 +300,12 @@ class App(QObject):
         return bool(hwnd) and u32.GetAncestor(hwnd, 2) == self._picker_hwnd   # GA_ROOT
 
     def _on_float(self, pt) -> bool:
-        """Mouse hook thread: the point is on the floating button."""
+        """Mouse hook thread: the point is on the floating button or the bubble."""
         import ctypes.wintypes
         u32 = ctypes.windll.user32
         u32.WindowFromPoint.argtypes = [ctypes.wintypes.POINT]
         hwnd = u32.WindowFromPoint(pt)
-        return bool(hwnd) and u32.GetAncestor(hwnd, 2) == self._float_hwnd   # GA_ROOT
+        return bool(hwnd) and u32.GetAncestor(hwnd, 2) in self._own_hwnds   # GA_ROOT
 
     def _watch_mouse(self):
         """Any click may move the caret, which ends what session.py knows about the text before it. Left button
@@ -321,8 +326,6 @@ class App(QObject):
                 self.session.on_input()
                 self.main.emit(self._caret_left)
                 self._pick_gen += 1
-                if msg == 0x201 and self._listening and self.cfg.off_on_window_change:
-                    self.main.emit(lambda: QTimer.singleShot(250, self._read_focus))   # the click moved the focus
                 if msg == 0x201:
                     term_watcher.mouse_down(data.pt.x, data.pt.y)
                     clicks["down"] = (data.pt.x, data.pt.y)
@@ -589,11 +592,7 @@ class App(QObject):
             self.listener.still(wait)   # the start sound is not speech; muting waits for its end
         self._heard_at = time.monotonic()
         self._update_float()
-        self._start_hwnd, self._listen_began, self._away = foreground(), time.monotonic(), 0
-        self._caret_seen = False
-        if self.cfg.off_on_window_change:
-            self._read_focus()
-        self._focus_timer.start()
+        self.bubble.hide()
         self._marks_timer.start()
         if self.cfg.mute_while_recording:
             QTimer.singleShot(int(wait * 1000), lambda: self.muter.mute() if self._listening else None)
@@ -623,15 +622,22 @@ class App(QObject):
     def _float_clicked(self):
         """Main thread: the floating button turns listening on, as a tap of the key would (the text goes to the
         window that has the focus: the button never takes it)."""
+        self._listen_now("button")
+
+    def _listen_now(self, name: str, quiet: bool = False) -> bool:
+        """Main thread: listening on without a key (the floating button, the bubble, the focus). quiet: no notice
+        when the model is not ready."""
         if self._listening or self._press is not None:
-            return
+            return False
         if self.recognizer is None:
-            self._notify(self._status_text or "模型尚未就緒")
-            return
-        press = _Press("button", ContextProbe(), time.monotonic(), self.session.deletable() is not None,
+            if not quiet:
+                self._notify(self._status_text or "模型尚未就緒")
+            return False
+        press = _Press(name, ContextProbe(), time.monotonic(), self.session.deletable() is not None,
                        gesture=TAP, decided=True, released=True, finished=True)
         self._start_listen(press)
         self._show_listen(press)
+        return self._listening
 
     def _float_moved(self, fx: float, fy: float):
         self.cfg.float_pos = [round(fx, 4), round(fy, 4)]
@@ -661,7 +667,8 @@ class App(QObject):
             def show():
                 self._marks_busy = False
                 now = self._draft
-                if rects and now is d and now.typed.endswith(text) and not self._moved() and self._listening                         and time.monotonic() >= self._marks_quiet:
+                if rects and now is d and now.typed.endswith(text) and not self._moved() and self._listening \
+                        and time.monotonic() >= self._marks_quiet:
                     self.marks.show(rects)
                 else:
                     self.marks.hide()
@@ -674,43 +681,43 @@ class App(QObject):
         self._marks_quiet = time.monotonic() + 0.35
         self.marks.hide()
 
-    def _read_focus(self):
-        """Main thread, at listening on and 0.25s after a left click while listening: where the focus is. Once the
-        caret was seen in a text box, a click that puts the focus where nothing can be typed (a web page's blank
-        part, a button, the desktop) turns listening off without Enter (the user's request, 2026-10-16: clicking a
-        blank part of a page in Chrome left it on). Unknown places (None) change nothing."""
+    def _watch_focus(self):
+        """Main thread, every 0.3s when on_focus is set: where the focus is, read on a thread (UI Automation)."""
+        if not self.cfg.on_focus or self._focus_busy or self._quitting:
+            return
+        self._focus_busy = True
+
         def read():
-            state = focus_editable()
-            self.main.emit(lambda: self._focus_read(state))
-        threading.Thread(target=read, daemon=True).start()
+            info = focus_info()
+            self.main.emit(lambda: self._focus_seen(*info))
+        self._focus_pool.submit(read)
 
-    def _focus_read(self, state):
-        if not self._listening or not self.cfg.off_on_window_change:
+    def _focus_seen(self, editable, key, rect):
+        """Main thread (the user's requests, 2026-10-16). The focus came into a text box (a new one: another control
+        or window): "bubble" shows the bubble next to it; "listen" turns listening on, unless it was turned off by
+        hand in this box. The focus went where nothing can be typed (a web page's blank part, a button, the
+        desktop): the bubble goes, and listening is turned off (when it was in a text box before: listening may be
+        turned on by hand anywhere). Unknown places and VoiceInput's own windows change nothing."""
+        self._focus_busy = False
+        mode = self.cfg.on_focus
+        if not mode or editable is None:
             return
-        if state:
-            self._caret_seen = True
-        elif state is False and self._caret_seen:
-            log.info("listen: off, clicked where nothing can be typed")
-            self._stop_listen(send=False)
-
-    def _check_window(self):
-        """Main thread, every 0.5s while listening: when another window is in front than the one text was last typed
-        in while listening (before that, the one in front when listening began), twice in a row (an Alt+Tab passes
-        through the switcher), listening turns off without Enter (the user's request, 2026-10-16; reading whether
-        the focused control takes text missed too often). VoiceInput's own windows do not count."""
-        if not self.cfg.off_on_window_change or not self._listen_shown:
+        if editable:
+            new = key != self._box
+            if new:
+                self._box, self._box_quiet = key, False
+            if mode == "listen" and not self._listening and not self._box_quiet:
+                log.info("listen: on, the focus is in a text box")
+                if self._listen_now("focus", quiet=True):
+                    self._box_auto = True
+            elif mode == "bubble" and new and not self._listening and rect:
+                self.bubble.show_by(rect)
             return
-        s = self.session
-        target = s.hwnd if s.hwnd and s.edited_at >= self._listen_began else self._start_hwnd
-        front = foreground()
-        if not front or not target or front == target or foreground_pid() == os.getpid():
-            self._away = 0
-            return
-        self._away += 1
-        if self._away >= 2:
-            log.info("listen: off, another window came to the front")
-            self._away = 0
-            self._stop_listen(send=False)
+        was, self._box = self._box, None
+        self.bubble.hide()
+        if mode == "listen" and was is not None and self._listening:
+            log.info("listen: off, the focus left the text box")
+            self._stop_listen(send=False, by_focus=True)
 
     def _preview_glow(self, style_id: str):
         """A glow style picked in the settings: shown for a moment (unless listening shows it already)."""
@@ -725,16 +732,19 @@ class App(QObject):
             self.listener.stop(discard=True)
             self._listen_owner = None
 
-    def _stop_listen(self, send: bool = True):
+    def _stop_listen(self, send: bool = True, by_focus: bool = False):
         """Listening off. send: by the key (not 送出 / 結束錄音): Enter once the text is in when the setting says so
-        and something was typed while listening."""
+        and something was typed while listening. by_focus: the focus left the text box (on_focus); any other way
+        of turning it off keeps the focus from turning it on again in the same box."""
+        if not by_focus and self._box is not None:
+            self._box_quiet = True
+        self._box_auto = False
         owner, self._listen_owner, self._listen_shown = self._listen_owner, None, False
         self.listener.stop()   # speech still going on is handed over as a last piece
         self.book.end_session()
         log.info("listen: off")
         self.tray.setIcon(self.icon_idle)
         self.overlay.hide_overlay()
-        self._focus_timer.stop()
         self._marks_timer.stop()
         self.marks.hide()
         self._update_float()
@@ -977,7 +987,8 @@ class App(QObject):
         op, typed, entry = command
         if op is not None:
             log.info("spoken operation: %s", op.phrase)
-            self._run_steps(_Press("listen", _Known(ctx), time.monotonic(), False), op.steps)
+            seen = Context(sel, ctx.terms, ctx.caret)
+            self._run_steps(_Press("listen", _Known(seen), time.monotonic(), False), op.steps)
         else:
             log.info("typed: %s", typed)
             s = self.session
@@ -1272,6 +1283,20 @@ class App(QObject):
             for n, step in enumerate(steps):
                 if n:
                     time.sleep(_STEP_GAP)
+                # a spoken operation with text selected in a terminal acts on the selection, not at the cursor
+                # (the user's request, 2026-10-16: in Claude Code a mouse selection leaves the cursor where it was,
+                # and 刪除 deleted there)
+                sel = press.probe.result().selection if press.key == "listen" and press.deleted is None else None
+                if sel is not None and sel.term is not None and (
+                        step.type == rules.KEYS and step.value in ("Backspace", "Delete") or step.type == rules.TEXT):
+                    if step.type == rules.TEXT:
+                        self._on_main(lambda t=step.value: self._replace_selection(press, sel, t))
+                    else:
+                        self._on_main(lambda: self._delete_selection(press, press.probe.result()))
+                    continue
+                if step.type == rules.COMMAND and step.value in rules.EDIT_COMMANDS:
+                    self._on_main(lambda c=step.value: self._edit_command(press, c, sel))
+                    continue
                 if step.type == rules.WAIT:
                     time.sleep(max(0, int(step.value or 0)) / 1000)
                 elif step.type == rules.KEYS:
@@ -1331,6 +1356,51 @@ class App(QObject):
             s.changed(s.buffer[:-1])
         else:
             s.on_input()
+
+    def _replace_selection(self, press: _Press, sel, text: str):
+        """Main thread: text typed over a terminal selection."""
+        if sel.term is not None:
+            self.overlay.hide_now()
+        pasted = _paste_over(sel, text)
+        self._overlay_idle()
+        if not pasted:
+            self._notify(_SEL_LOST)
+            return
+        press.deleted = sel
+        self.session.replaced_selection(sel.before, text, foreground(), sel.before + sel.text)
+
+    def _edit_command(self, press: _Press, command: str, sel):
+        """Main thread: 全選 / 複製 / 剪下 / 貼上 (2026-10-16). In an ordinary app their keys (Ctrl+A / C / X / V). In a
+        terminal, where Ctrl+C clears Claude Code's input and a mouse selection is not the cursor's: 複製 puts the
+        selection we read on the clipboard, 剪下 also deletes it, 貼上 replaces it with the clipboard's text (or
+        presses Ctrl+V with nothing selected), and 全選 cannot be done. The clipboard a paste borrowed is put back
+        first."""
+        term = sel.term is not None if sel is not None else terminal_in_front()
+        restore_now()
+        if not term:
+            press_chord(0x11, {rules.SELECT_ALL: 0x41, rules.COPY: 0x43, rules.CUT: 0x58, rules.PASTE: 0x56}[command])
+            if command != rules.COPY:
+                self.session.on_input()   # the text or the caret changed in ways we do not follow
+            return
+        if command == rules.SELECT_ALL:
+            self._notify("終端機裡無法全選")
+            return
+        if command == rules.PASTE and sel is None:
+            press_chord(0x11, 0x56)
+            self.session.on_input()
+            return
+        if sel is None:
+            self._notify("沒有選取的文字")
+            return
+        if command in (rules.COPY, rules.CUT):
+            copy_text(sel.text)
+            log.info("copied %r", sel.text)
+        if command == rules.CUT:
+            self._delete_selection(press, press.probe.result())
+        elif command == rules.PASTE:
+            text = QGuiApplication.clipboard().text()
+            if text:
+                self._replace_selection(press, sel, text)
 
     def _type_text(self, text: str):
         if text:
@@ -1658,6 +1728,8 @@ class App(QObject):
             self._stop_listen(send=False)
         self._could_record = can
         self._update_float()
+        if self.cfg.on_focus != "bubble":
+            self.bubble.hide()
         self._set_autostart()
 
     def _set_autostart(self):

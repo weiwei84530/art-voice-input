@@ -73,6 +73,33 @@ _NOT_TEXT = {50000, 50002, 50005, 50006, 50007, 50008, 50009, 50010, 50011, 5001
 _DESKTOP = {"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"}
 
 
+def focus_info():
+    """(editable, key, rect) of the focused control: focus_editable's answer, an identity of the control (its
+    window and UI Automation runtime id) and where a bubble may go next to it (physical pixels: the terminal cursor's
+    cell, else the control's rectangle), or (None, None, None)."""
+    import os
+    try:
+        uia, U = _uia()
+        el = uia.GetFocusedElement()
+        if el.CurrentProcessId == os.getpid():
+            return None, None, None
+        editable = _editable(el, U)
+        key = (ctypes.windll.user32.GetForegroundWindow(), tuple(el.GetRuntimeId() or ()))
+        rect = None
+        if editable:
+            if _proc_name(el.CurrentProcessId) in _TERMINALS or el.CurrentClassName == "TermControl":
+                pattern = el.GetCurrentPattern(U.UIA_TextPatternId)
+                cursor = _term_cursor(pattern.QueryInterface(U.IUIAutomationTextPattern)) if pattern else None
+                if cursor is not None:
+                    rect = _char_rect(*cursor)
+            if rect is None:
+                r = el.CurrentBoundingRectangle
+                rect = (r.left, r.top, r.right - r.left, r.bottom - r.top)
+        return editable, key, rect
+    except Exception:
+        return None, None, None
+
+
 def focus_editable() -> bool | None:
     """Whether text can be typed where the focus is (2026-10-16): True in a text box, a contenteditable box or a
     terminal; False on a button, list, menu, a read-only document (a web page clicked outside its boxes), the desktop
@@ -85,6 +112,13 @@ def focus_editable() -> bool | None:
         el = uia.GetFocusedElement()
         if el.CurrentProcessId == os.getpid():
             return None
+        return _editable(el, U)
+    except Exception:
+        return None
+
+
+def _editable(el, U) -> bool | None:
+    try:
         if _proc_name(el.CurrentProcessId) in _TERMINALS or el.CurrentClassName == "TermControl":
             return True
         top = ctypes.windll.user32.GetAncestor(ctypes.windll.user32.GetForegroundWindow(), 2)
@@ -106,6 +140,10 @@ def focus_editable() -> bool | None:
         return None
     except Exception:
         return None
+
+
+def terminal_in_front() -> bool:
+    return _proc_name(_window_pid(ctypes.windll.user32.GetForegroundWindow())) in _TERMINALS
 
 
 def read_selection() -> Selection | None:

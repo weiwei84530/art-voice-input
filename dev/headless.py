@@ -5,7 +5,8 @@ place of the focused app, so nothing is typed into real windows. Audio comes fro
 
 Each step is a wav name in <dir>/wav (the hotkey held while it is spoken), sel:WORD (select the last WORD in the
 box), mousesel:WORD (the same with the mouse: the 選字 menu may open while listening), floatclick (the floating
-button is clicked), window:N (window N comes to the front; the text box is 4242), click (the user clicks: ends what the app knows about the text), tap (one tap of the hotkey), undo / tap2
+button is clicked), window:N (window N comes to the front; the text box is 4242), focus:box:N / focus:none (what the
+focus watcher reads: text box N, or a place where nothing can be typed), click (the user clicks: ends what the app knows about the text), tap (one tap of the hotkey), undo / tap2
 (double tap), toggle:WAV (tap, speak, tap),
 hotkey:NAME (the key or button the next steps press, default mouse_middle), rules:default (the default operations), rules:norecord (every operation that records removed),
 rule:JSON (add an operation, rules.Rule.from_dict), at:WORD (put the caret right after the last WORD; at: puts it at
@@ -150,6 +151,8 @@ appmod.Overlay.show = lambda self: None   # no indicator on the user's screen ne
 appmod.EdgeGlow.show = lambda self, screen=None: None   # nor the glow around it
 appmod.FloatButton.appear = lambda self: print("      [浮動按鈕 顯示]")   # nor the floating button
 appmod.FloatButton.vanish = lambda self: print("      [浮動按鈕 隱藏]")
+appmod.focus_info = lambda: (None, None, None)   # the real focus is the user's: focus: steps say what it is
+appmod.Bubble.show_by = lambda self, rect: (print(f"      [語音氣泡 {rect}]"), appmod.Bubble.setVisible(self, False))
 A = appmod.App(qapp)
 A.tray.hide()
 A.tray.showMessage = lambda title, text, *a: print(f"      [通知] {title}: {text}")
@@ -249,6 +252,15 @@ while time.monotonic() - t0 < 120 and not A.recognizer:
 pump(2)
 try:
     for step in _steps(sys.argv[2]):
+        if step.startswith("focus:"):   # focus:box:N (the focus in text box N), focus:none (where nothing is typed)
+            what = step[6:]
+            if what == "none":
+                A._focus_seen(False, (1, ()), None)
+            else:
+                A._focus_seen(True, (HWND, (int(what.split(":")[1]),)), (100, 100, 200, 30))
+            pump(1.0)
+            print(f"[焦點 {what}] 聽寫中：{A._listening}  氣泡：{A.bubble.isVisible()}")
+            continue
         if step.startswith("window:"):   # window:N puts window N in front (the text box is 4242)
             hwnd = int(step[7:])
             appmod.foreground = session.foreground = lambda: hwnd

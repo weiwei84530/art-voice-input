@@ -25,6 +25,10 @@ RECORD, DELETE_SELECTION, DELETE_DICTATION = "record", "delete_selection", "dele
 PICK = "pick"
 STOP = "stop"        # 結束錄音: listening off (送出 did it by default 2026-10-14/15)
 UNDO = "undo"        # 復原: double tap and the spoken 復原 by default (the user's request 2026-10-14)
+# 全選 / 複製 / 剪下 / 貼上 (2026-10-16, the user's request): commands, not keys, because a terminal differs: Claude
+# Code clears its input on Ctrl+C, its mouse selection is not the cursor's, and nothing there selects all
+SELECT_ALL, COPY, CUT, PASTE = "select_all", "copy", "cut", "paste"
+EDIT_COMMANDS = (SELECT_ALL, COPY, CUT, PASTE)
 _LISTEN = "listen"   # 連續聽寫, a command for a few hours on 2026-10-14 until 錄音 itself became continuous
 _ADD_HOTWORD = "add_hotword"   # 加入熱詞, removed 2026-10-11: hotwords are typed in the 選字 menu instead
 # config rules_version: 2 added the tap on a selection that opens 選字, 3 a tap that listens, 4 dropped 連續聽寫,
@@ -32,8 +36,8 @@ _ADD_HOTWORD = "add_hotword"   # 加入熱詞, removed 2026-10-11: hotwords are 
 # double tap on a selection that deletes it, 8 adds the spoken 撤銷 (復原) and 刪除 (Backspace), 9 makes 送出 leave
 # listening on (the user's request, 2026-10-15: the microphone stays on, the key turns it off), 10: the simple
 # editor (simplify: hold on a selection = 選字 and the spoken 括號 dropped, 2026-10-16), 11 adds the spoken 結束
-# (結束錄音, the user's request the same day)
-VERSION = 11
+# (結束錄音, the user's request the same day), 12 adds 全選 / 複製 / 剪下 / 貼上 (commands) and drops 貼上 = Alt+V
+VERSION = 12
 
 _PUNCT = re.compile(r"[\s，。、！？；：,.!?;:…]+")
 
@@ -84,8 +88,11 @@ def defaults(key: str = "mouse_middle", newline: bool = True, send: bool = True)
             Rule(SPEECH, phrase="撤銷", steps=[Step(COMMAND, UNDO)]),
             Rule(SPEECH, phrase="刪除", steps=[Step(KEYS, "Backspace")]),
             Rule(SPEECH, phrase="結束", steps=[Step(COMMAND, STOP)]),
+            Rule(SPEECH, phrase="全選", steps=[Step(COMMAND, SELECT_ALL)]),
+            Rule(SPEECH, phrase="複製", steps=[Step(COMMAND, COPY)]),
+            Rule(SPEECH, phrase="剪下", steps=[Step(COMMAND, CUT)]),
+            Rule(SPEECH, phrase="貼上", steps=[Step(COMMAND, PASTE)]),
             Rule(SPEECH, phrase="標點", steps=[Step(TEXT, "- ")]),
-            Rule(SPEECH, phrase="貼上", steps=[Step(KEYS, "Alt+V")]),
             Rule(SPEECH, phrase="空白", steps=[Step(KEYS, "Space")])]
     return out
 
@@ -160,6 +167,12 @@ def upgrade(rules: list[Rule], version: int) -> list[Rule]:
                 r.steps.pop()
     if version < 11 and not any(r.source == SPEECH and normalize(r.phrase) == "結束" for r in rules):
         rules.append(Rule(SPEECH, phrase="結束", steps=[Step(COMMAND, STOP)]))
+    if version < 12:
+        rules[:] = [r for r in rules if not (r.source == SPEECH and normalize(r.phrase) == "貼上"
+                                             and [(st.type, st.value) for st in r.steps] == [(KEYS, "Alt+V")])]
+        for phrase, command in (("全選", SELECT_ALL), ("複製", COPY), ("剪下", CUT), ("貼上", PASTE)):
+            if not any(r.source == SPEECH and normalize(r.phrase) == phrase for r in rules):
+                rules.append(Rule(SPEECH, phrase=phrase, steps=[Step(COMMAND, command)]))
     return rules
 
 
@@ -186,11 +199,11 @@ def key_rule(rules: list[Rule], command: str, when: str) -> Rule | None:
 
 
 def spoken_ok(rule: Rule) -> bool:
-    """A speech rule the simple editor can show: one step of keys, text, 復原 or 結束錄音."""
+    """A speech rule the simple editor can show: one step of keys, text, 復原, 結束錄音 or an edit command."""
     if rule.source != SPEECH or len(rule.steps) != 1:
         return False
     st = rule.steps[0]
-    return st.type in (KEYS, TEXT) or st.type == COMMAND and st.value in (UNDO, STOP)
+    return st.type in (KEYS, TEXT) or st.type == COMMAND and st.value in (UNDO, STOP) + EDIT_COMMANDS
 
 
 def simplify(rules: list[Rule]) -> list[Rule]:

@@ -22,7 +22,11 @@ from .keys import KEY_TRIGGERS, MOUSE_TRIGGERS, combo_text, is_modifier
 from .rules import Rule, Step
 
 GESTURES = [(rules.TAP, "按一下"), (rules.DOUBLE, "連按兩下"), (rules.HOLD, "按住")]
-SPOKEN_ACTIONS = [(rules.KEYS, "按鍵"), (rules.TEXT, "輸入文字"), (rules.UNDO, "復原"), (rules.STOP, "結束錄音")]
+SPOKEN_ACTIONS = [(rules.KEYS, "按鍵"), (rules.TEXT, "輸入文字"), (rules.UNDO, "復原"), (rules.STOP, "結束錄音"),
+                  (rules.SELECT_ALL, "全選"), (rules.COPY, "複製"), (rules.CUT, "剪下"), (rules.PASTE, "貼上")]
+_COMMAND_NOTES = {rules.UNDO: "收回 VoiceInput 剛做的修改", rules.STOP: "關閉麥克風（不按 Enter）",
+                  rules.SELECT_ALL: "全選（終端機裡無法全選）", rules.COPY: "複製選取的文字",
+                  rules.CUT: "剪下選取的文字", rules.PASTE: "貼上（有選取時取代它）"}
 
 HOTWORD_SORTS = [("weight", "優先度（高→低）"), ("name", "名稱 A→Z"), ("name_desc", "名稱 Z→A"),
                  ("date", "日期（新→舊）"), ("date_old", "日期（舊→新）")]
@@ -298,9 +302,11 @@ class SettingsDialog(QDialog):
         self.float_btn = QCheckBox("顯示浮動麥克風按鈕")
         self.float_btn.setToolTip("麥克風關著時，畫面最上層有一個圓形按鈕，點它開啟麥克風（文字打到原本的視窗）；"
                                   "可以拖曳，會出現在滑鼠所在的螢幕")
-        self.off_unfocused = QCheckBox("離開輸入的地方時自動關閉麥克風（換視窗，或點到不能打字的地方）")
-        self.off_unfocused.setToolTip("最近一次打字的視窗不在最前面，或游標放進輸入框之後又點到網頁空白處、按鈕等不能打字的地方，"
-                                      "就關掉麥克風，不按 Enter；VoiceInput 自己的視窗不算")
+        self.on_focus = QComboBox(toolTip="游標放進輸入框（含終端機）時：顯示一個小麥克風氣泡，點了開始錄音；或直接開麥克風，"
+                                          "游標離開到不能打字的地方（網頁空白處、按鈕、桌面）時關掉。用按鍵關掉後，換到別的輸入框才會再自動開")
+        self.on_focus.addItem("不做事", "")
+        self.on_focus.addItem("顯示語音氣泡", "bubble")
+        self.on_focus.addItem("自動開麥克風（離開時關閉）", "listen")
         self.highlight = QCheckBox("還沒定稿的草稿以反白標示（實驗）")
         self.highlight.setToolTip("講話時還會再修正的字疊一層藍色反白，定稿後消失；只是畫在上面，不會真的選取文字")
         self.glow = QComboBox(toolTip="麥克風開著時，螢幕四周亮起一圈光，講話時會變亮；選了會先亮一下讓你看")
@@ -327,6 +333,7 @@ class SettingsDialog(QDialog):
         form = QFormLayout()
         form.addRow("麥克風", self.mic)
         form.addRow("定稿時機", self.commit_at)
+        form.addRow("游標進到輸入框時", self.on_focus)
         form.addRow("自動關閉麥克風", self.auto_off)
         form.addRow("螢幕邊緣光暈", self.glow)
         form.addRow("提示音", sound_row)
@@ -340,7 +347,6 @@ class SettingsDialog(QDialog):
         form.addRow("", self.spin)
         form.addRow("", self.show_pill)
         form.addRow("", self.float_btn)
-        form.addRow("", self.off_unfocused)
         form.addRow("", self.highlight)
         form.addRow("", self.autostart)
         form.addRow("開發測試", audio_row)
@@ -356,9 +362,10 @@ class SettingsDialog(QDialog):
         self.sound_set.currentIndexChanged.connect(self._sound_set_changed)
         self.stop_at.currentIndexChanged.connect(self._apply)
         self.commit_at.currentIndexChanged.connect(self._apply)
+        self.on_focus.currentIndexChanged.connect(self._apply)
         self.auto_off.currentIndexChanged.connect(self._apply)
         self.glow.currentIndexChanged.connect(self._glow_changed)
-        for box in (self.punct, self.period_comma, self.describe, self.send_on_stop, self.stop_on_send, self.spin, self.show_pill, self.float_btn, self.off_unfocused, self.highlight,
+        for box in (self.punct, self.period_comma, self.describe, self.send_on_stop, self.stop_on_send, self.spin, self.show_pill, self.float_btn, self.highlight,
                     self.autostart,
                     self.mute, self.keep_audio):
             box.toggled.connect(self._apply)
@@ -377,7 +384,7 @@ class SettingsDialog(QDialog):
         self.spin.setChecked(self.cfg.spin_while_decoding)
         self.show_pill.setChecked(self.cfg.show_indicator)
         self.float_btn.setChecked(self.cfg.float_button)
-        self.off_unfocused.setChecked(self.cfg.off_on_window_change)
+        self.on_focus.setCurrentIndex(max(0, self.on_focus.findData(self.cfg.on_focus)))
         self.highlight.setChecked(self.cfg.highlight_draft)
         self.keep_audio.setChecked(self.cfg.save_recordings)
         self.start_sound.setCurrentIndex(max(0, self.start_sound.findData(self.cfg.start_sound)))
@@ -416,7 +423,7 @@ class SettingsDialog(QDialog):
         self.cfg.spin_while_decoding = self.spin.isChecked()
         self.cfg.show_indicator = self.show_pill.isChecked()
         self.cfg.float_button = self.float_btn.isChecked()
-        self.cfg.off_on_window_change = self.off_unfocused.isChecked()
+        self.cfg.on_focus = self.on_focus.currentData()
         self.cfg.highlight_draft = self.highlight.isChecked()
         self.cfg.save_recordings = self.keep_audio.isChecked()
         self.cfg.start_sound = self.start_sound.currentData()
@@ -885,7 +892,7 @@ class SettingsDialog(QDialog):
                 value = QLineEdit(row[2], placeholderText="要輸入的文字")
                 value.textEdited.connect(lambda t, r=row: (r.__setitem__(2, t), self._rules_edited()))
             else:
-                value = QLabel("收回 VoiceInput 剛做的修改" if row[2] == rules.UNDO else "關閉麥克風（不按 Enter）")
+                value = QLabel(_COMMAND_NOTES.get(row[2], ""))
                 value.setStyleSheet("color: gray")
             value.setMinimumWidth(90)
             grid.addWidget(QLabel("說「"), i, 0)
@@ -948,7 +955,8 @@ class SettingsDialog(QDialog):
             label.setVisible(bool(items))
 
     def _own_type(self, row: list, kind: str):
-        row[1], row[2] = (rules.COMMAND, kind) if kind in (rules.UNDO, rules.STOP) else (kind, "")
+        row[1], row[2] = (rules.COMMAND, kind) if kind in (rules.UNDO, rules.STOP) + rules.EDIT_COMMANDS \
+            else (kind, "")
         self._rules_edited()
         self._draw_rules()
 
