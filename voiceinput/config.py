@@ -27,6 +27,13 @@ class Config:
     spin_while_decoding: bool = True   # the indicator's red dot spins while speech is being decoded
     glow: str = ""                 # glow.py style along the screen's edges while listening, "" for none
     show_indicator: bool = True    # the recording indicator (the pill); off, the glow and the sounds remain
+    # a floating microphone button, on top while listening is off; a click turns it on (the user's request,
+    # 2026-10-16); float_pos: its place as fractions of the screen's free range (floatbtn.py)
+    float_button: bool = True
+    float_pos: list = field(default_factory=lambda: [0.98, 0.88])
+    # listening turns off when the focus goes from where text can be typed to where it cannot (the user's request,
+    # 2026-10-16; only that way: listening may be turned on anywhere)
+    off_when_unfocused: bool = False
     # minutes without speech after which listening turns itself off, 0 never (the user's request, 2026-10-15: a
     # microphone left on by mistake; 5 their choice of default)
     auto_off_minutes: int = 5

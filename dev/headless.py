@@ -4,7 +4,8 @@ place of the focused app, so nothing is typed into real windows. Audio comes fro
   .venv\Scripts\python.exe dev\headless.py <dir> step,step,...
 
 Each step is a wav name in <dir>/wav (the hotkey held while it is spoken), sel:WORD (select the last WORD in the
-box), mousesel:WORD (the same with the mouse: the 選字 menu may open while listening), click (the user clicks: ends what the app knows about the text), tap (one tap of the hotkey), undo / tap2
+box), mousesel:WORD (the same with the mouse: the 選字 menu may open while listening), floatclick (the floating
+button is clicked), click (the user clicks: ends what the app knows about the text), tap (one tap of the hotkey), undo / tap2
 (double tap), toggle:WAV (tap, speak, tap),
 hotkey:NAME (the key or button the next steps press, default mouse_middle), rules:default (the default operations), rules:norecord (every operation that records removed),
 rule:JSON (add an operation, rules.Rule.from_dict), at:WORD (put the caret right after the last WORD; at: puts it at
@@ -147,6 +148,8 @@ qapp = QApplication(sys.argv)
 qapp.setQuitOnLastWindowClosed(False)
 appmod.Overlay.show = lambda self: None   # no indicator on the user's screen next to their own app's
 appmod.EdgeGlow.show = lambda self, screen=None: None   # nor the glow around it
+appmod.FloatButton.appear = lambda self: print("      [浮動按鈕 顯示]")   # nor the floating button
+appmod.FloatButton.vanish = lambda self: print("      [浮動按鈕 隱藏]")
 A = appmod.App(qapp)
 A.tray.hide()
 A.tray.showMessage = lambda title, text, *a: print(f"      [通知] {title}: {text}")
@@ -246,6 +249,11 @@ while time.monotonic() - t0 < 120 and not A.recognizer:
 pump(2)
 try:
     for step in _steps(sys.argv[2]):
+        if step == "floatclick":   # the floating button is clicked
+            A._float_clicked()
+            pump(0.5)
+            print(f"[點浮動按鈕] 聽寫中：{A._listening}")
+            continue
         if step.startswith("mousesel:"):   # the user selects the last WORD with the mouse (a drag)
             w = step[9:]
             i = box.text.rfind(w)

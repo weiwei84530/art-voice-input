@@ -254,6 +254,17 @@ every 5s, not while decoding). The user sees listening as a switch now: on, it t
 mouse's edits until turned off.
 錄音時顯示指示器 (`show_indicator`, a 一般 checkbox, on by default; the user's request, 2026-10-15): off, the pill is
 not shown (the glow, the sounds and the tray icon still are).
+顯示浮動麥克風按鈕 (`float_button`, a 一般 checkbox, on by default; `floatbtn.py`, the user's request 2026-10-16):
+a round button on top of everything while listening is off; a click turns listening on like a tap of the key
+(`App._float_clicked`, a press named "button"; the key or 送出 turns it off). It never takes focus, so the text goes to
+the window that had it; clicks on it are not caret moves (mouse hook). Dragged, it stays there: its place is kept as
+fractions of the screen's free range (`float_pos`) and it shows at that place on the screen the pointer is on.
+離開可輸入文字的地方時自動關閉麥克風 (`off_when_unfocused`, a 一般 checkbox, off by default; the user's request
+2026-10-16): every 0.5s while listening `selection.focus_editable` reads the focused control (True: a text box,
+writable document or terminal; False: a button, list, menu, read-only document such as a web page, the desktop or
+taskbar; None: other controls, our own windows); two False readings in a row after a True turn listening off without
+Enter. Only that way: listening may be turned on where nothing can be typed. Not yet tried in the user's apps (LINE,
+Electron chat apps may report their input as an unknown kind, which never turns listening off).
 An operation starting with Backspace (the spoken 刪除) gets no added sentence end when the draft showed none: it
 deleted that mark and seemed to do nothing.
 螢幕邊緣光暈 (`glow`, `glow.py`, the 一般 tab, off by default; the user's request, 2026-10-15, like Siri's): a glow

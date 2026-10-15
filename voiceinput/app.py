@@ -45,6 +45,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 from . import autostart, candidates, cues, edit, models, packs, paths, recordings, rules, sounds, spelling
 from .asr import SAMPLE_RATE, Recognizer
 from .config import Config
+from .floatbtn import FloatButton
 from .glow import EdgeGlow
 from .logbook import LogBook, esc
 from .hotwords import Hotwords
@@ -59,7 +60,7 @@ from . import picker as picker_mod
 from .picker import Picker
 from .reading import reading_key
 from .rules import DOUBLE, HOLD, TAP
-from .selection import Context, ContextProbe, move_cursor_after, term_watcher
+from .selection import Context, ContextProbe, focus_editable, move_cursor_after, term_watcher
 from .session import UNDO_DEPTH, Session, foreground
 from .settings import SettingsDialog
 from .textfmt import format_text, to_traditional
@@ -200,6 +201,14 @@ class App(QObject):
         self.overlay = Overlay(lambda: self.listener.level if self._listening else 0.0,
                                lambda: self.cfg.spin_while_decoding and self._busy > 0, glow=self.glow)
         self.overlay.pill = self.cfg.show_indicator
+        self.float_btn = FloatButton(self.cfg.float_pos)
+        self.float_btn.clicked.connect(self._float_clicked)
+        self.float_btn.moved.connect(self._float_moved)
+        self._float_hwnd = self.float_btn.hwnd()
+        self._focus_state = None                 # text could be typed where the focus was (off_when_unfocused)
+        self._focus_off = 0                      # checks in a row that found it cannot any more
+        self._focus_busy = False
+        self._focus_timer = QTimer(self, interval=500, timeout=self._check_focus)
         self.picker = Picker()
         self.picker.picked.connect(self.on_menu_pick)
         self.picker.closed.connect(self._forget_menu)
@@ -241,6 +250,7 @@ class App(QObject):
             self._set_autostart()   # re-register so the entry follows the app if its folder was moved
         if not self._could_record:
             self._notify(_NO_RECORD)
+        self._update_float()
 
     @staticmethod
     def _dark_taskbar() -> bool:
@@ -267,6 +277,14 @@ class App(QObject):
         hwnd = u32.WindowFromPoint(pt)
         return bool(hwnd) and u32.GetAncestor(hwnd, 2) == self._picker_hwnd   # GA_ROOT
 
+    def _on_float(self, pt) -> bool:
+        """Mouse hook thread: the point is on the floating button."""
+        import ctypes.wintypes
+        u32 = ctypes.windll.user32
+        u32.WindowFromPoint.argtypes = [ctypes.wintypes.POINT]
+        hwnd = u32.WindowFromPoint(pt)
+        return bool(hwnd) and u32.GetAncestor(hwnd, 2) == self._float_hwnd   # GA_ROOT
+
     def _watch_mouse(self):
         """Any click may move the caret, which ends what session.py knows about the text before it. Left button
         drags may select text in a terminal (selection.TermWatcher). Our own clicks (injected) are skipped."""
@@ -280,8 +298,8 @@ class App(QObject):
             if self.hotkeys.is_bound_mouse(msg, data.mouseData):
                 return False   # a button an operation uses is not a click
             if msg in downs:
-                if self._on_picker(data.pt):
-                    return False   # a click in the 選字 menu leaves the caret and the selection where they are
+                if self._on_picker(data.pt) or self._on_float(data.pt):
+                    return False   # a click in the 選字 menu or the floating button leaves the caret where it is
                 self.main.emit(self.picker.dismiss)   # a click anywhere else closes it
                 self.session.on_input()
                 self.main.emit(self._caret_left)
@@ -548,6 +566,9 @@ class App(QObject):
             wait += _CUE_LATENCY
             self.listener.still(wait)   # the start sound is not speech; muting waits for its end
         self._heard_at = time.monotonic()
+        self._update_float()
+        self._focus_state, self._focus_off = None, 0
+        self._focus_timer.start()
         if self.cfg.mute_while_recording:
             QTimer.singleShot(int(wait * 1000), lambda: self.muter.mute() if self._listening else None)
         with self._early_lock:
@@ -564,6 +585,60 @@ class App(QObject):
             log.info("listen: off after %d minutes without speech", minutes)
             self._stop_listen(send=False)
             self._notify(f"已自動關閉麥克風（{minutes} 分鐘沒有聽到講話）")
+
+    # --- the floating button and leaving text (2026-10-16) ---
+    def _update_float(self):
+        """Main thread: the floating button shows while listening is off, when the setting says so."""
+        if self.cfg.float_button and not self._listening and not self._quitting:
+            self.float_btn.appear()
+        else:
+            self.float_btn.vanish()
+
+    def _float_clicked(self):
+        """Main thread: the floating button turns listening on, as a tap of the key would (the text goes to the
+        window that has the focus: the button never takes it)."""
+        if self._listening or self._press is not None:
+            return
+        if self.recognizer is None:
+            self._notify(self._status_text or "模型尚未就緒")
+            return
+        press = _Press("button", ContextProbe(), time.monotonic(), self.session.deletable() is not None,
+                       gesture=TAP, decided=True, released=True, finished=True)
+        self._start_listen(press)
+        self._show_listen(press)
+
+    def _float_moved(self, fx: float, fy: float):
+        self.cfg.float_pos = [round(fx, 4), round(fy, 4)]
+        self.cfg.save()
+
+    def _check_focus(self):
+        """Main thread, every 0.5s while listening: when the focus goes from where text can be typed to where it
+        cannot (twice in a row: a window switch passes through other controls), listening turns off, without
+        Enter. Only that way: listening may be turned on anywhere (the user's request, 2026-10-16)."""
+        if not self.cfg.off_when_unfocused or not self._listen_shown or self._focus_busy:
+            return
+        self._focus_busy = True
+
+        def read():
+            state = focus_editable()
+            self.main.emit(lambda: self._focus_read(state))
+        threading.Thread(target=read, daemon=True).start()
+
+    def _focus_read(self, state):
+        self._focus_busy = False
+        if not self._listening or state is None:
+            return
+        if state:
+            self._focus_state, self._focus_off = True, 0
+            return
+        if self._focus_state:
+            self._focus_off += 1
+            if self._focus_off >= 2:
+                log.info("listen: off, the focus left text")
+                self._focus_state, self._focus_off = False, 0
+                self._stop_listen(send=False)
+        else:
+            self._focus_state = False
 
     def _preview_glow(self, style_id: str):
         """A glow style picked in the settings: shown for a moment (unless listening shows it already)."""
@@ -587,6 +662,8 @@ class App(QObject):
         log.info("listen: off")
         self.tray.setIcon(self.icon_idle)
         self.overlay.hide_overlay()
+        self._focus_timer.stop()
+        self._update_float()
         done = self.cfg.stop_sound and self.cfg.stop_sound_at == "done"
         if not done:
             self.muter.restore()
@@ -1501,6 +1578,7 @@ class App(QObject):
         if not can and self._listening:   # nothing could turn it off any more
             self._stop_listen(send=False)
         self._could_record = can
+        self._update_float()
         self._set_autostart()
 
     def _set_autostart(self):
@@ -1521,6 +1599,7 @@ class App(QObject):
         if self._mouse:
             self._mouse.stop()
         self.tray.hide()
+        self.float_btn.vanish()
         self.qapp.quit()
 
 

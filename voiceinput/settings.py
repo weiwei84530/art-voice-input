@@ -294,6 +294,12 @@ class SettingsDialog(QDialog):
         self.spin.setToolTip("講完一段、程式還在辨識時，錄音指示的紅點外會有一圈在轉")
         self.show_pill = QCheckBox("錄音時顯示指示器（底部的小膠囊）")
         self.show_pill.setToolTip("關掉後，麥克風開著只靠提示音和螢幕邊緣光暈（有開的話）提醒你")
+        self.float_btn = QCheckBox("顯示浮動麥克風按鈕")
+        self.float_btn.setToolTip("麥克風關著時，畫面最上層有一個圓形按鈕，點它開啟麥克風（文字打到原本的視窗）；"
+                                  "可以拖曳，會出現在滑鼠所在的螢幕")
+        self.off_unfocused = QCheckBox("離開可輸入文字的地方時自動關閉麥克風")
+        self.off_unfocused.setToolTip("焦點從輸入框移到按鈕、清單、桌面等不能打字的地方時關掉麥克風（不按 Enter）；"
+                                      "在不能打字的地方仍然可以開麥克風")
         self.glow = QComboBox(toolTip="麥克風開著時，螢幕四周亮起一圈光，講話時會變亮；選了會先亮一下讓你看")
         self.glow.addItem("關閉", "")
         for st in glowmod.STYLES:
@@ -330,6 +336,8 @@ class SettingsDialog(QDialog):
         form.addRow("", self.stop_on_send)
         form.addRow("", self.spin)
         form.addRow("", self.show_pill)
+        form.addRow("", self.float_btn)
+        form.addRow("", self.off_unfocused)
         form.addRow("", self.autostart)
         form.addRow("開發測試", audio_row)
         page = QWidget()
@@ -346,7 +354,7 @@ class SettingsDialog(QDialog):
         self.commit_at.currentIndexChanged.connect(self._apply)
         self.auto_off.currentIndexChanged.connect(self._apply)
         self.glow.currentIndexChanged.connect(self._glow_changed)
-        for box in (self.punct, self.period_comma, self.describe, self.send_on_stop, self.stop_on_send, self.spin, self.show_pill,
+        for box in (self.punct, self.period_comma, self.describe, self.send_on_stop, self.stop_on_send, self.spin, self.show_pill, self.float_btn, self.off_unfocused,
                     self.autostart,
                     self.mute, self.keep_audio):
             box.toggled.connect(self._apply)
@@ -364,6 +372,8 @@ class SettingsDialog(QDialog):
         self.stop_on_send.setChecked(self.cfg.stop_on_send)
         self.spin.setChecked(self.cfg.spin_while_decoding)
         self.show_pill.setChecked(self.cfg.show_indicator)
+        self.float_btn.setChecked(self.cfg.float_button)
+        self.off_unfocused.setChecked(self.cfg.off_when_unfocused)
         self.keep_audio.setChecked(self.cfg.save_recordings)
         self.start_sound.setCurrentIndex(max(0, self.start_sound.findData(self.cfg.start_sound)))
         self.stop_sound.setCurrentIndex(max(0, self.stop_sound.findData(self.cfg.stop_sound)))
@@ -400,6 +410,8 @@ class SettingsDialog(QDialog):
         self.cfg.stop_on_send = self.stop_on_send.isChecked()
         self.cfg.spin_while_decoding = self.spin.isChecked()
         self.cfg.show_indicator = self.show_pill.isChecked()
+        self.cfg.float_button = self.float_btn.isChecked()
+        self.cfg.off_when_unfocused = self.off_unfocused.isChecked()
         self.cfg.save_recordings = self.keep_audio.isChecked()
         self.cfg.start_sound = self.start_sound.currentData()
         self.cfg.stop_sound = self.stop_sound.currentData()
