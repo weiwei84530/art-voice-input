@@ -31,9 +31,9 @@ class Config:
     # 2026-10-16); float_pos: its place as fractions of the screen's free range (floatbtn.py)
     float_button: bool = True
     float_pos: list = field(default_factory=lambda: [0.98, 0.88])
-    # listening turns off when the focus goes from where text can be typed to where it cannot (the user's request,
-    # 2026-10-16; only that way: listening may be turned on anywhere)
-    off_when_unfocused: bool = False
+    # listening turns off when another window comes to the front than the one text was last typed in (or, before
+    # anything was typed, the one in front when listening began); the user's request, 2026-10-16
+    off_on_window_change: bool = False
     # minutes without speech after which listening turns itself off, 0 never (the user's request, 2026-10-15: a
     # microphone left on by mistake; 5 their choice of default)
     auto_off_minutes: int = 5

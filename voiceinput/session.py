@@ -46,6 +46,7 @@ class Session:
         self._lock = threading.RLock()
         self.buffer = ""
         self.hwnd = 0
+        self.edited_at = 0.0                   # when text was last put in self.hwnd (time.monotonic)
         self.dirty = True
         self.utterances: list[Utterance] = []
         self.history: list[Step] = []          # the last changes, oldest first, while they can be taken back
@@ -70,7 +71,7 @@ class Session:
             u = Utterance(start, len(self.buffer), text, audio)
             self.utterances.append(u)
             self._push(Step(before, self.buffer, prior))
-            self.hwnd, self.dirty = hwnd, False
+            self.hwnd, self.dirty, self.edited_at = hwnd, False, time.monotonic()
             return u
 
     def _push(self, step: Step):
@@ -82,7 +83,7 @@ class Session:
         with self._lock:
             self.buffer, self.utterances = before + new, []
             self.history = [Step(undo_to, self.buffer, [])] if undo_to is not None else []
-            self.hwnd, self.dirty = hwnd, False
+            self.hwnd, self.dirty, self.edited_at = hwnd, False, time.monotonic()
 
     def retyped(self, new: str, step: bool = False):
         """The caller turned the buffer into new (Backspace + paste): a draft shown while listening changed. step:

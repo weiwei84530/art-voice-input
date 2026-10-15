@@ -298,9 +298,9 @@ class SettingsDialog(QDialog):
         self.float_btn = QCheckBox("顯示浮動麥克風按鈕")
         self.float_btn.setToolTip("麥克風關著時，畫面最上層有一個圓形按鈕，點它開啟麥克風（文字打到原本的視窗）；"
                                   "可以拖曳，會出現在滑鼠所在的螢幕")
-        self.off_unfocused = QCheckBox("離開可輸入文字的地方時自動關閉麥克風")
-        self.off_unfocused.setToolTip("焦點從輸入框移到按鈕、清單、桌面等不能打字的地方時關掉麥克風（不按 Enter）；"
-                                      "在不能打字的地方仍然可以開麥克風")
+        self.off_unfocused = QCheckBox("切換到其他視窗時自動關閉麥克風")
+        self.off_unfocused.setToolTip("最近一次打字的視窗（還沒打字時是開麥克風時的視窗）不在最前面時關掉麥克風，不按 Enter；"
+                                      "VoiceInput 自己的視窗不算")
         self.glow = QComboBox(toolTip="麥克風開著時，螢幕四周亮起一圈光，講話時會變亮；選了會先亮一下讓你看")
         self.glow.addItem("關閉", "")
         for st in glowmod.STYLES:
@@ -374,7 +374,7 @@ class SettingsDialog(QDialog):
         self.spin.setChecked(self.cfg.spin_while_decoding)
         self.show_pill.setChecked(self.cfg.show_indicator)
         self.float_btn.setChecked(self.cfg.float_button)
-        self.off_unfocused.setChecked(self.cfg.off_when_unfocused)
+        self.off_unfocused.setChecked(self.cfg.off_on_window_change)
         self.keep_audio.setChecked(self.cfg.save_recordings)
         self.start_sound.setCurrentIndex(max(0, self.start_sound.findData(self.cfg.start_sound)))
         self.stop_sound.setCurrentIndex(max(0, self.stop_sound.findData(self.cfg.stop_sound)))
@@ -412,7 +412,7 @@ class SettingsDialog(QDialog):
         self.cfg.spin_while_decoding = self.spin.isChecked()
         self.cfg.show_indicator = self.show_pill.isChecked()
         self.cfg.float_button = self.float_btn.isChecked()
-        self.cfg.off_when_unfocused = self.off_unfocused.isChecked()
+        self.cfg.off_on_window_change = self.off_unfocused.isChecked()
         self.cfg.save_recordings = self.keep_audio.isChecked()
         self.cfg.start_sound = self.start_sound.currentData()
         self.cfg.stop_sound = self.stop_sound.currentData()

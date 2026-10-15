@@ -60,7 +60,7 @@ from . import picker as picker_mod
 from .picker import Picker
 from .reading import reading_key
 from .rules import DOUBLE, HOLD, TAP
-from .selection import Context, ContextProbe, focus_editable, move_cursor_after, term_watcher
+from .selection import Context, ContextProbe, move_cursor_after, term_watcher
 from .session import UNDO_DEPTH, Session, foreground
 from .settings import SettingsDialog
 from .textfmt import format_text, to_traditional
@@ -215,10 +215,10 @@ class App(QObject):
         self.float_btn.clicked.connect(self._float_clicked)
         self.float_btn.moved.connect(self._float_moved)
         self._float_hwnd = self.float_btn.hwnd()
-        self._focus_state = None                 # text could be typed where the focus was (off_when_unfocused)
-        self._focus_off = 0                      # checks in a row that found it cannot any more
-        self._focus_busy = False
-        self._focus_timer = QTimer(self, interval=500, timeout=self._check_focus)
+        self._start_hwnd = 0                     # the window in front when listening began
+        self._listen_began = 0.0
+        self._away = 0                           # window checks in a row that found another window in front
+        self._focus_timer = QTimer(self, interval=500, timeout=self._check_window)
         self.picker = Picker()
         self.picker.picked.connect(self.on_menu_pick)
         self.picker.closed.connect(self._forget_menu)
@@ -577,7 +577,7 @@ class App(QObject):
             self.listener.still(wait)   # the start sound is not speech; muting waits for its end
         self._heard_at = time.monotonic()
         self._update_float()
-        self._focus_state, self._focus_off = None, 0
+        self._start_hwnd, self._listen_began, self._away = foreground(), time.monotonic(), 0
         self._focus_timer.start()
         if self.cfg.mute_while_recording:
             QTimer.singleShot(int(wait * 1000), lambda: self.muter.mute() if self._listening else None)
@@ -621,34 +621,24 @@ class App(QObject):
         self.cfg.float_pos = [round(fx, 4), round(fy, 4)]
         self.cfg.save()
 
-    def _check_focus(self):
-        """Main thread, every 0.5s while listening: when the focus goes from where text can be typed to where it
-        cannot (twice in a row: a window switch passes through other controls), listening turns off, without
-        Enter. Only that way: listening may be turned on anywhere (the user's request, 2026-10-16)."""
-        if not self.cfg.off_when_unfocused or not self._listen_shown or self._focus_busy:
+    def _check_window(self):
+        """Main thread, every 0.5s while listening: when another window is in front than the one text was last typed
+        in while listening (before that, the one in front when listening began), twice in a row (an Alt+Tab passes
+        through the switcher), listening turns off without Enter (the user's request, 2026-10-16; reading whether
+        the focused control takes text missed too often). VoiceInput's own windows do not count."""
+        if not self.cfg.off_on_window_change or not self._listen_shown:
             return
-        self._focus_busy = True
-
-        def read():
-            state = focus_editable()
-            self.main.emit(lambda: self._focus_read(state))
-        threading.Thread(target=read, daemon=True).start()
-
-    def _focus_read(self, state):
-        self._focus_busy = False
-        if not self._listening or state is None:
+        s = self.session
+        target = s.hwnd if s.hwnd and s.edited_at >= self._listen_began else self._start_hwnd
+        front = foreground()
+        if not front or not target or front == target or foreground_pid() == os.getpid():
+            self._away = 0
             return
-        if state:
-            self._focus_state, self._focus_off = True, 0
-            return
-        if self._focus_state:
-            self._focus_off += 1
-            if self._focus_off >= 2:
-                log.info("listen: off, the focus left text")
-                self._focus_state, self._focus_off = False, 0
-                self._stop_listen(send=False)
-        else:
-            self._focus_state = False
+        self._away += 1
+        if self._away >= 2:
+            log.info("listen: off, another window came to the front")
+            self._away = 0
+            self._stop_listen(send=False)
 
     def _preview_glow(self, style_id: str):
         """A glow style picked in the settings: shown for a moment (unless listening shows it already)."""

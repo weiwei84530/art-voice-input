@@ -5,7 +5,7 @@ place of the focused app, so nothing is typed into real windows. Audio comes fro
 
 Each step is a wav name in <dir>/wav (the hotkey held while it is spoken), sel:WORD (select the last WORD in the
 box), mousesel:WORD (the same with the mouse: the 選字 menu may open while listening), floatclick (the floating
-button is clicked), click (the user clicks: ends what the app knows about the text), tap (one tap of the hotkey), undo / tap2
+button is clicked), window:N (window N comes to the front; the text box is 4242), click (the user clicks: ends what the app knows about the text), tap (one tap of the hotkey), undo / tap2
 (double tap), toggle:WAV (tap, speak, tap),
 hotkey:NAME (the key or button the next steps press, default mouse_middle), rules:default (the default operations), rules:norecord (every operation that records removed),
 rule:JSON (add an operation, rules.Rule.from_dict), at:WORD (put the caret right after the last WORD; at: puts it at
@@ -249,6 +249,12 @@ while time.monotonic() - t0 < 120 and not A.recognizer:
 pump(2)
 try:
     for step in _steps(sys.argv[2]):
+        if step.startswith("window:"):   # window:N puts window N in front (the text box is 4242)
+            hwnd = int(step[7:])
+            appmod.foreground = session.foreground = lambda: hwnd
+            pump(1.5)
+            print(f"[切換視窗 {hwnd}] 聽寫中：{A._listening}")
+            continue
         if step == "floatclick":   # the floating button is clicked
             A._float_clicked()
             pump(0.5)
