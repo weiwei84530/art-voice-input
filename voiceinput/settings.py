@@ -298,9 +298,9 @@ class SettingsDialog(QDialog):
         self.float_btn = QCheckBox("顯示浮動麥克風按鈕")
         self.float_btn.setToolTip("麥克風關著時，畫面最上層有一個圓形按鈕，點它開啟麥克風（文字打到原本的視窗）；"
                                   "可以拖曳，會出現在滑鼠所在的螢幕")
-        self.off_unfocused = QCheckBox("切換到其他視窗時自動關閉麥克風")
-        self.off_unfocused.setToolTip("最近一次打字的視窗（還沒打字時是開麥克風時的視窗）不在最前面時關掉麥克風，不按 Enter；"
-                                      "VoiceInput 自己的視窗不算")
+        self.off_unfocused = QCheckBox("離開輸入的地方時自動關閉麥克風（換視窗，或點到不能打字的地方）")
+        self.off_unfocused.setToolTip("最近一次打字的視窗不在最前面，或游標放進輸入框之後又點到網頁空白處、按鈕等不能打字的地方，"
+                                      "就關掉麥克風，不按 Enter；VoiceInput 自己的視窗不算")
         self.highlight = QCheckBox("還沒定稿的草稿以反白標示（實驗）")
         self.highlight.setToolTip("講話時還會再修正的字疊一層藍色反白，定稿後消失；只是畫在上面，不會真的選取文字")
         self.glow = QComboBox(toolTip="麥克風開著時，螢幕四周亮起一圈光，講話時會變亮；選了會先亮一下讓你看")

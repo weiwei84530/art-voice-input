@@ -267,19 +267,29 @@ fractions of the screen's free range (`float_pos`) and it shows at that place on
 last typed in during this listening (`Session.edited_at`), or before anything was typed the one in front when
 listening began, twice in a row, listening turns off without Enter. VoiceInput's own windows do not count. It
 replaced, the same evening, a check of whether the focused control takes text (UI Automation control types), which
-missed too often in the user's apps.
+missed too often in the user's apps. Later that night it came back on clicks, measured in Chrome (`focus_editable`:
+a textarea or search box is a writable Edit, a contenteditable box such as ChatGPT's or Claude.ai's a focusable Group
+with a TextPattern and no ValuePattern, which the first version counted as unknown so it never armed; blank page is
+the read-only RootWebArea document): once the focus was seen in a text box while listening (read when listening
+begins and 0.25s after each left click), a left click that puts it where nothing can be typed turns listening off
+without Enter (the user's request: clicking a blank part of a page left it on). Unknown places change nothing. The
+checkbox reads 離開輸入的地方時自動關閉麥克風（換視窗，或點到不能打字的地方）.
 還沒定稿的草稿以反白標示（實驗） (`highlight_draft`, a 一般 checkbox, off by default; `highlight.py`, the user's
 request 2026-10-16, after an underline was declined on 10-15): while listening, every 0.15s (`App._mark_draft`) the
 draft's place is read on a thread (`highlight.draft_rects`: the characters before the caret, checked to be the draft's
 text; in Windows Terminal the input box rows walked back from the cursor, borders and row-end padding left out) and
 click-through selection-blue boxes are drawn there (`DraftMarks`); hidden when the draft is committed or left, the
-caret moves, or another window is in front. Measured with `dev/highlight_spike.py` / `.html` (no typing: a page with
+caret moves, or another window is in front. Only the open sentence is marked, the part a later pause may still
+change; the settled text before it is not (the user's expectation, 2026-10-16). While the mouse wheel turns the marks
+hide, and come back 0.35s after it stops (following the scroll they trailed by up to 0.15s). Windows Terminal reports
+a wide character 3 cells wide (it takes 2; not herdr): a row's box ends at the next cell's left edge. Measured with `dev/highlight_spike.py` / `.html` (no typing: a page with
 a textarea and a contenteditable box, the caret placed by UIA): exact in Chrome (two wrapped rows, ~13ms a read) and
 in a Windows Terminal prompt laid out like Claude Code's (three indented rows, 10-30ms); a wrong text draws nothing.
 Not tried: Notepad (the user's was open; a new file would be a tab in it), LINE, Electron apps, scrolling while
 drafting, and with the user's real voice.
-An operation starting with Backspace (the spoken 刪除) gets no added sentence end when the draft showed none: it
-deleted that mark and seemed to do nothing.
+An operation starting with Backspace (the spoken 刪除) or 復原 (撤銷) gets no added sentence end when the draft showed
+none: Backspace deleted that mark and seemed to do nothing; 復原 showed the 。 for a moment before taking back the
+last update (2026-10-16, `_no_mark_first`).
 螢幕邊緣光暈 (`glow`, `glow.py`, the 一般 tab, off by default; the user's request, 2026-10-15, like Siri's): a glow
 around the edges of the indicator's screen while listening, shown and hidden with the indicator (which stays, the
 user's choice), brightening and reaching further in with the voice (their choice). Five styles in a drop-down

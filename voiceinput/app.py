@@ -61,7 +61,7 @@ from . import picker as picker_mod
 from .picker import Picker
 from .reading import reading_key
 from .rules import DOUBLE, HOLD, TAP
-from .selection import Context, ContextProbe, move_cursor_after, term_watcher
+from .selection import Context, ContextProbe, focus_editable, move_cursor_after, term_watcher
 from .session import UNDO_DEPTH, Session, foreground
 from .settings import SettingsDialog
 from .textfmt import format_text, to_traditional
@@ -219,11 +219,13 @@ class App(QObject):
         self._start_hwnd = 0                     # the window in front when listening began
         self._listen_began = 0.0
         self._away = 0                           # window checks in a row that found another window in front
+        self._caret_seen = False                 # the focus was where text can be typed while listening
         self._focus_timer = QTimer(self, interval=500, timeout=self._check_window)
         self.marks = DraftMarks()                # the draft drawn as if selected (highlight_draft)
         self._marks_pool = ThreadPoolExecutor(max_workers=1)   # UI Automation reads for it
         self._marks_busy = False
         self._marks_timer = QTimer(self, interval=150, timeout=self._mark_draft)
+        self._marks_quiet = 0.0                  # no marks until then: the view is scrolling
         self.picker = Picker()
         self.picker.picked.connect(self.on_menu_pick)
         self.picker.closed.connect(self._forget_menu)
@@ -319,12 +321,17 @@ class App(QObject):
                 self.session.on_input()
                 self.main.emit(self._caret_left)
                 self._pick_gen += 1
+                if msg == 0x201 and self._listening and self.cfg.off_on_window_change:
+                    self.main.emit(lambda: QTimer.singleShot(250, self._read_focus))   # the click moved the focus
                 if msg == 0x201:
                     term_watcher.mouse_down(data.pt.x, data.pt.y)
                     clicks["down"] = (data.pt.x, data.pt.y)
                 else:
                     term_watcher.forget()
                     clicks["down"] = None
+            elif msg in (0x20A, 0x20E):   # the wheel: the view scrolls, the marks would trail behind it
+                if self.marks.visible():
+                    self.main.emit(self._scrolling)
             elif msg == 0x202:
                 term_watcher.mouse_up(data.pt.x, data.pt.y)
                 down, clicks["down"] = clicks["down"], None
@@ -583,6 +590,9 @@ class App(QObject):
         self._heard_at = time.monotonic()
         self._update_float()
         self._start_hwnd, self._listen_began, self._away = foreground(), time.monotonic(), 0
+        self._caret_seen = False
+        if self.cfg.off_on_window_change:
+            self._read_focus()
         self._focus_timer.start()
         self._marks_timer.start()
         if self.cfg.mute_while_recording:
@@ -635,10 +645,15 @@ class App(QObject):
                 or foreground() != self.session.hwnd:
             self.marks.hide()
             return
+        # only the open sentence: the settled text before it is not decoded again (the user's expectation,
+        # 2026-10-16: the blue marks what may still change)
+        text = d.typed[len(d.settled):].lstrip() if d.settled and d.typed.startswith(d.settled) else d.typed
+        if not text.strip() or time.monotonic() < self._marks_quiet:
+            self.marks.hide()
+            return
         if self._marks_busy:
             return
         self._marks_busy = True
-        text = d.typed
 
         def read():
             rects = draft_rects(text)
@@ -646,12 +661,37 @@ class App(QObject):
             def show():
                 self._marks_busy = False
                 now = self._draft
-                if rects and now is d and now.typed == text and not self._moved() and self._listening:
+                if rects and now is d and now.typed.endswith(text) and not self._moved() and self._listening                         and time.monotonic() >= self._marks_quiet:
                     self.marks.show(rects)
                 else:
                     self.marks.hide()
             self.main.emit(show)
         self._marks_pool.submit(read)
+
+    def _scrolling(self):
+        """Main thread: the wheel turned. The marks hide and come back 0.35s after it stops (following the text as
+        it scrolled, they trailed behind by up to 0.15s; the user's choice, 2026-10-16)."""
+        self._marks_quiet = time.monotonic() + 0.35
+        self.marks.hide()
+
+    def _read_focus(self):
+        """Main thread, at listening on and 0.25s after a left click while listening: where the focus is. Once the
+        caret was seen in a text box, a click that puts the focus where nothing can be typed (a web page's blank
+        part, a button, the desktop) turns listening off without Enter (the user's request, 2026-10-16: clicking a
+        blank part of a page in Chrome left it on). Unknown places (None) change nothing."""
+        def read():
+            state = focus_editable()
+            self.main.emit(lambda: self._focus_read(state))
+        threading.Thread(target=read, daemon=True).start()
+
+    def _focus_read(self, state):
+        if not self._listening or not self.cfg.off_on_window_change:
+            return
+        if state:
+            self._caret_seen = True
+        elif state is False and self._caret_seen:
+            log.info("listen: off, clicked where nothing can be typed")
+            self._stop_listen(send=False)
 
     def _check_window(self):
         """Main thread, every 0.5s while listening: when another window is in front than the one text was last typed
@@ -894,9 +934,8 @@ class App(QObject):
                     _go_on(d)
                 d.final = _TRAILING.sub("", _joined(d.settled, text))
                 end = _SENTENCE_END.search(_joined(d.settled, text))
-                # an operation starting with Backspace (刪除) takes off the last character shown: a mark added
-                # first would be what it deletes, and it looked like it did nothing (2026-10-15)
-                if final and d.final and not _inside(d.ctx) and not (end is None and _backspace_first(command)):
+                # no mark added before an operation that takes back what precedes the caret (_no_mark_first)
+                if final and d.final and not _inside(d.ctx) and not (end is None and _no_mark_first(command)):
                     # none from the recognizer (a short sentence often has none): 。 (the user's choice, 2026-10-15),
                     # ？ after 嗎 (the user's request the same day)
                     d.final += end.group() if end else "？" if d.final.endswith("嗎") \
@@ -1654,9 +1693,15 @@ def _inside(ctx) -> bool:
     return sides is not None and all(t.strip() for t in sides)
 
 
-def _backspace_first(command) -> bool:
+def _no_mark_first(command) -> bool:
+    """An operation that takes back what is before the caret: Backspace (刪除) would delete a mark the commit added
+    and seem to do nothing (2026-10-15); 復原 (撤銷) showed the 。 for a moment before taking back the last update
+    (2026-10-16)."""
     op = command[0] if command is not None else None
-    return op is not None and bool(op.steps) and op.steps[0].type == rules.KEYS and op.steps[0].value == "Backspace"
+    if op is None or not op.steps:
+        return False
+    st = op.steps[0]
+    return (st.type, st.value) in ((rules.KEYS, "Backspace"), (rules.COMMAND, rules.UNDO))
 
 
 def _go_on(d) -> None:

@@ -32,7 +32,8 @@ class Config:
     float_button: bool = True
     float_pos: list = field(default_factory=lambda: [0.98, 0.88])
     # listening turns off when another window comes to the front than the one text was last typed in (or, before
-    # anything was typed, the one in front when listening began); the user's request, 2026-10-16
+    # anything was typed, the one in front when listening began), or a click puts the focus where nothing can be
+    # typed after the caret was in a text box; the user's requests, 2026-10-16
     off_on_window_change: bool = False
     # the draft drawn as if selected (highlight.py), an experiment (the user's request, 2026-10-16)
     highlight_draft: bool = False

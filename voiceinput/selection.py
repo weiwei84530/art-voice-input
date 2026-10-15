@@ -67,6 +67,47 @@ def _uia():
     return _local.uia, _local.U
 
 
+# control types where nothing can be typed (UIA_*ControlTypeId): a button, a list, a menu, a tab …
+_NOT_TEXT = {50000, 50002, 50005, 50006, 50007, 50008, 50009, 50010, 50011, 50013, 50014, 50015, 50016, 50017,
+             50018, 50019, 50021, 50023, 50024, 50029, 50031, 50034, 50035, 50037}
+_DESKTOP = {"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"}
+
+
+def focus_editable() -> bool | None:
+    """Whether text can be typed where the focus is (2026-10-16): True in a text box, a contenteditable box or a
+    terminal; False on a button, list, menu, a read-only document (a web page clicked outside its boxes), the desktop
+    or the taskbar; None when unknown (our own windows, UI Automation failing). Measured in Chrome: a textarea and
+    a search box are writable Edits, a contenteditable box (the chat boxes of ChatGPT, Claude.ai) a focusable Group
+    with a TextPattern and no ValuePattern, blank page the read-only RootWebArea document."""
+    import os
+    try:
+        uia, U = _uia()
+        el = uia.GetFocusedElement()
+        if el.CurrentProcessId == os.getpid():
+            return None
+        if _proc_name(el.CurrentProcessId) in _TERMINALS or el.CurrentClassName == "TermControl":
+            return True
+        top = ctypes.windll.user32.GetAncestor(ctypes.windll.user32.GetForegroundWindow(), 2)
+        cls = ctypes.create_unicode_buffer(64)
+        ctypes.windll.user32.GetClassNameW(top, cls, 64)
+        if cls.value in _DESKTOP:
+            return False
+        kind = el.CurrentControlType
+        value = el.GetCurrentPattern(U.UIA_ValuePatternId)
+        read_only = bool(value.QueryInterface(U.IUIAutomationValuePattern).CurrentIsReadOnly) if value else None
+        if kind == U.UIA_EditControlTypeId:
+            return not read_only
+        if kind == U.UIA_DocumentControlTypeId:
+            return None if read_only is None else not read_only
+        if kind in _NOT_TEXT:
+            return False
+        if not read_only and el.CurrentIsKeyboardFocusable and el.GetCurrentPattern(U.UIA_TextPatternId):
+            return True
+        return None
+    except Exception:
+        return None
+
+
 def read_selection() -> Selection | None:
     """The focused app's non-empty selection, or None (nothing selected, unsupported app, terminal)."""
     try:

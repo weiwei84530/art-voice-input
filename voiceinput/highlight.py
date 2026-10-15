@@ -64,6 +64,9 @@ class DraftMarks:
         for m in self._marks[len(rects):]:
             m.hide()
 
+    def visible(self) -> bool:
+        return bool(self._shown)
+
     def hide(self):
         if self._shown:
             self._shown = ()
@@ -131,7 +134,14 @@ def _term_rects(pattern, U, text: str) -> list | None:
                     count += 1
             got = _flat(row[a:b]) + got
             first, last = selection._char_rect(line, a), selection._char_rect(line, b - 1)
-            rects.append((first[0], first[1], last[0] + last[2] - first[0], first[3]))
+            right = last[0] + last[2]
+            if b < len(row):
+                # Windows Terminal reports a wide character 3 cells wide (it takes 2): the next cell's left edge is
+                # where it ends (the user saw half a character too much in Claude Code, 2026-10-16)
+                nxt = selection._char_rect(line, b)
+                if nxt[1] == first[1] and nxt[0] > last[0]:
+                    right = nxt[0]
+            rects.append((first[0], first[1], right - first[0], first[3]))
         if len(got) >= len(need):
             break
         line = line.Clone()
