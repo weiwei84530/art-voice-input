@@ -154,9 +154,12 @@ seconds, the recognizer's own text and the formatting steps only with 顯示技�
 
 Since 2026-10-16 the tab is a simple editor (the user's design; the card editor with steps, situations and any
 command was removed): 按鍵, three rows of [key or 不使用] [按一下 / 連按兩下 / 按住] + what it does: 開關麥克風,
-復原, 刪除選取的文字（有選取時） (`rules.KEY_ROWS`); 口說, four built-in rows 說「…」就會 換行 (Shift+Enter) / 送出
-(Enter) / 復原 / 刪掉前一個字 (Backspace) whose phrase box takes several phrases separated by 、 (empty: off;
-`rules.SPOKEN`), then the user's own rows (one step: 按鍵 captured or 輸入文字) and ＋ 新增口說操作. Clashes are
+復原, 刪除選取的文字（有選取時） (`rules.KEY_ROWS`); 口說, rows 說「…」就會 [按鍵 / 輸入文字 / 復原 / 結束錄音] [value],
+every one editable and removable (no built-in rows since the same evening, the user's choice: 換行 / 送出 / 刪除 are
+just Shift+Enter / Enter / Backspace; 復原 stays VoiceInput's own, not Ctrl+Z); a phrase box takes several phrases
+separated by 、 (one rule each; rules with the same step share a row), and ＋ 新增口說操作. The spoken 結束 turns
+listening off (rules_version 11 adds it; the user's request). A first decode that is already exactly a command is not
+decoded again with commands boosted, and a command the boost repeated (結束結束結束) counts once (`_one_command`). Clashes are
 listed in red under each part. The rules format is unchanged; `rules.simplify` (on every load, rules_version 10)
 keeps only what the editor can show: the spoken 括號 (two steps) and hold on a selection = 選字 (the menu opens by
 itself while listening) were dropped, the user's choice. The rest of this section describes the rule engine,

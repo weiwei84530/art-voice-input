@@ -22,6 +22,7 @@ from .keys import KEY_TRIGGERS, MOUSE_TRIGGERS, combo_text, is_modifier
 from .rules import Rule, Step
 
 GESTURES = [(rules.TAP, "按一下"), (rules.DOUBLE, "連按兩下"), (rules.HOLD, "按住")]
+SPOKEN_ACTIONS = [(rules.KEYS, "按鍵"), (rules.TEXT, "輸入文字"), (rules.UNDO, "復原"), (rules.STOP, "結束錄音")]
 
 HOTWORD_SORTS = [("weight", "優先度（高→低）"), ("name", "名稱 A→Z"), ("name_desc", "名稱 Z→A"),
                  ("date", "日期（新→舊）"), ("date_old", "日期（舊→新）")]
@@ -482,12 +483,10 @@ class SettingsDialog(QDialog):
         self.hw_input.returnPressed.connect(self._add_hotword)
         add = QPushButton("加入")
         add.clicked.connect(self._add_hotword)
-        hw_top = QVBoxLayout()
-        add_row = QHBoxLayout()
-        add_row.addWidget(self.hw_input, 1)
-        add_row.addWidget(add)
-        hw_top.addLayout(add_row)
-        hw_top.addLayout(self._sort_row(HOTWORD_SORTS, "hotword_sort"))
+        self.hw_input.setFixedWidth(180)
+        hw_top = self._sort_row(HOTWORD_SORTS, "hotword_sort")   # 排序 [drop-down] … [input] [加入]
+        hw_top.addWidget(self.hw_input)
+        hw_top.addWidget(add)
         self.hw_list, self.hw_empty, hw_body = _card_list(
             "詞庫裡還沒有詞。選字時選了詞語（被換掉的詞也會列出，優先度較低），或在上面輸入詞語，就會加到這裡。", hw_top)
         self.pick_list, self.pick_empty, pick_body = _card_list(
@@ -815,21 +814,23 @@ class SettingsDialog(QDialog):
         return page
 
     def refresh_rules(self):
-        """Rows from cfg.rules: the key rows, the built-in spoken rows, the user's own spoken rows."""
+        """Rows from cfg.rules: the key rows and the spoken rows."""
         rs = self.cfg.rules
         self._keys = {}
         for command, when, _ in rules.KEY_ROWS:
             r = rules.key_rule(rs, command, when)
             self._keys[command] = [r.key if r else "", r.gesture if r else rules.TAP]
-        spoken = {kind: [] for kind, _, _ in rules.SPOKEN}
-        self._own = []   # [phrase, step type, value]
+        # one row per action: phrases with the same step share a row (復原、撤銷)
+        self._own = []   # [phrases, step type, value]
         for r in rs:
-            kind = rules.spoken_kind(r) if r.enabled else None
-            if kind:
-                spoken[kind].append(r.phrase)
-            elif kind == "":
-                self._own.append([r.phrase, r.steps[0].type, r.steps[0].value])
-        self._spoken = {k: "、".join(v) for k, v in spoken.items()}
+            if not (r.enabled and rules.spoken_ok(r)):
+                continue
+            st = r.steps[0]
+            row = next((o for o in self._own if (o[1], o[2]) == (st.type, st.value)), None)
+            if row is None:
+                self._own.append([r.phrase, st.type, st.value])
+            else:
+                row[0] += "、" + r.phrase
         self._draw_rules()
 
     def _draw_rules(self):
@@ -861,36 +862,26 @@ class SettingsDialog(QDialog):
 
         self.rules_body.addSpacing(8)
         self.rules_body.addWidget(_heading("口說"))
-        note = QLabel("整句只說這些話時才執行。可以填好幾種說法，用「、」分開；清空就不使用。")
+        note = QLabel("整句只說這些話時才執行。可以填好幾種說法，用「、」分開。")
         note.setStyleSheet("color: gray")
         note.setWordWrap(True)
         self.rules_body.addWidget(note)
         grid = QGridLayout()
         grid.setHorizontalSpacing(6)
-        for i, (kind, _, label) in enumerate(rules.SPOKEN):
-            edit = QLineEdit(self._spoken[kind], placeholderText="不使用")
-            edit.textEdited.connect(lambda t, k=kind: (self._spoken.__setitem__(k, t), self._rules_edited()))
-            grid.addWidget(QLabel("說「"), i, 0)
-            grid.addWidget(edit, i, 1)
-            grid.addWidget(QLabel("」就會"), i, 2)
-            grid.addWidget(QLabel(label), i, 3, 1, 3)
-        n = len(rules.SPOKEN)
-        if self._own:
-            own = QLabel("自訂")
-            own.setStyleSheet("color: gray")
-            grid.addWidget(own, n, 0, 1, 6)
-        for j, row in enumerate(self._own):
-            i = n + 1 + j
+        for i, row in enumerate(self._own):
             edit = QLineEdit(row[0], placeholderText="要說的話")
             edit.textEdited.connect(lambda t, r=row: (r.__setitem__(0, t), self._rules_edited()))
-            kind = _combo([(rules.KEYS, "按鍵"), (rules.TEXT, "輸入文字")], row[1])
+            kind = _combo(SPOKEN_ACTIONS, row[2] if row[1] == rules.COMMAND else row[1])
             kind.currentIndexChanged.connect(lambda _, k=kind, r=row: self._own_type(r, k.currentData()))
             if row[1] == rules.KEYS:
                 value = KeyCapture(row[2])
                 value.captured.connect(lambda t, r=row: (r.__setitem__(2, t), self._rules_edited()))
-            else:
+            elif row[1] == rules.TEXT:
                 value = QLineEdit(row[2], placeholderText="要輸入的文字")
                 value.textEdited.connect(lambda t, r=row: (r.__setitem__(2, t), self._rules_edited()))
+            else:
+                value = QLabel("收回 VoiceInput 剛做的修改" if row[2] == rules.UNDO else "關閉麥克風（不按 Enter）")
+                value.setStyleSheet("color: gray")
             value.setMinimumWidth(90)
             grid.addWidget(QLabel("說「"), i, 0)
             grid.addWidget(edit, i, 1)
@@ -918,11 +909,9 @@ class SettingsDialog(QDialog):
             if key:
                 source = rules.MOUSE if key in MOUSE_TRIGGERS else rules.KEY
                 out.append(Rule(source, key, gesture=gesture, when=when, steps=[Step(rules.COMMAND, command)]))
-        for kind, (step_type, value), _ in rules.SPOKEN:
-            for phrase in rules.phrases(self._spoken[kind]):
+        for text, step_type, value in self._own:
+            for phrase in rules.phrases(text) or [""]:
                 out.append(Rule(rules.SPEECH, phrase=phrase, steps=[Step(step_type, value)]))
-        for phrase, step_type, value in self._own:
-            out.append(Rule(rules.SPEECH, phrase=phrase.strip(), steps=[Step(step_type, value)]))
         return out
 
     def _rules_edited(self):
@@ -954,7 +943,7 @@ class SettingsDialog(QDialog):
             label.setVisible(bool(items))
 
     def _own_type(self, row: list, kind: str):
-        row[1], row[2] = kind, ""
+        row[1], row[2] = (rules.COMMAND, kind) if kind in (rules.UNDO, rules.STOP) else (kind, "")
         self._rules_edited()
         self._draw_rules()
 

@@ -90,6 +90,16 @@ _PICK_ZH = re.compile(r"[㐀-䶿一-鿿]{1,4}")
 _PICK_EN = re.compile(r"[A-Za-z][\w'.+-]*(?: [\w'.+-]+){0,2}")
 
 
+def _one_command(raw: str, names: list) -> str:
+    """A command the boost repeated (結束結束結束, like 點點點 before it) as said once."""
+    said = rules.normalize(to_traditional(raw))
+    for n in names:
+        n = rules.normalize(n)
+        if n and len(said) > len(n) and len(said) % len(n) == 0 and said == n * (len(said) // len(n)):
+            return n
+    return raw
+
+
 def _pickable(text: str) -> bool:
     """Short enough for the 選字 menu to open by itself: up to 4 Chinese characters or 3 English words."""
     t = text.strip()
@@ -934,11 +944,15 @@ class App(QObject):
         words = self._bias_words(ctx)
         raw = self.recognizer.recognize(audio, words)
         names = self._command_words() if commands else []
+        said = rules.normalize(to_traditional(raw))
+        if any(said == rules.normalize(n) for n in names):
+            return raw   # already a command: boosted again, 結束 after a sentence came out as 結束結束結束 (2026-10-16)
         if names and self._short(raw, names):
             # commands only: the hotwords, packs and on-screen terms competed with them (the user's 換行 came out as
             # "One home." with them, 換行 without; on their short recordings 363/374 commands vs 362, no new false
             # hits among 211 short texts, 2026-10-15)
             again = self.recognizer.recognize(audio, _bias([(w, _COMMAND_SCORE) for w in names]))
+            again = _one_command(again, names)
             if again != raw:
                 log.info("asr with commands boosted: %s -> %s", raw, again)
             raw = again

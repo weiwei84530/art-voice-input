@@ -31,8 +31,9 @@ _ADD_HOTWORD = "add_hotword"   # 加入熱詞, removed 2026-10-11: hotwords are 
 # 5 makes 送出 stop listening, 6 turns the double-tap deletes into 復原 and adds the spoken 復原, 7 brings back the
 # double tap on a selection that deletes it, 8 adds the spoken 撤銷 (復原) and 刪除 (Backspace), 9 makes 送出 leave
 # listening on (the user's request, 2026-10-15: the microphone stays on, the key turns it off), 10: the simple
-# editor (simplify: hold on a selection = 選字 and the spoken 括號 dropped, 2026-10-16)
-VERSION = 10
+# editor (simplify: hold on a selection = 選字 and the spoken 括號 dropped, 2026-10-16), 11 adds the spoken 結束
+# (結束錄音, the user's request the same day)
+VERSION = 11
 
 _PUNCT = re.compile(r"[\s，。、！？；：,.!?;:…]+")
 
@@ -82,6 +83,7 @@ def defaults(key: str = "mouse_middle", newline: bool = True, send: bool = True)
     out += [Rule(SPEECH, phrase="復原", steps=[Step(COMMAND, UNDO)]),
             Rule(SPEECH, phrase="撤銷", steps=[Step(COMMAND, UNDO)]),
             Rule(SPEECH, phrase="刪除", steps=[Step(KEYS, "Backspace")]),
+            Rule(SPEECH, phrase="結束", steps=[Step(COMMAND, STOP)]),
             Rule(SPEECH, phrase="標點", steps=[Step(TEXT, "- ")]),
             Rule(SPEECH, phrase="貼上", steps=[Step(KEYS, "Alt+V")]),
             Rule(SPEECH, phrase="空白", steps=[Step(KEYS, "Space")])]
@@ -156,16 +158,16 @@ def upgrade(rules: list[Rule], version: int) -> list[Rule]:
             if r.source == SPEECH and normalize(r.phrase) == "送出" \
                     and [(st.type, st.value) for st in r.steps] == [(KEYS, "Enter"), (COMMAND, STOP)]:
                 r.steps.pop()
+    if version < 11 and not any(r.source == SPEECH and normalize(r.phrase) == "結束" for r in rules):
+        rules.append(Rule(SPEECH, phrase="結束", steps=[Step(COMMAND, STOP)]))
     return rules
 
 
 # The simple editor (自訂操作, 2026-10-16, the user's design): one row per thing a key does, one per spoken phrase.
 # Keys: (command, situation, label); a row is one rule, or none when 不使用.
 KEY_ROWS = [(RECORD, ANY, "開關麥克風"), (UNDO, ANY, "復原"), (DELETE_SELECTION, SELECTION, "刪除選取的文字（有選取時）")]
-# Spoken: (id, its one step, what it does); one rule per phrase in the row. Other phrases are the user's own rows:
-# one step, keys or text.
-SPOKEN = [("newline", (KEYS, "Shift+Enter"), "換行"), ("send", (KEYS, "Enter"), "送出"),
-          ("undo", (COMMAND, UNDO), "復原"), ("backspace", (KEYS, "Backspace"), "刪掉前一個字")]
+# Spoken rows (2026-10-16, the user's choice: no built-in rows, every one editable): a phrase box (several phrases
+# separated by 、, one rule each) and one step: keys, text, 復原 (VoiceInput's own, not Ctrl+Z) or 結束錄音.
 PHRASES = re.compile(r"[、,，/／;；]+")
 
 
@@ -178,21 +180,17 @@ def key_rule(rules: list[Rule], command: str, when: str) -> Rule | None:
     """The rule of a key row: a key or button whose steps are that command alone (錄音: any rule that records)."""
     for r in rules:
         if r.enabled and r.source != SPEECH and r.when == when:
-            if command == RECORD and r.record_index() is not None or                     [(st.type, st.value) for st in r.steps] == [(COMMAND, command)]:
+            if command == RECORD and r.record_index() is not None                     or [(st.type, st.value) for st in r.steps] == [(COMMAND, command)]:
                 return r
     return None
 
 
-def spoken_kind(rule: Rule) -> str | None:
-    """The built-in spoken row a speech rule belongs to (SPOKEN id), "" for the user's own row (one key or text
-    step), None when the simple editor cannot show it (several steps, another command)."""
+def spoken_ok(rule: Rule) -> bool:
+    """A speech rule the simple editor can show: one step of keys, text, 復原 or 結束錄音."""
     if rule.source != SPEECH or len(rule.steps) != 1:
-        return None
+        return False
     st = rule.steps[0]
-    for kind, step, _ in SPOKEN:
-        if (st.type, st.value) == step:
-            return kind
-    return "" if st.type in (KEYS, TEXT) else None
+    return st.type in (KEYS, TEXT) or st.type == COMMAND and st.value in (UNDO, STOP)
 
 
 def simplify(rules: list[Rule]) -> list[Rule]:
@@ -206,7 +204,7 @@ def simplify(rules: list[Rule]) -> list[Rule]:
             out.append(Rule(r.source, r.key, gesture=r.gesture, when=when, steps=[Step(COMMAND, command)]))
     seen = set()
     for r in rules:
-        if r.enabled and spoken_kind(r) is not None and normalize(r.phrase) and normalize(r.phrase) not in seen:
+        if r.enabled and spoken_ok(r) and normalize(r.phrase) and normalize(r.phrase) not in seen:
             seen.add(normalize(r.phrase))
             out.append(Rule(SPEECH, phrase=r.phrase, steps=[Step(r.steps[0].type, r.steps[0].value)]))
     return out
