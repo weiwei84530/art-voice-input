@@ -843,12 +843,19 @@ class App(QObject):
         typed as text (2026-10-14)."""
         return len(_WORDS.findall(raw)) <= max(map(len, names)) + _COMMAND_SLACK
 
-    def _command(self, formatted: str, ctx, steps: list):
+    def _command(self, formatted: str, ctx, steps: list, raw: str = ""):
         """(operation, text to type) when the utterance is a command said alone: an operation's phrase, a
-        punctuation name or a described character; (None, None) otherwise."""
+        punctuation name, a described character, or letters spelled over a selected English word (raw: the
+        recognizer's text, which writes them as "B L I P."); (None, None) otherwise."""
         op = rules.pick(rules.candidates(self.cfg.rules, rules.SPEECH, formatted), ctx.selection is not None,
                         self.session.deletable() is not None)
         typed = None
+        if op is None and ctx.selection is not None and raw:
+            spelt = edit.spelled(ctx.selection.text, raw)
+            if spelt:   # that word, spelled, in the selection's case (lost on this branch until 2026-10-16)
+                steps.append(("拼字", formatted, spelt[0]))
+                self.main.emit(lambda: self._learn_spelled(spelt[1], spelt[2]))
+                return None, spelt[0]
         if op is None and self.cfg.punctuation_names:
             typed = edit.symbol(formatted)
             if typed:
@@ -905,7 +912,7 @@ class App(QObject):
             steps = []
             formatted = format_text(raw, True, steps)
             entry = {"time": time.strftime("%H:%M:%S"), "asr": to_traditional(raw), "asr_s": t_asr, "steps": steps}
-            op, typed = self._command(formatted, ctx, steps)
+            op, typed = self._command(formatted, ctx, steps, raw)
             names = self._command_words()
             if op is None and not typed and state["alone"] and names and self._short(raw, names) \
                     and piece.lo > anchor:
@@ -915,7 +922,7 @@ class App(QObject):
                 whole, _ = self._speech(anchor, piece.hi, self._spans)
                 again = self._decode(whole, ctx, commands=True)
                 more = format_text(again, True)
-                op, typed = self._command(more, ctx, steps)
+                op, typed = self._command(more, ctx, steps, again)
                 if op is not None or typed:
                     log.info("piece with the draft before it: %s -> %s", raw, again)
                     raw, formatted, audio = again, more, whole

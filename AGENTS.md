@@ -268,8 +268,9 @@ no draft, and a draft with nothing typed yet takes the latest speech's caret and
 selection with text on both sides of it on its line gets no added 。, like the caret (it did until 2026-10-15). Tried and
 dropped the same day (the user's verdict after comparing them with settings): the streaming X-ASR model (480ms) typing
 the text as it was said, corrected at each pause, and a preview box above the indicator holding the draft until the
-commit. Not carried over from press-and-talk yet: 選取句號 -> ，…。 (its checkbox is hidden on this branch), letters
-spelled over a selected English word, punctuation trimmed when replacing a selection. Why VAD + the offline model:
+commit. Not carried over from press-and-talk yet: 選取句號 -> ，…。 (its checkbox is hidden on this branch), punctuation
+trimmed when replacing a selection. Letters spelled over a selected English word came back 2026-10-16 (a piece said
+alone, `App._command`, typed over the selection like a punctuation mark). Why VAD + the offline model:
 `listen.py` and the experiment in `dev/streaming` (not committed; report "連續麥克風實驗報告" in the user's Claude
 docs). `dev/headless.py` feed:WAV prints the document as the audio arrives.
 Listener internals (2026-10-15, from a review): sample numbers go on from one listening session to the next (they
