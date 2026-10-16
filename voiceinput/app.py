@@ -1120,6 +1120,10 @@ class App(QObject):
         said = rules.normalize(to_traditional(raw))
         if any(said == rules.normalize(n) for n in names):
             return raw   # already a command: boosted again, 結束 after a sentence came out as 結束結束結束 (2026-10-16)
+        alike = _alike(raw, names)
+        if alike:   # before the boost: it made the user's 金嘆號 (驚嘆號) 金看號
+            log.info("asr sounds like a command: %s -> %s", raw, alike)
+            return alike
         if names and self._short(raw, names):
             # commands only: the hotwords, packs and on-screen terms competed with them (the user's 換行 came out as
             # "One home." with them, 換行 without; on their short recordings 363/374 commands vs 362, no new false
@@ -1142,7 +1146,12 @@ class App(QObject):
                                         _bias([(w, _COMMAND_SCORE) for w in names]))
         raw = _one_command(raw, names)
         said = rules.normalize(to_traditional(raw))
-        return raw if any(said == rules.normalize(n) for n in names) else ""
+        if any(said == rules.normalize(n) for n in names):
+            return raw
+        alike = _alike(raw, names)
+        if alike:
+            log.info("asr sounds like a command: %s -> %s", raw, alike)
+        return alike
 
     def _bias_words(self, ctx) -> list:
         """Hotwords and on-screen terms, as the recognizer takes them. Not a command's phrase: a word picked in 選字
@@ -1457,10 +1466,11 @@ class App(QObject):
                     vks = combo_vks(step.value)
                     if vks:
                         press_chord(*vks)
-                        if step.value == "Shift+Enter":   # a new line, which 復原 can take back
-                            self._on_main(lambda: self.session.dictated("\n", None, foreground()))
+                        if step.value in ("Shift+Enter", "Space"):   # a new line or a space, which 復原 takes back
+                            ch = "\n" if step.value == "Shift+Enter" else " "
+                            self._on_main(lambda c=ch: self.session.dictated(c, None, foreground()))
                         elif step.value == "Backspace":   # one character less, which 復原 can type again
-                            self._on_main(self._backspaced)
+                            self._on_main(lambda: self._backspaced(press))
                         else:
                             self.session.on_input()     # the caret may have moved
                             # 送出 said, with 送出後關閉麥克風: listening off once the steps are done
@@ -1495,13 +1505,17 @@ class App(QObject):
             if ev.wait(0.1) or self._quitting:
                 return
 
-    def _backspaced(self):
-        """Main thread: a Backspace step deleted the character before the caret."""
+    def _backspaced(self, press: _Press):
+        """Main thread: a Backspace step deleted the character before the caret. After the caret moved, the line
+        before it as read when the command was said tells which (2026-10-17, the user's request: 復原 after it)."""
         s = self.session
-        if s.clean():
-            s.changed(s.buffer[:-1])
-        else:
-            s.on_input()
+        if not s.clean():
+            caret = press.probe.result().caret if press.key == "listen" else None
+            if not caret or not caret[0]:
+                s.on_input()
+                return
+            s.known(caret[0], foreground())
+        s.changed(s.buffer[:-1])
 
     def _wrap(self, press: _Press, value, sel):
         """Main thread: 左右輸入文字 (2026-10-16, the user's request): left and right typed around the selection, or
@@ -1538,16 +1552,30 @@ class App(QObject):
         term = sel.term is not None if sel is not None else terminal_in_front()
         restore_now()
         if not term:
+            text = _plain(_clipboard_text()) if command == rules.PASTE else ""
             press_chord(0x11, {rules.SELECT_ALL: 0x41, rules.COPY: 0x43, rules.CUT: 0x58, rules.PASTE: 0x56}[command])
-            if command != rules.COPY:
+            # 剪下 / 貼上 are changes 復原 takes back (2026-10-17, the user's request) when what they did is known
+            if command == rules.CUT and sel is not None:
+                press.deleted = sel
+                self.session.replaced_selection(sel.before, "", foreground(), sel.before + sel.text)
+            elif command == rules.PASTE and text and sel is not None:
+                press.deleted = sel
+                self.session.replaced_selection(sel.before, text, foreground(), sel.before + sel.text)
+            elif command == rules.PASTE and text:
+                self.session.dictated(text, None, foreground())
+            elif command != rules.COPY:
                 self.session.on_input()   # the text or the caret changed in ways we do not follow
             return
         if command == rules.SELECT_ALL:
             self._notify("終端機裡無法全選")
             return
         if command == rules.PASTE and sel is None:
+            text = _plain(_clipboard_text())
             press_chord(0x11, 0x56)
-            self.session.on_input()
+            if text:
+                self.session.dictated(text, None, foreground())
+            else:
+                self.session.on_input()
             return
         if sel is None:
             self._notify("沒有選取的文字")
@@ -1558,7 +1586,7 @@ class App(QObject):
         if command == rules.CUT:
             self._delete_selection(press, press.probe.result())
         elif command == rules.PASTE:
-            text = QGuiApplication.clipboard().text()
+            text = _clipboard_text()
             if text:
                 self._replace_selection(press, sel, text)
 
@@ -1955,14 +1983,32 @@ def _no_mark_first(command) -> bool:
     return (st.type, st.value) in ((rules.KEYS, "Backspace"), (rules.COMMAND, rules.UNDO))
 
 
+def _clipboard_text() -> str:
+    return QGuiApplication.clipboard().text()
+
+
+def _plain(text: str) -> str:
+    """Clipboard text a paste types as it is, so 復原 can take it back with Backspace: one line, not long. "" for
+    anything else (Claude Code turns a pasted block into [Pasted text], an editor may indent new lines)."""
+    return text if text and "\n" not in text and "\r" not in text and len(text) <= 300 else ""
+
+
 def _quick_ok(op, typed) -> bool:
-    """A command a quick piece may run (config.early_commands): one whose false trigger costs little, typing text
-    or a new line (換行, 空白, 括號, punctuation names); not 送出, 刪除, 復原, 結束 or the clipboard commands."""
-    if typed:
-        return True
-    return op is not None and all(s.type in (rules.TEXT, rules.WRAP) or
-                                  s.type == rules.KEYS and s.value in ("Shift+Enter", "Space", "Tab")
-                                  for s in op.steps)
+    """A command a quick piece may run (config.early_commands): any, while the user tries out where it fires
+    wrongly (2026-10-17, their request; it was only those typing text or a new line for a few hours)."""
+    return op is not None or bool(typed)
+
+
+def _alike(raw: str, names: list) -> str:
+    """The command a short decode sounds like (candidates.sounds_alike: no tones, the fuzzy pairs, any reading of
+    a 多音字; the user's 驚嘆號 came out as 金嘆號, 換一行 as 換一航), "" when none or several. dev/cmdlab: on the
+    user's 571 labeled text pieces no false trigger."""
+    said = rules.normalize(to_traditional(raw))
+    if not said or len(said) > 4:
+        return ""
+    hits = [n for n in names if candidates.sounds_alike(rules.normalize(n), said)]
+    # spellings of one punctuation name (驚嘆號 / 驚歎號) are one command
+    return hits[0] if len({edit.SYMBOLS.get(n, n) for n in hits}) == 1 else ""
 
 
 def _held(vk: int) -> bool:

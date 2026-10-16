@@ -10,7 +10,8 @@ focus watcher reads: text box N, or a place where nothing can be typed), click (
 (double tap), toggle:WAV (tap, speak, tap),
 hotkey:NAME (the key or button the next steps press, default mouse_middle), rules:default (the default operations),
 rule:JSON (add an operation, rules.Rule.from_dict), at:WORD (put the caret right after the last WORD; at: puts it at
-the end), say:TEXT (dictate TEXT as if recognized), set:NAME=VALUE (change a setting in memory only; apply: as the settings window does after a change), packs:ID+ID (tick term packs, in memory only) or key:BACK (the
+the end), say:TEXT (dictate TEXT as if recognized), op:PHRASE (a spoken operation of the
+user's config run without audio), clip:TEXT (the box's clipboard; the real one is never read), set:NAME=VALUE (change a setting in memory only; apply: as the settings window does after a change), packs:ID+ID (tick term packs, in memory only) or key:BACK (the
 user presses Backspace n times: key:BACK*3), key:ENTER (the user presses Enter), dbl:MS (a double tap, each press MS ms long), dblbusy (a double tap whose release is handled 0.5s late), pick:N / pickw:WORD (click a row of the 選字 menu), feed:WAV (while
 continuous listening is on: WAV and 1s of silence reach the microphone; feed:WAV+WAV joins clips with 0.6s pauses),
 logshot:NAME (the 辨識紀錄 tab saved as <dir>/NAME.png), wait:SEC (silence for SEC seconds), tap0 (a tap; the next step starts once it is known to be one,
@@ -40,6 +41,7 @@ class Box:
 
     def __init__(self):
         self.text, self.sel, self.caret = "", None, 0      # sel: (start, end)
+        self.clip = ""                                     # what Ctrl+C / Ctrl+X put on the clipboard
 
     def paste(self, s):
         if self.sel:
@@ -82,6 +84,15 @@ class Box:
         elif vks == (0x0D,):
             print(f"      [送出] {self.text!r}")
             self.text, self.caret = "", 0
+        elif vks == (0x20,):
+            self.paste(" ")
+        elif vks in ((0x11, 0x43), (0x11, 0x58)):   # Ctrl+C / Ctrl+X: the box's own clipboard
+            if self.sel:
+                self.clip = self.text[self.sel[0]:self.sel[1]]
+                if vks[1] == 0x58:
+                    self.delete()
+        elif vks == (0x11, 0x56):   # Ctrl+V
+            self.paste(self.clip)
         else:
             print(f"      [按鍵] {[hex(v) for v in vks]}")
 
@@ -105,6 +116,7 @@ def _press_key(vk, n=1):
 
 
 appmod.press_key = _press_key
+appmod._clipboard_text = lambda: box.clip   # never the user's real clipboard
 appmod.foreground = session.foreground = lambda: HWND
 appmod.Hotkeys.start = lambda self: None           # no real hotkey / keyboard hook
 replayed = []                                      # gestures given back to the key (key name per press)
@@ -382,6 +394,16 @@ try:
             A._type_text(step[4:])
             pump(0.5)
             print(f"[說 {step[4:]}（跳過辨識）] → 文字框：{box.text[:box.caret] + '|' + box.text[box.caret:]!r}")
+            continue
+        if step.startswith("op:"):   # a spoken operation said, without its audio
+            rule = next(r for r in A.cfg.rules if r.source == rules.SPEECH and r.phrase == step[3:])
+            ctx = Probe().result()
+            A._run_command((rule, None, {}), ctx, ctx.selection)
+            pump(1.0)
+            print(f"[說 {step[3:]}] → 文字框：{box.text[:box.caret] + '|' + box.text[box.caret:]!r}")
+            continue
+        if step.startswith("clip:"):
+            box.clip = step[5:]
             continue
         if step.startswith("at:"):
             w = step[3:]

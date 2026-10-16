@@ -141,6 +141,21 @@ def rank_of(word: str, other: str) -> int | None:
     return best
 
 
+def sounds_alike(a: str, b: str) -> bool:
+    """Whether b (Traditional Chinese, as written) sounds like a, character by character, without tones and with
+    the fuzzy pairs: a spoken command the recognizer wrote as a homophone (金嘆號 for the user's 驚嘆號, said jin;
+    換一航). Any reading of a 多音字 in a counts (行 is hang in 換一行), b only as read in its words (還行 is hai
+    xing, not 換行). Only for short phrases."""
+    if len(a) != len(b) or not _CJK.match(a) or not _CJK.match(b):
+        return False
+    load()
+    said = [_key(s) for s in _pypinyin_reading(b).split()]
+    if len(said) != len(b):
+        return False
+    return all(x == y or k in {_key(r) for r in (_words[x][1] if x in _words else [_pypinyin_reading(x)])}
+               for x, y, k in zip(a, b, said))
+
+
 COMMON = 5   # frequency from which a word counts as common (McBopomofo lists many obscure words at 1-2)
 
 

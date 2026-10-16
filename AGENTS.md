@@ -515,6 +515,16 @@ user). Press-and-talk recordings are left out: their files keep the start sound 
   換行, 空白, 括號, 引號, 標點, punctuation names; not 送出, 刪除, 復原, 結束, clipboard). The piece that follows
   is dropped when it ends with it, or cut to the speech after it (`_quick_done`). Checked with `dev/headless.py`
   and the user's recordings (換個號吧 / 半行 now 換行, a sentence 0.2s after a quick 換行 typed on the new line).
+- Later the same night (the user's requests): the quick test applies to every command (`_quick_ok`), so they can see
+  where it fires wrongly; a short decode that sounds like a command is that command (`_alike`,
+  `candidates.sounds_alike`: no tones, the 選字 fuzzy pairs, any reading of a 多音字 in the command but the decode
+  only as read in its words, so 還行 is not 換行; spellings of one punctuation name count as one): the user's
+  驚嘆號 said jin came out as 金嘆號 and the boost made it 金看號 (checked before boosting); no false trigger on the
+  571 labeled text pieces. Their 換一行 was never a command: 自訂操作 had 下一行.
+- 復原 takes back the spoken 空白 (Space), 剪下 / 貼上 in ordinary apps (the selection read when it was said; a
+  paste only for one line of at most 300 characters, `_plain`: Claude Code turns a block into [Pasted text]) and a
+  Backspace after the caret moved (the line before the caret read when it was said, `Session.known`); after a move
+  the history starts from there. `dev/headless.py` has op:PHRASE and clip:TEXT for testing these.
 
 ## Spoken edit commands (2026-10-16)
 

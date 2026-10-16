@@ -11,7 +11,8 @@ caret has not moved (unlimited since 2026-10-16, the user's request; 3 from 2026
 2026-10-04): typed
 text, a punctuation mark, a new line, text spoken over a selection (the selection comes back), a deleted
 selection. A draft counts each pause's update as a change (the user's request, 2026-10-15: a whole draft at once
-took back what was said long before).
+took back what was said long before). Since 2026-10-17 (the user's request) also the spoken operations' 空白, 剪下,
+貼上 and Backspace; after the caret moves the history starts again from the operations done there.
 """
 import threading
 import time
@@ -103,6 +104,13 @@ class Session:
                 self.history[-1].after = new
             self.buffer = new
             self.dirty = False
+
+    def known(self, before: str, hwnd: int):
+        """The text before the caret is known to end with before (read with UI Automation) after the caret moved:
+        what follows starts a new history from there."""
+        with self._lock:
+            self.buffer, self.utterances, self.history = before, [], []
+            self.hwnd, self.dirty = hwnd, False
 
     def changed(self, new: str):
         """The caller turned the buffer into new: a change 復原 can take back."""

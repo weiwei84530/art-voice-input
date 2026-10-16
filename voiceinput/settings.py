@@ -447,9 +447,8 @@ class SettingsDialog(QDialog):
                                                   "不想要這個功能就取消勾選"))
         form.addRow("", self.autostart)
         form.addRow("開發測試", audio_row)
-        form.addRow("", _with_info(self.early, "單獨說出換行、標點、空白、括號、引號這類指令時，停頓 0.15 秒就執行"
-                                               "（平常要等 0.3 秒）；認不出來就照常等 0.3 秒。送出、刪除、復原、結束、"
-                                               "剪貼簿指令不受影響。代價是句子中間剛好停一下時可能被當成指令。"
+        form.addRow("", _with_info(self.early, "單獨說出的指令停頓 0.15 秒就執行（平常要等 0.3 秒），所有指令都適用；"
+                                               "認不出來就照常等 0.3 秒。代價是句子中間剛好停一下時可能被當成指令。"
                                                "下次開麥克風時生效"))
         page = QWidget()
         v = QVBoxLayout(page)
