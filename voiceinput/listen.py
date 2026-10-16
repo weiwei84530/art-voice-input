@@ -30,6 +30,11 @@ SILENCE = 0.3        # seconds of silence that end a piece
 LEAD = 0.5           # seconds of audio decoded before a piece
 TAIL = 0.25          # and after it
 MAX_PIECE = 30       # seconds; X-ASR fails beyond 40s
+# a quick piece (config.early_commands, a development test, 2026-10-17): speech after at least SILENCE of silence that
+# stops for QUICK_SILENCE and is at most QUICK_MAX long, handed over before the VAD ends the piece, so a command said
+# alone can run 0.15s sooner (dev/cmdlab: at 0.15s about 5 text utterances in 616 had a command word cut out alone)
+QUICK_SILENCE = 0.15
+QUICK_MAX = 1.2
 _KEEP_IDLE = 1.0     # seconds of audio kept before the commit point while nobody speaks
 _MAX_HOLD = 180      # seconds: audio held for 復原 (hold) reaches back at most this far
 
@@ -43,16 +48,19 @@ class Piece:
 
 
 class Listener:
-    """on_speech(): speech started. on_piece(Piece): a piece ended. Both are called on the listener thread.
+    """on_speech(): speech started. on_piece(Piece): a piece ended. on_quick(Piece): short speech after a pause has
+    stopped for QUICK_SILENCE (only when started with quick=True); its piece usually follows. All are called on the
+    listener thread.
 
     Sample numbers go on from one listening session to the next (they started at 0 each time until 2026-10-15: a
     piece or commit of the last session still queued then read the new session's audio at its old numbers). The
     audio is kept as a list of the microphone's chunks: appending to one array copied all of it every 30ms."""
 
-    def __init__(self, vad_model: str, on_speech, on_piece):
+    def __init__(self, vad_model: str, on_speech, on_piece, on_quick=None):
         self._vad_model = vad_model
         self._on_speech = on_speech
         self._on_piece = on_piece
+        self._on_quick = on_quick
         self._queue: queue.Queue = queue.Queue()
         self._stream = None
         self._thread = None
@@ -75,12 +83,9 @@ class Listener:
         with self._lock:
             return self._end
 
-    def start(self, device_name: str = ""):
-        cfg = sherpa_onnx.VadModelConfig()
-        cfg.silero_vad.model = self._vad_model
-        cfg.silero_vad.min_silence_duration = SILENCE
-        cfg.silero_vad.max_speech_duration = MAX_PIECE
-        cfg.sample_rate = SAMPLE_RATE
+    def start(self, device_name: str = "", quick: bool = False):
+        cfg = self._vad_config(SILENCE)
+        fast = self._vad_config(QUICK_SILENCE) if quick and self._on_quick is not None else None
         stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32",
                                 device=resolve_device(device_name), callback=self._callback,
                                 blocksize=int(SAMPLE_RATE * 0.03))
@@ -89,7 +94,9 @@ class Listener:
         self._thread = threading.Thread(
             target=self._run, daemon=True,
             args=(lambda: sherpa_onnx.VoiceActivityDetector(cfg, buffer_size_in_seconds=MAX_PIECE + 10),
-                  cfg.silero_vad.window_size, self.now))
+                  cfg.silero_vad.window_size, self.now,
+                  (lambda: sherpa_onnx.VoiceActivityDetector(fast, buffer_size_in_seconds=MAX_PIECE + 10))
+                  if fast is not None else None))
         self._thread.start()
         try:
             stream.start()
@@ -100,6 +107,14 @@ class Listener:
             self._thread = None
             raise
         self._stream = stream
+
+    def _vad_config(self, silence: float):
+        cfg = sherpa_onnx.VadModelConfig()
+        cfg.silero_vad.model = self._vad_model
+        cfg.silero_vad.min_silence_duration = silence
+        cfg.silero_vad.max_speech_duration = MAX_PIECE
+        cfg.sample_rate = SAMPLE_RATE
+        return cfg
 
     def stop(self, discard: bool = False):
         """Stop the microphone; speech still going on is cut there and handed over as a last piece (unless
@@ -157,11 +172,14 @@ class Listener:
             self.level = min(1.0, float(np.sqrt(np.mean(mono * mono))) * 12)
         self._queue.put(mono)
 
-    def _run(self, make_vad, win, offset: int):
-        """offset: the sample number this session starts at (the VAD counts from 0)."""
+    def _run(self, make_vad, win, offset: int, make_quick=None):
+        """offset: the sample number this session starts at (the VAD counts from 0). make_quick: a second VAD
+        whose pieces end at QUICK_SILENCE."""
         vad = make_vad()
+        quick = make_quick() if make_quick is not None else None
         rest = np.zeros(0, np.float32)
         prev_end = offset
+        quick_end = None   # where the quick VAD's last speech ended
         speaking = False
 
         def emit():
@@ -178,6 +196,22 @@ class Listener:
                 except Exception:
                     log.exception("listen: piece handler failed")
 
+        def emit_quick(total):
+            nonlocal quick_end
+            while not quick.empty():
+                seg = quick.front
+                start, end = offset + seg.start, offset + seg.start + len(seg.samples)
+                quick.pop()
+                # alone: after the silence that ends a piece (not a word between two short pauses), and short
+                alone = quick_end is None or start - quick_end >= SILENCE * SAMPLE_RATE
+                lo = max(quick_end if quick_end is not None else offset, start - int(LEAD * SAMPLE_RATE))
+                quick_end = end
+                if alone and end - start <= QUICK_MAX * SAMPLE_RATE:
+                    try:
+                        self._on_quick(Piece(lo, start, end, min(total, end + int(TAIL * SAMPLE_RATE))))
+                    except Exception:
+                        log.exception("listen: quick piece handler failed")
+
         while True:
             chunk = self._queue.get()
             if chunk is None:
@@ -190,6 +224,9 @@ class Listener:
             rest = np.concatenate([rest, chunk])
             while len(rest) >= win:
                 vad.accept_waveform(rest[:win])
+                if quick is not None:
+                    quick.accept_waveform(rest[:win])
+                    emit_quick(total)
                 rest = rest[win:]
                 now = vad.is_speech_detected()
                 if now and not speaking:

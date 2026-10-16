@@ -74,6 +74,9 @@ class Config:
     # back to the hotkey); no longer on a tab since 2026-10-16
     gesture_time: float = 0.15
     save_recordings: bool = False   # development only, to be removed before release (recordings.py)
+    # development test (2026-10-17, dev/cmdlab): a short piece that is a command whose false trigger costs little
+    # (App._early_ok) runs after 0.15s of silence, before the VAD's 0.3s ends the piece
+    early_commands: bool = False
     rules: list = field(default_factory=rules.defaults)   # custom operations (rules.Rule)
     rules_version: int = RULES_VERSION
 

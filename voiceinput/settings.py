@@ -414,6 +414,9 @@ class SettingsDialog(QDialog):
                                                         "用來以真實聲音檢查辨識；不會自動刪除", stretch=False))
         audio_row.addWidget(folder)
         audio_row.addStretch()
+        # development test (2026-10-17, the user's request; dev/cmdlab): a short command acted on after 0.15s of
+        # silence instead of 0.3s
+        self.early = QCheckBox("短停頓就執行指令（測試）")
         self.status = QLabel()
         self.status.setStyleSheet("color: gray")
         self.status.setWordWrap(True)
@@ -444,6 +447,10 @@ class SettingsDialog(QDialog):
                                                   "不想要這個功能就取消勾選"))
         form.addRow("", self.autostart)
         form.addRow("開發測試", audio_row)
+        form.addRow("", _with_info(self.early, "單獨說出換行、標點、空白、括號、引號這類指令時，停頓 0.15 秒就執行"
+                                               "（平常要等 0.3 秒）；認不出來就照常等 0.3 秒。送出、刪除、復原、結束、"
+                                               "剪貼簿指令不受影響。代價是句子中間剛好停一下時可能被當成指令。"
+                                               "下次開麥克風時生效"))
         page = QWidget()
         v = QVBoxLayout(page)
         v.addLayout(form)
@@ -455,7 +462,7 @@ class SettingsDialog(QDialog):
         self.auto_listen.toggled.connect(self._apply)
         self.auto_off.currentIndexChanged.connect(self._apply)
         for box in (self.punct, self.period_comma, self.describe, self.autostart, self.mute, self.keep_audio,
-                    self.stop_on_enter):
+                    self.stop_on_enter, self.early):
             box.toggled.connect(self._apply)
         return page
 
@@ -804,6 +811,7 @@ class SettingsDialog(QDialog):
         self.glow_edges.setCurrentIndex(max(0, self.glow_edges.findData(self.cfg.glow_edges)))
         self._show_mark_color()
         self.keep_audio.setChecked(self.cfg.save_recordings)
+        self.early.setChecked(self.cfg.early_commands)
         self.start_sound.setCurrentIndex(max(0, self.start_sound.findData(self.cfg.start_sound)))
         self.stop_sound.setCurrentIndex(max(0, self.stop_sound.findData(self.cfg.stop_sound)))
         self.glow.setCurrentIndex(max(0, self.glow.findData(self.cfg.glow)))
@@ -860,6 +868,7 @@ class SettingsDialog(QDialog):
         self.cfg.float_text_only = self.float_text_only.isChecked()
         self.cfg.float_keep = self.float_keep.isChecked()
         self.cfg.save_recordings = self.keep_audio.isChecked()
+        self.cfg.early_commands = self.early.isChecked()
         self.cfg.start_sound = self.start_sound.currentData()
         self.cfg.stop_sound = self.stop_sound.currentData()
         self.cfg.glow = self.glow.currentData()

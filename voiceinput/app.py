@@ -77,6 +77,14 @@ _SCREEN_TERM_SCORE = 1.5
 # With TTS the boost fixed 據點 -> 句點 and 珊姐好 -> 刪節號; alone, 問好 / 分好 became 問號 / 分號.
 _COMMAND_SCORE = 5.0
 _COMMAND_SLACK = 2
+# A piece of at most _FIRST_MAX seconds of speech is decoded first with the commands alone boosted, padded with _PAD
+# seconds of silence at both ends (dev/cmdlab, 2026-10-17, the user's recordings of continuous listening: commands
+# 96.7% -> 98.7%, 換行 missed 21 -> 8 times, still no text taken for a command). X-ASR writes a command as English
+# when the audio does not start and end in silence (換行 -> Hang Hung, 刪除 -> Central): the padding alone fixed 23
+# of the 31 misses. Most commands then need one decode instead of up to two.
+_FIRST_MAX = 1.2
+_PAD = 0.3
+_QUICK_SLACK = int(0.1 * SAMPLE_RATE)   # samples: a piece ending this soon after a quick command's speech is that one
 _WORDS = re.compile(r"[㐀-䶿一-鿿]|[A-Za-z0-9]+")   # a Chinese character or an English word counts one
 _SEL_LOST = "找不到選取的文字，沒有修改"   # a terminal selection that moved or the cursor could not reach
 # from the call to PlaySound until the start sound has left the speakers: measured 0.17s on the user's machine
@@ -193,6 +201,11 @@ class App(QObject):
         self._marked = None                      # the buffer when the last commit added its sentence-final mark
         self._committed = None                   # (text before it, _Draft, its history step): 復原 may revive it
         self._spans: list = []                   # worker thread: the pieces of the draft's open sentence
+        # worker thread: the last pause's decode of the open sentence, (start, anchor, its last piece, raw text): a
+        # commit right after it reuses the text instead of decoding the same audio again (dev/cmdlab, 2026-10-17:
+        # 0.24s median before a command, the same text in 91% of the user's commits)
+        self._live = None
+        self._quick_done = None                  # worker thread: (speech end, hi) of the command a quick piece ran
         # the pieces of a draft 復原 brought back as it was, for the worker to take up (_take_restored)
         self._restored_spans, self._restore_lock = None, threading.Lock()
         self._ignored: set[str] = set()          # keys pressed while another was held
@@ -567,8 +580,9 @@ class App(QObject):
             return
         try:
             if self.listener is None:
-                self.listener = Listener(str(models.vad_path()), self._on_listen_speech, self._on_listen_piece)
-            self.listener.start(self.cfg.mic)
+                self.listener = Listener(str(models.vad_path()), self._on_listen_speech, self._on_listen_piece,
+                                         self._on_listen_quick)
+            self.listener.start(self.cfg.mic, quick=self.cfg.early_commands)
         except Exception as e:
             log.exception("listen start failed")
             self._notify(f"無法開啟麥克風：{e}")
@@ -579,6 +593,7 @@ class App(QObject):
 
         def fresh():   # worker thread, after the last session's pieces and its end (they still need its draft)
             self._spans = []
+            self._live = self._quick_done = None
 
             def reset():
                 self._draft, self._draft_start = None, begin
@@ -855,6 +870,15 @@ class App(QObject):
                 return
         self._submit_piece(piece, probe)
 
+    def _on_listen_quick(self, piece):
+        """Listener thread: short speech after a pause stopped for listen.QUICK_SILENCE (config.early_commands): a
+        command whose false trigger costs little runs now, before the piece ends (_piece_job, quick)."""
+        with self._early_lock:
+            if self._early_pieces is not None:   # the press is not known to listen yet
+                return
+        if self.recognizer is not None:
+            self._decoding(self._piece_job, piece, self._listen_probe, True)
+
     def _submit_piece(self, piece, probe):
         if self.recognizer is not None:
             self._decoding(self._piece_job, piece, probe)
@@ -1107,6 +1131,19 @@ class App(QObject):
             raw = again
         return raw
 
+    def _command_first(self, audio, piece) -> str:
+        """A piece of little speech (_FIRST_MAX) decoded with the spoken commands alone boosted, padded with
+        silence: the recognizer's text when that is exactly a command, else "" (the piece is decoded as usual)."""
+        names = self._command_words()
+        if not names or piece.end - piece.start > _FIRST_MAX * SAMPLE_RATE:
+            return ""
+        pad = np.zeros(int(_PAD * SAMPLE_RATE), np.float32)
+        raw = self.recognizer.recognize(np.concatenate([pad, audio, pad]),
+                                        _bias([(w, _COMMAND_SCORE) for w in names]))
+        raw = _one_command(raw, names)
+        said = rules.normalize(to_traditional(raw))
+        return raw if any(said == rules.normalize(n) for n in names) else ""
+
     def _bias_words(self, ctx) -> list:
         """Hotwords and on-screen terms, as the recognizer takes them. Not a command's phrase: a word picked in 選字
         is a hotword too, and the user's 括號 at 200% turned their 逗號 and 換行 said alone into 括號 (2026-10-16, 5
@@ -1163,10 +1200,20 @@ class App(QObject):
             steps.append(("選字記憶", formatted, text))
         return text
 
-    def _piece_job(self, piece, probe):
+    def _piece_job(self, piece, probe, quick: bool = False):
         """A piece of speech ended. Said alone, a command commits the draft before it and runs; otherwise the
-        draft's open sentence is decoded again up to here (committed when the setting says every pause)."""
+        draft's open sentence is decoded again up to here (committed when the setting says every pause).
+        quick: a quick piece (_on_listen_quick): only a command _quick_ok allows runs, anything else waits for the
+        piece."""
         try:
+            done = self._quick_done
+            if not quick and done is not None:
+                if piece.end <= done[0] + _QUICK_SLACK:   # the command a quick piece already ran
+                    log.info("piece already run at the short pause")
+                    return
+                self._quick_done = None
+                if piece.start < done[1]:   # speech went on after it: only what follows is this piece
+                    piece = replace(piece, lo=done[1], start=max(piece.start, done[1]))
             # what earlier pieces asked of the main thread is done; a draft the user moved away from stays as it
             # is, and this piece starts a new one (over the selection made meanwhile)
             state = {}
@@ -1184,10 +1231,18 @@ class App(QObject):
             ctx = probe.result() if probe is not None else Context()
             start, anchor = state["start"], state["anchor"]
             self._take_restored()
-            self._spans = [p for p in self._spans if p.start >= anchor] + [piece]
             audio = self.listener.audio(piece.lo, piece.hi)
             t0 = time.monotonic()
-            raw = self._decode(audio, ctx, commands=True)
+            raw = self._command_first(audio, piece)
+            if quick:
+                steps = []
+                op, typed = self._command(format_text(raw, True, steps), ctx, steps, raw) if raw else (None, None)
+                if not _quick_ok(op, typed):
+                    return   # the piece decides
+                self._quick_done = (piece.end, piece.hi)
+                log.info("quick piece: %s", raw)
+            self._spans = [p for p in self._spans if p.start >= anchor] + [piece]
+            raw = raw or self._decode(audio, ctx, commands=True)
             t_asr = time.monotonic() - t0
             log.info("piece %.2fs: %s", t_asr, raw)
             steps = []
@@ -1256,6 +1311,7 @@ class App(QObject):
                 settled, live, after = text[:cut], text[cut:], gap.lo
                 self._spans = [p for p in self._spans if p.start >= after]
                 break
+        self._live = (start, after, piece, live)
         settled = self._text_of(settled, ctx, [], keep_end=True) if settled else ""
         live = self._text_of(live, ctx, [], keep_end=True)
         log.info("draft %.2fs: %s | %s", time.monotonic() - t0, settled, live)
@@ -1346,7 +1402,14 @@ class App(QObject):
         audio, _ = self._speech(anchor, end, spans)
         steps, text, raw = [], "", ""
         t0 = time.monotonic()
-        if audio.size >= SAMPLE_RATE * 0.2:
+        live, self._live = self._live, None
+        # the last pause decoded this same audio (its last piece is the open sentence's last): its text is used
+        # (spans would differ after 復原 took that update back)
+        if live is not None and live[:2] == (start, anchor) and spans and spans[-1] is live[2] and end > anchor:
+            raw = live[3]
+            log.info("commit reuses the last pause's text")
+            text = self._text_of(raw, ctx, steps, keep_end=final) if raw.strip() else ""
+        elif audio.size >= SAMPLE_RATE * 0.2:
             raw = self._decode(audio, ctx)
             text = self._text_of(raw, ctx, steps, keep_end=final)
         if text:
@@ -1890,6 +1953,16 @@ def _no_mark_first(command) -> bool:
         return False
     st = op.steps[0]
     return (st.type, st.value) in ((rules.KEYS, "Backspace"), (rules.COMMAND, rules.UNDO))
+
+
+def _quick_ok(op, typed) -> bool:
+    """A command a quick piece may run (config.early_commands): one whose false trigger costs little, typing text
+    or a new line (換行, 空白, 括號, punctuation names); not 送出, 刪除, 復原, 結束 or the clipboard commands."""
+    if typed:
+        return True
+    return op is not None and all(s.type in (rules.TEXT, rules.WRAP) or
+                                  s.type == rules.KEYS and s.value in ("Shift+Enter", "Space", "Tab")
+                                  for s in op.steps)
 
 
 def _held(vk: int) -> bool:

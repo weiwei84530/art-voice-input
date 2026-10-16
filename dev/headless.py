@@ -115,19 +115,16 @@ appmod.App._watch_mouse = lambda self: None       # the user's real clicks must 
 class Listener(appmod.Listener):
     """Continuous listening without the microphone: feed:WAV puts audio where the microphone would."""
 
-    def start(self, device_name=""):
+    def start(self, device_name="", quick=False):
         import sherpa_onnx
         import threading
-        cfg = sherpa_onnx.VadModelConfig()
-        cfg.silero_vad.model = self._vad_model
-        cfg.silero_vad.min_silence_duration = listen.SILENCE
-        cfg.silero_vad.max_speech_duration = listen.MAX_PIECE
-        cfg.sample_rate = 16000
+        cfg = self._vad_config(listen.SILENCE)
+        fast = self._vad_config(listen.QUICK_SILENCE) if quick and self._on_quick is not None else None
         import queue
         self._queue, self._discard = queue.Queue(), False
         self._thread = threading.Thread(target=self._run, daemon=True, args=(
             lambda: sherpa_onnx.VoiceActivityDetector(cfg, buffer_size_in_seconds=40), cfg.silero_vad.window_size,
-            self.now))
+            self.now, (lambda: sherpa_onnx.VoiceActivityDetector(fast, buffer_size_in_seconds=40)) if fast else None))
         self._thread.start()
         self._stream = True
 

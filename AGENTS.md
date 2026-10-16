@@ -506,6 +506,15 @@ user). Press-and-talk recordings are left out: their files keep the start sound 
   is before the command its commit decode 0.24s (p90 0.50s), whose text equals the draft shown in 91% of cases: run
   it alongside the piece's decode. Acting after 0.15s of silence: as a try only (fallback to 0.3s), for commands whose
   false trigger costs little; at 0.15s about 5 new false triggers in 616 utterances (自行刪除, 新增一個引號).
+- Built the same day (the user's go-ahead, in this order): `App._command_first` (the padded boosted-first decode);
+  a commit reuses the last pause's decode of the open sentence when its last piece is the spans' last
+  (`App._live`; after 復原 the spans differ and it decodes again); and, behind 一般's 開發測試 checkbox
+  短停頓就執行指令（測試） (`early_commands`, off by default, applies at the next listening), a second VAD in
+  `listen.Listener` ending pieces at `QUICK_SILENCE` (0.15s): speech of at most `QUICK_MAX` after a pause of at
+  least `SILENCE` is a quick piece, run at once when it is a command `_quick_ok` allows (typing text or a new line:
+  換行, 空白, 括號, 引號, 標點, punctuation names; not 送出, 刪除, 復原, 結束, clipboard). The piece that follows
+  is dropped when it ends with it, or cut to the speech after it (`_quick_done`). Checked with `dev/headless.py`
+  and the user's recordings (換個號吧 / 半行 now 換行, a sentence 0.2s after a quick 換行 typed on the new line).
 
 ## Spoken edit commands (2026-10-16)
 
