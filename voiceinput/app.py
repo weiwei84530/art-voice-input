@@ -86,6 +86,7 @@ _STEP_GAP = 0.03           # seconds between the steps of an operation
 _DRAFT_MAX = 60            # seconds: a longer draft is committed at a pause (decoding it again gets slow)
 _TAP_MAX = 0.6             # seconds: a press no hold operation takes, released sooner, is a tap
 _SPACED = re.compile(r"[A-Za-z0-9]")
+_FUZZY_MIN = 3             # a word only fuzzy-alike is listed in 選字 from this dictionary frequency on
 _PICK_ZH = re.compile(r"[㐀-䶿一-鿿]{1,4}")
 _PICK_EN = re.compile(r"[A-Za-z][\w'.+-]*(?: [\w'.+-]+){0,2}")
 
@@ -1623,13 +1624,18 @@ class App(QObject):
                     first = [self.memory.lookup(key, left, right, single=True)] + self.memory.values(key)
                     order = lambda w: (-found[w][1] < candidates.COMMON, found[w][1])
                 else:
-                    key = reading_key(text)
+                    # the user's words, also those the dictionary lacks (光暈), in the tab of how close they sound
                     for h in self.hotwords.items:
-                        if h.word != text and h.word not in found and reading_key(h.word) == key:
-                            found[h.word] = (0, 0)
+                        if h.word != text and h.word not in found:
+                            rank = candidates.rank_of(text, h.word)
+                            if rank is not None:
+                                found[h.word] = (rank, 0)
                     first = []
                     weights = self.hotwords.weights_for(found)
                     order = lambda w: (-weights.get(w, 0), -found[w][1] < candidates.COMMON, found[w][1])
+                    # rare words only by fuzzy sound (官癮, 灌嬰 next to 光陰: the user's complaint, 2026-10-16)
+                    found = {w: v for w, v in found.items()
+                             if v[0] < 2 or -v[1] >= _FUZZY_MIN or w in weights}
                 for rank, name in enumerate(("同音", "不同聲調", "模糊音")):
                     words = sorted((w for w in found if found[w][0] == rank), key=order)
                     mine = [w for w in first if w and (found.get(w, (0,))[0] == rank)]

@@ -27,11 +27,13 @@ log = logging.getLogger("voiceinput")
 _DICT = Path(__file__).resolve().parent / "dict" / "words.tsv.gz"
 _CACHE = DATA_DIR / "cache" / "word_index.pkl"
 _OLD_CACHE = DATA_DIR / "cache" / "pinyin_index.pkl"   # the jieba index, removed on first build
-_CACHE_VERSION = 3   # the index keys depend on _FUZZY
+_CACHE_VERSION = 4   # the index keys depend on _FUZZY
 _CJK = re.compile(r"^[㐀-䶿一-鿿]+$")
 _TONES = re.compile("[ˊˇˋ˙]")
 # ㄩㄣ with ㄧㄣ (雲 / 銀, 軍 / 今; 2026-10-16, the user's request)
-_FUZZY = [("ㄓ", "ㄗ"), ("ㄔ", "ㄘ"), ("ㄕ", "ㄙ"), ("ㄤ", "ㄢ"), ("ㄖ", "ㄌ"), ("ㄩㄣ", "ㄧㄣ")]
+# ㄈ with ㄏㄨ (飛 ㄈㄟ / 灰 ㄏㄨㄟ, 發 / 花, 福 / 胡) and ㄋ with ㄌ (你 / 裡), the user's choice the same day
+_FUZZY = [("ㄓ", "ㄗ"), ("ㄔ", "ㄘ"), ("ㄕ", "ㄙ"), ("ㄤ", "ㄢ"), ("ㄖ", "ㄌ"), ("ㄩㄣ", "ㄧㄣ"), ("ㄈㄨ", "ㄏㄨ"),
+          ("ㄈ", "ㄏㄨ"), ("ㄋ", "ㄌ")]
 _ENG = re.compile("(?<![ㄨㄩ])ㄥ")   # eng/en and ing/in, but not ong/un or iong/ün
 
 _index: dict[str, list[tuple[str, str, int]]] | None = None   # fuzzy key -> [(word, toned reading, frequency)]
@@ -122,6 +124,21 @@ def _readings(word: str) -> list[str]:
             readings.append(spoken)
         return readings
     return [" ".join(_words[c][1][0] if c in _words else _pypinyin_reading(c) for c in word)]
+
+
+def rank_of(word: str, other: str) -> int | None:
+    """How close other sounds to word, as in ranked (0 / 1 / 2), or None; for words the dictionary lacks (the
+    user's hotwords: 光暈 is not in it)."""
+    if len(word) != len(other):
+        return None
+    load()
+    best = None
+    for a in _readings(word):
+        for b in _readings(other):
+            r = 0 if a == b else 1 if _TONES.sub("", a) == _TONES.sub("", b) else 2 if _key(a) == _key(b) else None
+            if r is not None and (best is None or r < best):
+                best = r
+    return best
 
 
 COMMON = 5   # frequency from which a word counts as common (McBopomofo lists many obscure words at 1-2)
