@@ -1,5 +1,5 @@
-"""Settings window in four tabs: 一般 (general), 辨識紀錄 (live transcript log), 自訂操作 (custom operations,
-rules.py) and 詞庫 (hotwords.py, the UI name for hotwords since 2026-10-13), in four sections one open at a time:
+"""Settings window in five tabs: 一般 (general), 外觀 (the glow, the draft's mark and the sounds; 2026-10-16),
+辨識紀錄 (live transcript log), 自訂操作 (spoken operations, rules.py) and 詞庫 (hotwords.py, the UI name for hotwords since 2026-10-13), in four sections one open at a time:
 term packs to tick (packs.py), every listed word with its 優先度 (−100% .. +100%, 0 does nothing; stored as 0 ..
 200%; read only); 選字記憶 (the smart picks, memory.py); English replacements (hotword aliases). Each list is dated,
 sortable, and its entries removable. Every change is applied and saved immediately."""
@@ -8,26 +8,52 @@ import os
 
 from pypinyin import lazy_pinyin
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QCursor, QImage, QPainter, QPen, QTextDocument
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
-                               QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+from PySide6.QtGui import QColor, QCursor, QIcon, QImage, QPainter, QPen, QPixmap, QTextDocument
+from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QColorDialog, QComboBox, QDialog,
+                               QDialogButtonBox, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
                                QPushButton, QScrollArea, QSizePolicy, QTabWidget, QTextBrowser, QToolButton,
                                QToolTip, QVBoxLayout, QWidget)
 
 from . import audio, cues, hotwords, packs, recordings, rules
 from . import glow as glowmod
-from .config import GESTURE_TIME_RANGE
+from .highlight import COLORS as MARK_COLORS
 from .memory import BOUNDARY
 from .keys import KEY_TRIGGERS, MOUSE_TRIGGERS, combo_text, is_modifier
 from .rules import Rule, Step
 
-GESTURES = [(rules.TAP, "按一下"), (rules.DOUBLE, "連按兩下"), (rules.HOLD, "按住")]
 SPOKEN_ACTIONS = [(rules.KEYS, "按鍵"), (rules.TEXT, "輸入文字"), (rules.WRAP, "左右輸入文字"), (rules.UNDO, "復原"),
                   (rules.STOP, "結束錄音"),
                   (rules.SELECT_ALL, "全選"), (rules.COPY, "複製"), (rules.CUT, "剪下"), (rules.PASTE, "貼上")]
 _COMMAND_NOTES = {rules.UNDO: "收回 VoiceInput 剛做的修改", rules.STOP: "關閉麥克風（不按 Enter）",
                   rules.SELECT_ALL: "全選（終端機裡無法全選）", rules.COPY: "複製選取的文字",
                   rules.CUT: "剪下選取的文字", rules.PASTE: "貼上（有選取時取代它）"}
+# the 自訂操作 tab lists spoken operations by what they do (2026-10-16, the user's choice), in this order, under
+# these headings; a row's place in its group by _ORDER, then as it was
+_GROUPS = ["輸入", "修改", "剪貼簿", "其他", "結束"]
+_ORDER = {(rules.KEYS, "Shift+Enter"): (0, 0), (rules.KEYS, "Space"): (0, 1), (rules.KEYS, "Tab"): (0, 2),
+          (rules.TEXT, None): (0, 3), (rules.WRAP, None): (0, 4),
+          (rules.KEYS, "Backspace"): (1, 0), (rules.KEYS, "Delete"): (1, 1), (rules.COMMAND, rules.UNDO): (1, 2),
+          (rules.COMMAND, rules.SELECT_ALL): (2, 0), (rules.COMMAND, rules.COPY): (2, 1),
+          (rules.COMMAND, rules.CUT): (2, 2), (rules.COMMAND, rules.PASTE): (2, 3),
+          (rules.KEYS, "Enter"): (4, 0), (rules.COMMAND, rules.STOP): (4, 1)}
+
+
+def _place(row) -> tuple[int, int]:
+    """(group, order in it) of a spoken row [phrases, step type, value]; other keys go under 其他."""
+    _, kind, value = row
+    return _ORDER.get((kind, value if kind in (rules.KEYS, rules.COMMAND) else None), (3, 0))
+
+
+def _swatch(color: str) -> QIcon:
+    """A color button's icon: the mark color over white, as it looks on a page."""
+    pm = QPixmap(20, 20)
+    pm.fill(QColor("white"))
+    p = QPainter(pm)
+    p.fillRect(pm.rect(), QColor(color))
+    p.setPen(QColor(0, 0, 0, 60))
+    p.drawRect(pm.rect().adjusted(0, 0, -1, -1))
+    p.end()
+    return QIcon(pm)
 
 HOTWORD_SORTS = [("weight", "優先度（高→低）"), ("name", "名稱 A→Z"), ("name_desc", "名稱 Z→A"),
                  ("date", "日期（新→舊）"), ("date_old", "日期（舊→新）")]
@@ -227,6 +253,7 @@ class SettingsDialog(QDialog):
 
         self.tabs = QTabWidget()
         self.tabs.addTab(self._general_page(), "一般")
+        self.tabs.addTab(self._look_page(), "外觀")
         self.tabs.addTab(self._log_page(), "辨識紀錄")
         self.tabs.addTab(self._rules_page(), "自訂操作")
         self.tabs.addTab(self._hotwords_page(), "詞庫")
@@ -249,13 +276,80 @@ class SettingsDialog(QDialog):
         self.period_comma = QCheckBox("選取句號後講話，句號改成逗號並接上講的內容")
         self.period_comma.setToolTip("今天很好。明天見 → 選取「。」講「我們去公園」→ 今天很好，我們去公園。明天見")
         self.autostart = QCheckBox("開機時自動啟動")
+        self.commit_at = QComboBox(toolTip="停頓時字會先打出來並修正；定稿後才固定下來")
+        self.commit_at.addItem("講指令或關錄音時", "command")
+        self.commit_at.addItem("每次停頓時", "pause")
+        self.mute = QCheckBox("錄音時暫時靜音電腦音效")
+        self.mute.setToolTip("麥克風開著時把喇叭靜音，關閉麥克風後恢復；原本就靜音的話不會動")
+        self.describe = QCheckBox("說「詞＋的＋字」時只輸入那個字，例如「節日的節」")
+        self.describe.setToolTip("整句剛好是「某個詞的某個字」才算，輸入的是詞裡讀音相同的那個字")
+        self.hotkey = QComboBox(toolTip="按一下開麥克風，再按一下關；按住或連按兩下會照常交給原本的程式"
+                                        "（例如滑鼠中鍵照樣能用）")
+        self.hotkey.addItem("不使用", "")
+        for k, label in MOUSE_TRIGGERS.items():
+            self.hotkey.addItem(f"滑鼠{label}", k)
+        for k, (label, _) in KEY_TRIGGERS.items():
+            self.hotkey.addItem(f"鍵盤 {label}", k)
+        self.on_focus = QComboBox(toolTip="游標放進輸入框（含終端機）時：游標旁出現小麥克風氣泡（一打字就收起來）；"
+                                          "或出現可拖動的浮動按鈕（不能打字的地方會隱藏，拖到哪就留在哪）；"
+                                          "或直接開麥克風，離開到網頁空白處、按鈕、桌面時關掉，用按鍵關掉後要換個輸入框才會再自動開。"
+                                          "點氣泡或按鈕開始錄音，文字打到原本的輸入框")
+        self.on_focus.addItem("不做事", "")
+        self.on_focus.addItem("游標旁顯示語音氣泡", "bubble")
+        self.on_focus.addItem("顯示可拖動的浮動按鈕", "float")
+        self.on_focus.addItem("自動開麥克風（離開時關閉）", "listen")
+        self.auto_off = QComboBox(toolTip="麥克風開著卻一直沒聽到人聲時自動關掉，避免忘了關；關掉時播結束音，不按 Enter")
+        self.auto_off.addItem("不自動關閉", 0)
+        for m in (1, 3, 5, 10, 30):
+            self.auto_off.addItem(f"{m} 分鐘沒講話", m)
+        # development only, to be removed before release (the user's plan): recordings.py
+        self.keep_audio = QCheckBox("保存錄音（測試用）")
+        self.keep_audio.setToolTip("每句話存成 wav，並記下辨識結果與之後的選字、刪除，用來以真實聲音檢查辨識；不會自動刪除")
+        folder = QPushButton("開啟錄音資料夾", clicked=self._open_recordings)
+        audio_row = QHBoxLayout()
+        audio_row.addWidget(self.keep_audio)
+        audio_row.addWidget(folder)
+        audio_row.addStretch()
+        self.status = QLabel()
+        self.status.setStyleSheet("color: gray")
+        self.status.setWordWrap(True)
+
+        form = QFormLayout()
+        form.addRow("麥克風", self.mic)
+        form.addRow("麥克風快捷鍵", self.hotkey)
+        form.addRow("定稿時機", self.commit_at)
+        form.addRow("游標進到輸入框時", self.on_focus)
+        form.addRow("自動關閉麥克風", self.auto_off)
+        form.addRow("", self.mute)
+        form.addRow("", self.punct)
+        # form.addRow("", self.period_comma)   # not carried over to continuous listening yet
+        form.addRow("", self.describe)
+        form.addRow("", self.autostart)
+        form.addRow("開發測試", audio_row)
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.addLayout(form)
+        v.addStretch(1)
+        v.addWidget(self.status)
+
+        self.mic.currentIndexChanged.connect(self._apply)
+        self.hotkey.currentIndexChanged.connect(self._apply)
+        self.commit_at.currentIndexChanged.connect(self._apply)
+        self.on_focus.currentIndexChanged.connect(self._apply)
+        self.auto_off.currentIndexChanged.connect(self._apply)
+        for box in (self.punct, self.period_comma, self.describe, self.autostart, self.mute, self.keep_audio):
+            box.toggled.connect(self._apply)
+        return page
+
+    # --- 外觀 (2026-10-16, the user's request: what is seen and heard) ---
+    def _look_page(self) -> QWidget:
         self.start_sound, self.stop_sound = QComboBox(), QComboBox()
         for box in (self.start_sound, self.stop_sound):
             for cue_id, name, *_sources in cues.SOUNDS:
                 box.addItem(name, cue_id)
             box.addItem("無", "")
-        self.start_sound.setToolTip("確定開始錄音時播放（按住約 0.3 秒，連按兩下不會響）；選了會先播一次")
-        self.stop_sound.setToolTip("錄音結束時播放；選了會先播一次")
+        self.start_sound.setToolTip("麥克風打開時播放；選了會先播一次")
+        self.stop_sound.setToolTip("麥克風關掉時播放；選了會先播一次")
         # a set picks both sounds at once; 自定義 shows a drop-down for each (the user's design, 2026-10-13)
         self.sound_set = QComboBox(toolTip="同一組的開始音與結束音；選「自定義」可分別挑選")
         for cue_id, name, *_sources in cues.SOUNDS:
@@ -286,90 +380,81 @@ class SettingsDialog(QDialog):
         stop_at_row.addWidget(self.stop_at)
         stop_at_row.addWidget(QLabel("播放"))
         stop_at_row.addStretch()
-        self.commit_at = QComboBox(toolTip="停頓時字會先打出來並修正；定稿後才固定下來")
-        self.commit_at.addItem("講指令或關錄音時", "command")
-        self.commit_at.addItem("每次停頓時", "pause")
-        self.mute = QCheckBox("錄音時暫時靜音電腦音效")
-        self.mute.setToolTip("麥克風開著時把喇叭靜音，關閉麥克風後恢復；原本就靜音的話不會動")
-        self.describe = QCheckBox("說「詞＋的＋字」時只輸入那個字，例如「節日的節」")
-        self.describe.setToolTip("整句剛好是「某個詞的某個字」才算，輸入的是詞裡讀音相同的那個字")
-        self.send_on_stop = QCheckBox("用按鍵關閉麥克風時自動送出（按 Enter）")
-        self.stop_on_send = QCheckBox("說「送出」時關閉麥克風")
-        self.stop_on_send.setToolTip("說出會按 Enter 的指令（例如「送出」）後，麥克風跟著關掉；沒勾的話送出後繼續聽")
-        self.spin = QCheckBox("錄音中正在辨識時，紅點旋轉")
-        self.spin.setToolTip("講完一段、程式還在辨識時，錄音指示的紅點外會有一圈在轉")
-        self.show_pill = QCheckBox("錄音時顯示指示器（底部的小膠囊）")
-        self.show_pill.setToolTip("關掉後，麥克風開著只靠提示音和螢幕邊緣光暈（有開的話）提醒你")
-        self.on_focus = QComboBox(toolTip="游標放進輸入框（含終端機）時：游標旁出現小麥克風氣泡（一打字就收起來）；"
-                                          "或出現可拖動的浮動按鈕（不能打字的地方會隱藏，拖到哪就留在哪）；"
-                                          "或直接開麥克風，離開到網頁空白處、按鈕、桌面時關掉，用按鍵關掉後要換個輸入框才會再自動開。"
-                                          "點氣泡或按鈕開始錄音，文字打到原本的輸入框")
-        self.on_focus.addItem("不做事", "")
-        self.on_focus.addItem("游標旁顯示語音氣泡", "bubble")
-        self.on_focus.addItem("顯示可拖動的浮動按鈕", "float")
-        self.on_focus.addItem("自動開麥克風（離開時關閉）", "listen")
-        self.highlight = QCheckBox("還沒定稿的草稿以反白標示（實驗）")
-        self.highlight.setToolTip("講話時還會再修正的字疊一層藍色反白，定稿後消失；只是畫在上面，不會真的選取文字")
-        self.glow = QComboBox(toolTip="麥克風開著時，螢幕四周亮起一圈光，講話時會變亮；選了會先亮一下讓你看")
+
+        self.glow = QComboBox(toolTip="麥克風開著時，螢幕邊緣亮起一圈光，講話時會變亮；選了會先亮一下讓你看")
         self.glow.addItem("關閉", "")
         for st in glowmod.STYLES:
             self.glow.addItem(st.name, st.id)
-        self.auto_off = QComboBox(toolTip="麥克風開著卻一直沒聽到人聲時自動關掉，避免忘了關；關掉時播結束音，不按 Enter")
-        self.auto_off.addItem("不自動關閉", 0)
-        for m in (1, 3, 5, 10, 30):
-            self.auto_off.addItem(f"{m} 分鐘沒講話", m)
-        self.send_on_stop.setToolTip("定稿後按 Enter；說「送出」關閉時不會再按一次，這次沒有打出任何字時也不會按")
-        # development only, to be removed before release (the user's plan): recordings.py
-        self.keep_audio = QCheckBox("保存錄音（測試用）")
-        self.keep_audio.setToolTip("每句話存成 wav，並記下辨識結果與之後的選字、刪除，用來以真實聲音檢查辨識；不會自動刪除")
-        folder = QPushButton("開啟錄音資料夾", clicked=self._open_recordings)
-        audio_row = QHBoxLayout()
-        audio_row.addWidget(self.keep_audio)
-        audio_row.addWidget(folder)
-        audio_row.addStretch()
-        self.status = QLabel()
-        self.status.setStyleSheet("color: gray")
-        self.status.setWordWrap(True)
+        self.glow_edges = QComboBox(toolTip="光暈出現在螢幕的哪幾邊")
+        for k, (label, *_edges) in glowmod.EDGES.items():
+            self.glow_edges.addItem(label, k)
+        glow_row = QHBoxLayout()
+        glow_row.addWidget(self.glow)
+        glow_row.addWidget(self.glow_edges)
+        glow_row.addStretch()
+
+        # the draft's mark: a few colors and 自訂 (the user's request, 2026-10-16)
+        self.mark_group = QButtonGroup(self, exclusive=True)
+        mark_row = QHBoxLayout()
+        mark_row.setSpacing(4)
+        for color, name in MARK_COLORS:
+            b = QToolButton(checkable=True, toolTip=name, icon=_swatch(color), autoRaise=True)
+            b.setProperty("color", color)
+            self.mark_group.addButton(b)
+            mark_row.addWidget(b)
+        self.mark_custom = QToolButton(checkable=True, toolTip="自訂的顏色", autoRaise=True)
+        self.mark_group.addButton(self.mark_custom)
+        mark_row.addWidget(self.mark_custom)
+        mark_row.addWidget(QPushButton("自訂…", clicked=self._pick_mark_color))
+        mark_row.addStretch()
+        self.mark_group.buttonClicked.connect(self._mark_clicked)
+        note = QLabel("麥克風開著時，講完還可能被修正的字會疊上這個顏色，定稿後消失；只是畫在上面，不是選取")
+        note.setStyleSheet("color: gray")
+        note.setWordWrap(True)
 
         form = QFormLayout()
-        form.addRow("麥克風", self.mic)
-        form.addRow("定稿時機", self.commit_at)
-        form.addRow("游標進到輸入框時", self.on_focus)
-        form.addRow("自動關閉麥克風", self.auto_off)
-        form.addRow("螢幕邊緣光暈", self.glow)
+        form.addRow("螢幕邊緣光暈", glow_row)
+        form.addRow("草稿反白顏色", mark_row)
+        form.addRow("", note)
         form.addRow("提示音", sound_row)
         form.addRow("", stop_at_row)
-        form.addRow("", self.mute)
-        form.addRow("", self.punct)
-        # form.addRow("", self.period_comma)   # not carried over to continuous listening yet
-        form.addRow("", self.describe)
-        form.addRow("", self.send_on_stop)
-        form.addRow("", self.stop_on_send)
-        form.addRow("", self.spin)
-        form.addRow("", self.show_pill)
-        form.addRow("", self.highlight)
-        form.addRow("", self.autostart)
-        form.addRow("開發測試", audio_row)
         page = QWidget()
         v = QVBoxLayout(page)
         v.addLayout(form)
         v.addStretch(1)
-        v.addWidget(self.status)
 
-        self.mic.currentIndexChanged.connect(self._apply)
         self.start_sound.currentIndexChanged.connect(lambda: self._sound_changed(self.start_sound, "start"))
         self.stop_sound.currentIndexChanged.connect(lambda: self._sound_changed(self.stop_sound, "stop"))
         self.sound_set.currentIndexChanged.connect(self._sound_set_changed)
         self.stop_at.currentIndexChanged.connect(self._apply)
-        self.commit_at.currentIndexChanged.connect(self._apply)
-        self.on_focus.currentIndexChanged.connect(self._apply)
-        self.auto_off.currentIndexChanged.connect(self._apply)
         self.glow.currentIndexChanged.connect(self._glow_changed)
-        for box in (self.punct, self.period_comma, self.describe, self.send_on_stop, self.stop_on_send, self.spin, self.show_pill, self.highlight,
-                    self.autostart,
-                    self.mute, self.keep_audio):
-            box.toggled.connect(self._apply)
+        self.glow_edges.currentIndexChanged.connect(self._glow_changed)
         return page
+
+    def _show_mark_color(self):
+        """The button of the current color checked; a color of one's own on the 自訂 swatch."""
+        color = self.cfg.highlight_color.upper()
+        preset = next((b for b in self.mark_group.buttons() if b is not self.mark_custom
+                       and b.property("color").upper() == color), None)
+        self.mark_custom.setVisible(preset is None)
+        if preset is None:
+            self.mark_custom.setIcon(_swatch(color))
+            self.mark_custom.setProperty("color", color)
+            self.mark_custom.setChecked(True)
+        else:
+            preset.setChecked(True)
+
+    def _mark_clicked(self, button):
+        self.cfg.highlight_color = button.property("color")
+        self._save()
+
+    def _pick_mark_color(self):
+        c = QColorDialog.getColor(QColor(self.cfg.highlight_color), self, "草稿反白顏色",
+                                  QColorDialog.ShowAlphaChannel)
+        if c.isValid():
+            self.cfg.highlight_color = c.name(QColor.HexArgb).upper()
+            self._show_mark_color()
+            self._save()
 
     def load_values(self):
         self._loading = True
@@ -379,12 +464,10 @@ class SettingsDialog(QDialog):
         self.autostart.setChecked(self.cfg.autostart)
         self.mute.setChecked(self.cfg.mute_while_recording)
         self.describe.setChecked(self.cfg.describe_char)
-        self.send_on_stop.setChecked(self.cfg.send_on_stop)
-        self.stop_on_send.setChecked(self.cfg.stop_on_send)
-        self.spin.setChecked(self.cfg.spin_while_decoding)
-        self.show_pill.setChecked(self.cfg.show_indicator)
+        self.hotkey.setCurrentIndex(max(0, self.hotkey.findData(self.cfg.hotkey)))
         self.on_focus.setCurrentIndex(max(0, self.on_focus.findData(self.cfg.on_focus)))
-        self.highlight.setChecked(self.cfg.highlight_draft)
+        self.glow_edges.setCurrentIndex(max(0, self.glow_edges.findData(self.cfg.glow_edges)))
+        self._show_mark_color()
         self.keep_audio.setChecked(self.cfg.save_recordings)
         self.start_sound.setCurrentIndex(max(0, self.start_sound.findData(self.cfg.start_sound)))
         self.stop_sound.setCurrentIndex(max(0, self.stop_sound.findData(self.cfg.stop_sound)))
@@ -396,7 +479,6 @@ class SettingsDialog(QDialog):
             self.auto_off.addItem(f"{self.cfg.auto_off_minutes} 分鐘沒講話", self.cfg.auto_off_minutes)
             i = self.auto_off.count() - 1
         self.auto_off.setCurrentIndex(i)
-        self.gesture_time.setValue(self.cfg.gesture_time)
         same = self.cfg.start_sound == self.cfg.stop_sound
         self.sound_set.setCurrentIndex(self.sound_set.findData(self.cfg.start_sound) if same
                                        else self.sound_set.count() - 1)
@@ -417,12 +499,9 @@ class SettingsDialog(QDialog):
         self.cfg.autostart = self.autostart.isChecked()
         self.cfg.mute_while_recording = self.mute.isChecked()
         self.cfg.describe_char = self.describe.isChecked()
-        self.cfg.send_on_stop = self.send_on_stop.isChecked()
-        self.cfg.stop_on_send = self.stop_on_send.isChecked()
-        self.cfg.spin_while_decoding = self.spin.isChecked()
-        self.cfg.show_indicator = self.show_pill.isChecked()
+        self.cfg.hotkey = self.hotkey.currentData()
         self.cfg.on_focus = self.on_focus.currentData()
-        self.cfg.highlight_draft = self.highlight.isChecked()
+        self.cfg.glow_edges = self.glow_edges.currentData()
         self.cfg.save_recordings = self.keep_audio.isChecked()
         self.cfg.start_sound = self.start_sound.currentData()
         self.cfg.stop_sound = self.stop_sound.currentData()
@@ -787,18 +866,9 @@ class SettingsDialog(QDialog):
         self.log.setHtml("".join(group(g) for g in reversed(self._log_sessions)))
         self.log.verticalScrollBar().setValue(0)
 
-    # --- 自訂操作: the simple editor (2026-10-16, the user's design): a row per thing a key does, a row per phrase ---
-    def _gesture_time_changed(self, value: float):
-        if not self._loading:
-            self.cfg.gesture_time = round(value, 2)
-            self._save()
-
+    # --- 自訂操作: the simple editor (2026-10-16, the user's design): a row per spoken phrase, grouped ---
     def _rules_page(self) -> QWidget:
         reset = QPushButton("還原預設", clicked=self._reset_rules)
-        self.gesture_time = QDoubleSpinBox(decimals=2, singleStep=0.05, suffix=" 秒", minimum=GESTURE_TIME_RANGE[0],
-                                           maximum=GESTURE_TIME_RANGE[1], value=self.cfg.gesture_time)
-        self.gesture_time.setToolTip("按著超過這個時間算「按住」；放開後在這個時間內再按一次算「連按兩下」")
-        self.gesture_time.valueChanged.connect(self._gesture_time_changed)
 
         self.rules_body = QVBoxLayout()
         self.rules_body.setSpacing(6)
@@ -813,8 +883,6 @@ class SettingsDialog(QDialog):
         inner.setAutoFillBackground(False)
 
         bottom = QHBoxLayout()
-        bottom.addWidget(QLabel("按住／連按判定時間"))
-        bottom.addWidget(self.gesture_time)
         bottom.addStretch()
         bottom.addWidget(reset)
         page = QWidget()
@@ -824,12 +892,8 @@ class SettingsDialog(QDialog):
         return page
 
     def refresh_rules(self):
-        """Rows from cfg.rules: the key rows and the spoken rows."""
+        """Rows from cfg.rules, the spoken operations."""
         rs = self.cfg.rules
-        self._keys = {}
-        for command, when, _ in rules.KEY_ROWS:
-            r = rules.key_rule(rs, command, when)
-            self._keys[command] = [r.key if r else "", r.gesture if r else rules.TAP]
         # one row per action: phrases with the same step share a row (復原、撤銷)
         self._own = []   # [phrases, step type, value]
         for r in rs:
@@ -847,38 +911,22 @@ class SettingsDialog(QDialog):
         bar = self.rules_scroll.verticalScrollBar()
         pos = bar.value()
         _clear_layout(self.rules_body)
-        self.rules_body.addWidget(_heading("按鍵"))
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(8)
-        keys = [("", "不使用")] + [(k, f"滑鼠{label}") for k, label in MOUSE_TRIGGERS.items()] + \
-            [(k, label) for k, (label, _) in KEY_TRIGGERS.items()]
-        for i, (command, _, label) in enumerate(rules.KEY_ROWS):
-            state = self._keys[command]
-            key = _combo(keys, state[0])
-            gesture = _combo(GESTURES, state[1])
-            gesture.setEnabled(bool(state[0]))
-            key.currentIndexChanged.connect(
-                lambda _, k=key, g=gesture, st=state: (st.__setitem__(0, k.currentData()),
-                                                       g.setEnabled(bool(k.currentData())), self._rules_edited()))
-            gesture.currentIndexChanged.connect(
-                lambda _, g=gesture, st=state: (st.__setitem__(1, g.currentData()), self._rules_edited()))
-            grid.addWidget(key, i, 0)
-            grid.addWidget(gesture, i, 1)
-            grid.addWidget(QLabel(label), i, 2)
-        grid.setColumnStretch(3, 1)
-        self.rules_body.addLayout(grid)
-        self.key_problems = _problem_label()
-        self.rules_body.addWidget(self.key_problems)
-
-        self.rules_body.addSpacing(8)
-        self.rules_body.addWidget(_heading("口說"))
         note = QLabel("整句只說這些話時才執行。可以填好幾種說法，用「、」分開。")
         note.setStyleSheet("color: gray")
         note.setWordWrap(True)
         self.rules_body.addWidget(note)
+        self._own.sort(key=_place)   # by what they do (stable: rows of one kind keep their order)
         grid = QGridLayout()
         grid.setHorizontalSpacing(6)
-        for i, row in enumerate(self._own):
+        line, group = 0, None
+        for row in self._own:
+            if _place(row)[0] != group:
+                group = _place(row)[0]
+                head = _heading(_GROUPS[group])
+                head.setStyleSheet("font-weight: bold; color: #5F6670; padding-top: 6px")
+                grid.addWidget(head, line, 0, 1, 6)
+                line += 1
+            i, line = line, line + 1
             edit = QLineEdit(row[0], placeholderText="要說的話")
             edit.textEdited.connect(lambda t, r=row: (r.__setitem__(0, t), self._rules_edited()))
             kind = _combo(SPOKEN_ACTIONS, row[2] if row[1] == rules.COMMAND else row[1])
@@ -928,11 +976,6 @@ class SettingsDialog(QDialog):
 
     def _collect_rules(self) -> list:
         out = []
-        for command, when, _ in rules.KEY_ROWS:
-            key, gesture = self._keys[command]
-            if key:
-                source = rules.MOUSE if key in MOUSE_TRIGGERS else rules.KEY
-                out.append(Rule(source, key, gesture=gesture, when=when, steps=[Step(rules.COMMAND, command)]))
         for text, step_type, value in self._own:
             for phrase in rules.phrases(text) or [""]:
                 out.append(Rule(rules.SPEECH, phrase=phrase, steps=[Step(step_type, value)]))
@@ -946,25 +989,14 @@ class SettingsDialog(QDialog):
     def _show_problems(self):
         """Clashes the rows cannot show on their own; a rule with a problem is skipped (rules.problems)."""
         rs = self.cfg.rules
-        keys = []
-        if not self._keys[rules.RECORD][0]:
-            keys.append("「開關麥克風」不使用時無法語音輸入")
-        names = dict(GESTURES)
-        labels = {c: label for c, _, label in rules.KEY_ROWS}
-        for i, (a, wa, _) in enumerate(rules.KEY_ROWS):
-            for b, wb, _ in rules.KEY_ROWS[i + 1:]:
-                if self._keys[a][0] and self._keys[a] == self._keys[b] and wa == wb:
-                    keys.append(f"「{labels[a]}」和「{labels[b]}」是同一個鍵{names[self._keys[a][1]]}，"
-                                f"只有「{labels[a]}」會生效")
         spoken = []
         for r in rs:
             if r.source == rules.SPEECH:
                 text = "、".join(rules.problems(r, rs))
                 if text:
                     spoken.append(f"「{r.phrase or '（空白）'}」：{text}")
-        for label, items in ((self.key_problems, keys), (self.spoken_problems, spoken)):
-            label.setText("\n".join(f"⚠ {t}" for t in items))
-            label.setVisible(bool(items))
+        self.spoken_problems.setText("\n".join(f"⚠ {t}" for t in spoken))
+        self.spoken_problems.setVisible(bool(spoken))
 
     def _own_type(self, row: list, kind: str):
         row[1], row[2] = (rules.COMMAND, kind) if kind in (rules.UNDO, rules.STOP) + rules.EDIT_COMMANDS \

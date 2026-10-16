@@ -108,6 +108,14 @@ CJK/ASCII spacing → English sentence end → 嗎 questions → trailing punctu
 
 ## Settings window (tabs since 2026-10-11)
 
+Since 2026-10-16 (the user's requests) there are five tabs: 一般 (microphone, 麥克風快捷鍵, 定稿時機, 游標進到輸入框時,
+自動關閉麥克風, mute, punctuation names, described characters, autostart, recordings), 外觀 (new: 螢幕邊緣光暈 with
+its edges, 草稿反白顏色, 提示音 and 結束音在), 辨識紀錄, 自訂操作 (spoken operations only) and 詞庫. Removed the same
+day with everything behind them (the user's choice, what they had unticked): 用按鍵關閉麥克風時自動送出
+(`send_on_stop`), 說「送出」時關閉麥克風 (`stop_on_send`), 錄音時顯示指示器 and the whole indicator (`overlay.py`, the
+pill at the bottom, its red dot spinning while decoding, `spin_while_decoding`); the draft's mark is always on (its
+checkbox `highlight_draft` removed). Paragraphs below that describe these are history.
+
 Four tabs, sized for the log: 一般 (microphone, "mute the speakers while recording", punctuation names, "selected 。 →
 ，", "節日的節" (described characters), autostart; the menu timeout was removed
 2026-10-11), 辨識紀錄 (the transcript log; since 2026-10-14, the user's design, each entry
@@ -154,6 +162,15 @@ seconds, the recognizer's own text and the formatting steps only with 顯示技�
 
 ## Custom operations (自訂操作, 2026-10-11)
 
+Since the evening of 2026-10-16 the tab has spoken operations only (the user's request: turning listening on and
+off moves to the interface): the key rows below and what only they did (double tap = 復原, double tap on a selection
+deletes it, the hold / double tap gesture time setting) were removed. One hotkey is left, 麥克風快捷鍵 on the 一般 tab
+(`config.hotkey`, a mouse button or key or 不使用, migrated from the key that recorded): a tap turns listening on or
+off; a hold or a double tap is given back to the key or button (`App._rules_for` builds the tap's one rule; a tap
+waits `gesture_time`, 0.15s, for a second press, the audio is kept from key-down). The spoken rows are listed by
+what they do (`settings._GROUPS` / `_ORDER`, the user's choice, also for rows they add): 輸入 (換行, 空白, text,
+左右輸入文字: 括號 （ ）, 引號 「」, rules_version 14), 修改 (Backspace, Delete, 復原), 剪貼簿 (全選 / 複製 / 剪下 /
+貼上), 其他 (other keys), 結束 (Enter, 結束錄音).
 Since 2026-10-16 the tab is a simple editor (the user's design; the card editor with steps, situations and any
 command was removed): 按鍵, three rows of [key or 不使用] [按一下 / 連按兩下 / 按住] + what it does: 開關麥克風,
 復原, 刪除選取的文字（有選取時） (`rules.KEY_ROWS`); 口說, rows 說「…」就會 [按鍵 / 輸入文字 / 復原 / 結束錄音] [value],
@@ -278,11 +295,13 @@ nothing can be typed turns it off without Enter; turned off any other way (key, 
 in that box until the focus has been elsewhere (the user's choice). Listening turned on by hand where nothing can be
 typed is left alone until the focus has been in a text box. VoiceInput's own windows and unknown controls change
 nothing. In a terminal the microphone stays on while it has the focus.
-還沒定稿的草稿以反白標示（實驗） (`highlight_draft`, a 一般 checkbox, off by default; `highlight.py`, the user's
-request 2026-10-16, after an underline was declined on 10-15): while listening, every 0.15s (`App._mark_draft`) the
+The draft's mark (`highlight.py`, the user's request 2026-10-16, after an underline was declined on 10-15; an
+experiment behind a checkbox for a few hours, always on since; its color `highlight_color` on the 外觀 tab: 螢光黃
+(default), 淡綠, 粉紅, 淡橘, 選取藍, or 自訂… with alpha. Yellow by default, the user's choice: in selection blue they
+took a draft typed over a selection for a selection, spoke again to replace it, and the speech went after it): while listening, every 0.15s (`App._mark_draft`) the
 draft's place is read on a thread (`highlight.draft_rects`: the characters before the caret, checked to be the draft's
 text; in Windows Terminal the input box rows walked back from the cursor, borders and row-end padding left out) and
-click-through selection-blue boxes are drawn there (`DraftMarks`); hidden when the draft is committed or left, the
+click-through boxes are drawn there (`DraftMarks`); hidden when the draft is committed or left, the
 caret moves, or another window is in front. Only the open sentence is marked, the part a later pause may still
 change; the settled text before it is not (the user's expectation, 2026-10-16). While the mouse wheel turns the marks
 hide, and come back 0.35s after it stops (following the scroll they trailed by up to 0.15s). Windows Terminal reports
@@ -294,9 +313,11 @@ drafting, and with the user's real voice.
 An operation starting with Backspace (the spoken 刪除) or 復原 (撤銷) gets no added sentence end when the draft showed
 none: Backspace deleted that mark and seemed to do nothing; 復原 showed the 。 for a moment before taking back the
 last update (2026-10-16, `_no_mark_first`).
-螢幕邊緣光暈 (`glow`, `glow.py`, the 一般 tab, off by default; the user's request, 2026-10-15, like Siri's): a glow
-around the edges of the indicator's screen while listening, shown and hidden with the indicator (which stays, the
-user's choice), brightening and reaching further in with the voice (their choice). Five styles in a drop-down
+螢幕邊緣光暈 (`glow`, `glow.py`, the 外觀 tab since 2026-10-16, off by default; the user's request, 2026-10-15, like
+Siri's): a glow around the edges of the screen the pointer is on while listening (it follows the pointer to another
+screen; with the indicator until that was removed 2026-10-16), on the edges picked next to the style (`glow_edges`:
+all, top and bottom, left and right, top, bottom; the user's request 2026-10-16: the masks count only those edges,
+the side strips reach the corners when top and bottom are off; 彩虹 was Siri 彩虹 until then), brightening and reaching further in with the voice (their choice). Five styles in a drop-down
 (Siri 彩虹, 極光, 暖陽, 冰藍, 錄音紅); picking one shows it for 2.5s. Four click-through windows along the edges, each
 drawn at a third of its size (a conical gradient cut by a falloff mask made once per level) and scaled up: drawn as
 wide gradient strokes it took more than a CPU core; now ~10-17% of one core quiet (12 fps), ~21% talking (24 fps),
@@ -523,7 +544,9 @@ removed the same day they were built: the user corrects by selecting with the mo
   against 362, and of 211 short texts the only new "commands" were two misheard 換行). No code change had made
   it worse: the misses were borderline decodes.
 - **Described characters** (`edit.described`, 2026-10-11, the user picked it among ideas for exact text by voice;
-  a 一般 checkbox, on by default): an utterance that is exactly <words>的<character> types only that character when
+  a 一般 checkbox, on by default). Since 2026-10-16 (the user's rule) what comes before 的 must be a dictionary word
+  (`candidates.is_word`), after an optional 這個字是 / 這個字 / 就是 / <the character>是: their 只是顯示的是 and
+  不過顯示的是 typed 是; 顯示的是 still types 示, 張雨薇的薇 (a name) no longer works. Before: an utterance that is exactly <words>的<character> types only that character when
   the last 4 characters before 的 contain it, or one that sounds like it (X-ASR wrote 一張的章: 張 is typed). Also
   這個字是教育的育, 偉是偉大的偉 (said that way in the log before the feature existed). Typed as is, like a
   punctuation mark (replaces a selection, no smart picks). A character that only sounds like it counts only when

@@ -1,5 +1,5 @@
 """A glow along the screen's edges while listening, like Siri's (the user's request, 2026-10-15; a style picked on
-the 一般 tab, off by default). It brightens and reaches further in with the voice (the user's choice).
+the 外觀 tab, off by default). It brightens and reaches further in with the voice (the user's choice).
 
 Four thin windows along the edges, not one over the whole screen: a translucent window is handed to Windows whole
 at every frame. Each strip is drawn at a third of its size and scaled up (the glow is soft anyway): its colors
@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from PySide6.QtCore import QPointF, QPropertyAnimation, QRect, Qt, QTimer
-from PySide6.QtGui import QColor, QConicalGradient, QGuiApplication, QImage, QPainter
+from PySide6.QtGui import QColor, QConicalGradient, QCursor, QGuiApplication, QImage, QPainter
 from PySide6.QtWidgets import QWidget
 
 DEPTH = 72          # px of the screen each strip covers, the glow's widest
@@ -33,13 +33,17 @@ class Style:
 
 
 STYLES = [
-    Style("siri", "Siri 彩虹", ("#3d7bff", "#a259ff", "#ff4fa3", "#ff9f43", "#29d3ff", "#3d7bff"), 0.18, 0.2),
+    Style("siri", "彩虹", ("#3d7bff", "#a259ff", "#ff4fa3", "#ff9f43", "#29d3ff", "#3d7bff"), 0.18, 0.2),
     Style("aurora", "極光", ("#14e8b5", "#2fa8ff", "#7b5cff", "#14e8b5", "#5cffd0", "#14e8b5"), 0.08, 0.3),
     Style("sunset", "暖陽", ("#ff7a3d", "#ff3d6e", "#ffc23d", "#ff7a3d", "#ff5c8a", "#ff7a3d"), 0.1, 0.3),
     Style("ocean", "冰藍", ("#7fd6ff", "#3a8dff", "#c8f0ff", "#7fd6ff", "#4fa8ff", "#7fd6ff"), 0.06, 0.4),
     Style("red", "錄音紅", ("#ff453a", "#ff6b5e", "#ff2d20", "#ff453a"), 0.0, 1.0),
 ]
 BY_ID = {s.id: s for s in STYLES}
+# which edges glow (the 外觀 tab, 2026-10-16, the user's request): id -> (label, top, bottom, left, right)
+EDGES = {"all": ("上下左右", True, True, True, True), "tb": ("只有上下", True, True, False, False),
+         "lr": ("只有左右", False, False, True, True), "top": ("只有上", True, False, False, False),
+         "bottom": ("只有下", False, True, False, False)}
 
 
 def _strength(level: int) -> float:
@@ -53,16 +57,17 @@ def _profile(dist: np.ndarray, strength: float) -> np.ndarray:
     return (1 - x) ** 2.4 * (0.35 + 0.6 * strength)
 
 
-def mask(screen: QRect, rect: QRect, strength: float) -> QImage:
-    """The falloff over `rect` (screen coordinates) at 1/_SCALE: white, its alpha the glow's opacity, every edge
-    of the screen counted (so a strip's corners match its neighbours')."""
+def mask(screen: QRect, rect: QRect, strength: float, edges=(True, True, True, True)) -> QImage:
+    """The falloff over `rect` (screen coordinates) at 1/_SCALE: white, its alpha the glow's opacity, every glowing
+    edge of the screen counted (so a strip's corners match its neighbours'); edges: (top, bottom, left, right)."""
     w, h = -(-rect.width() // _SCALE), -(-rect.height() // _SCALE)
     xs = rect.left() - screen.left() + (np.arange(w) + 0.5) * _SCALE
     ys = rect.top() - screen.top() + (np.arange(h) + 0.5) * _SCALE
     X, Y = np.meshgrid(xs, ys)
     keep = np.ones_like(X)
-    for dist in (X, screen.width() - X, Y, screen.height() - Y):
-        keep *= 1 - _profile(dist, strength)
+    for on, dist in zip(edges, (Y, screen.height() - Y, X, screen.width() - X)):
+        if on:
+            keep *= 1 - _profile(dist, strength)
     a = (np.clip(1 - keep, 0, 1) * 255).astype(np.uint32)
     argb = np.ascontiguousarray((a << 24) | (a << 16) | (a << 8) | a)   # premultiplied white
     return QImage(argb.tobytes(), w, h, w * 4, QImage.Format_ARGB32_Premultiplied).copy()
@@ -140,8 +145,9 @@ class EdgeGlow:
             self._fades.append(fade)
         self._on = False
         self._shown = None   # the frame drawn last (frame())
-        self._masks = {}     # (x, y, w, h) of a screen -> each strip's masks
+        self._masks = {}     # (x, y, w, h, edges) of a screen -> each strip's masks
         self._ticks = 0
+        self.edges = "all"
 
     @property
     def style_id(self) -> str:
@@ -151,6 +157,14 @@ class EdgeGlow:
         self._style = BY_ID.get(style_id)
         self._shown = None
         if self._style is None:
+            self.hide_now()
+
+    def set_edges(self, edges: str):
+        if edges not in EDGES:
+            edges = "all"
+        if edges != self.edges:
+            self.edges = edges
+            self._screen = QRect()   # placed again at the next show
             self.hide_now()
 
     def show(self, screen=None):
@@ -163,6 +177,8 @@ class EdgeGlow:
         self._shown = None
         self._render()
         for s, fade in zip(self._strips, self._fades):
+            if not s.masks:
+                continue   # an edge that does not glow
             s.setWindowOpacity(0.0)
             s.show()
             _click_through(s)
@@ -188,14 +204,21 @@ class EdgeGlow:
             return
         self._screen = g
         d = min(DEPTH, g.height() // 4, g.width() // 4)
-        rects = [QRect(g.left(), g.top(), g.width(), d), QRect(g.left(), g.bottom() - d + 1, g.width(), d),
-                 QRect(g.left(), g.top() + d, d, g.height() - 2 * d),
-                 QRect(g.right() - d + 1, g.top() + d, d, g.height() - 2 * d)]
-        key = (g.x(), g.y(), g.width(), g.height())
+        _, top, bottom, left, right = EDGES[self.edges]
+        side_top, side_h = g.top() + (d if top else 0), g.height() - (d if top else 0) - (d if bottom else 0)
+        rects = [QRect(g.left(), g.top(), g.width(), d) if top else None,
+                 QRect(g.left(), g.bottom() - d + 1, g.width(), d) if bottom else None,
+                 QRect(g.left(), side_top, d, side_h) if left else None,
+                 QRect(g.right() - d + 1, side_top, d, side_h) if right else None]
+        key = (g.x(), g.y(), g.width(), g.height(), self.edges)
         if key not in self._masks:
-            self._masks[key] = [[mask(g, r, _strength(k)) for k in range(_LEVELS)] for r in rects]
+            self._masks[key] = [[mask(g, r, _strength(k), (top, bottom, left, right)) for k in range(_LEVELS)]
+                                if r is not None else [] for r in rects]
         for s, r, m in zip(self._strips, rects, self._masks[key]):
-            s.setGeometry(r)
+            if r is not None:
+                s.setGeometry(r)
+            else:
+                s.hide()
             s.masks = m
 
     def hide(self):
@@ -210,7 +233,7 @@ class EdgeGlow:
         QTimer.singleShot(260, lambda: None if self._on else self._timer.stop())
 
     def hide_now(self):
-        """Hidden at once, with the indicator (before a terminal edit)."""
+        """Hidden at once (before a terminal edit: a fading window over the point UI Automation reads froze it)."""
         self._on = False
         self._timer.stop()
         for s, fade in zip(self._strips, self._fades):
@@ -218,6 +241,11 @@ class EdgeGlow:
             s.hide()
 
     def _tick(self):
+        # the pointer on another screen takes the glow there (the user's request, 2026-10-15; the indicator did it
+        # until it was removed 2026-10-16)
+        screen = QGuiApplication.screenAt(QCursor.pos())
+        if screen is not None and screen.geometry() != self._screen:
+            self.move(screen)
         target = min(1.0, max(0.0, self._level_source()) * 1.6)
         # fast up, slow down, like a level meter
         self._level += (target - self._level) * (0.5 if target > self._level else 0.08)
@@ -236,5 +264,6 @@ class EdgeGlow:
             return False
         self._shown = shown
         for s in self._strips:
-            s.image = render(self._style, self._screen, s.geometry(), s.masks, t, self._level)
+            if s.masks:
+                s.image = render(self._style, self._screen, s.geometry(), s.masks, t, self._level)
         return True

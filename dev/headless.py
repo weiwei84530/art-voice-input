@@ -8,7 +8,7 @@ box), mousesel:WORD (the same with the mouse: the 選字 menu may open while lis
 button is clicked), window:N (window N comes to the front; the text box is 4242), focus:box:N / focus:none (what the
 focus watcher reads: text box N, or a place where nothing can be typed), click (the user clicks: ends what the app knows about the text), tap (one tap of the hotkey), undo / tap2
 (double tap), toggle:WAV (tap, speak, tap),
-hotkey:NAME (the key or button the next steps press, default mouse_middle), rules:default (the default operations), rules:norecord (every operation that records removed),
+hotkey:NAME (the key or button the next steps press, default mouse_middle), rules:default (the default operations),
 rule:JSON (add an operation, rules.Rule.from_dict), at:WORD (put the caret right after the last WORD; at: puts it at
 the end), say:TEXT (dictate TEXT as if recognized), set:NAME=VALUE (change a setting in memory only; apply: as the settings window does after a change), packs:ID+ID (tick term packs, in memory only) or key:BACK (the
 user presses Backspace n times: key:BACK*3), dbl:MS (a double tap, each press MS ms long), dblbusy (a double tap whose release is handled 0.5s late), pick:N / pickw:WORD (click a row of the 選字 menu), feed:WAV (while
@@ -159,8 +159,8 @@ appmod.recordings.DIR = Path(S) / "recordings"   # set:save_recordings=1 saves h
 appmod.recordings.INDEX = appmod.recordings.DIR / "index.jsonl"
 qapp = QApplication(sys.argv)
 qapp.setQuitOnLastWindowClosed(False)
-appmod.Overlay.show = lambda self: None   # no indicator on the user's screen next to their own app's
-appmod.EdgeGlow.show = lambda self, screen=None: None   # nor the glow around it
+appmod.EdgeGlow.show = lambda self, screen=None: None   # no glow on the user's screen
+appmod.DraftMarks.show = lambda self, rects: None   # nor marks over their own app's text
 appmod.FloatButton.appear = lambda self: print("      [浮動按鈕 顯示]")   # nor the floating button
 appmod.FloatButton.vanish = lambda self: print("      [浮動按鈕 隱藏]")
 appmod.focus_info = lambda: (None, None, None)   # the real focus is the user's: focus: steps say what it is
@@ -215,7 +215,8 @@ def load(name):
     return np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768
 
 
-KEY = "mouse_middle"
+KEY = A.cfg.hotkey = "mouse_middle"
+A.hotkeys.set_keys(A._hotkeys())
 
 
 def _steps(arg: str) -> list[str]:
@@ -343,21 +344,16 @@ try:
             A._refine = moved_first
             continue
         if step.startswith("hotkey:"):
-            KEY = step[7:]
+            KEY = A.cfg.hotkey = step[7:]
+            A.hotkeys.set_keys(A._hotkeys())
             print(f"[按鍵 {KEY}]")
             continue
         if step == "rules:default":
             A.cfg.rules = rules.defaults()
-            A.hotkeys.set_keys(rules.bound_keys(A.cfg.rules))
             print("[預設操作]")
-            continue
-        if step == "rules:norecord":   # every operation that records removed (in memory)
-            A.cfg.rules = [r for r in A.cfg.rules if r.record_index() is None]
-            print("[移除所有錄音操作]")
             continue
         if step.startswith("rule:"):
             A.cfg.rules.append(rules.Rule.from_dict(json.loads(step[5:])))
-            A.hotkeys.set_keys(rules.bound_keys(A.cfg.rules))
             print(f"[新增操作] {A.cfg.rules[-1]}  {rules.problems(A.cfg.rules[-1], A.cfg.rules) or ''}")
             continue
         if step.startswith("set:"):

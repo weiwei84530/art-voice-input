@@ -1,8 +1,8 @@
-"""Global hooks for the mouse buttons and keyboard keys that custom operations use (rules.bound_keys).
+"""Global hooks for the mouse button or keyboard key that turns listening on and off (config.hotkey).
 
 Those keys are suppressed with low-level hooks (pynput) so holding CapsLock does not toggle caps and a middle
-click does not reach the app. Whether a gesture is given back to the key (replay()) is up to the app: only
-gestures no rule takes are. Injected events (our own replays and keystrokes) always pass.
+click does not reach the app. Whether a gesture is given back to the key (replay()) is up to the app: a hold
+or a double tap is. Injected events (our own replays and keystrokes) always pass.
 """
 import time
 

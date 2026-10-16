@@ -19,8 +19,8 @@ DEL = "background-color:#FBE1E1; color:#A23030; text-decoration:line-through"
 _CONTEXT = 8   # characters kept around a change; the rest of a long sentence is "…"
 _BRIEF = 18    # characters kept at each end of settled text: about two lines of the log's column (the user's choice)
 _KEY_WORDS = {"Shift+Enter": "換行", "Enter": "按 Enter", "Backspace": "刪掉前一個字"}
-_COMMAND_WORDS = {rules.STOP: "關掉麥克風", rules.UNDO: "復原", rules.PICK: "選字",
-                  rules.DELETE_SELECTION: "刪除選取的文字", rules.DELETE_DICTATION: "刪除剛輸入的文字"}
+_COMMAND_WORDS = {rules.STOP: "關掉麥克風", rules.UNDO: "復原", rules.SELECT_ALL: "全選", rules.COPY: "複製",
+                  rules.CUT: "剪下", rules.PASTE: "貼上"}
 
 
 def esc(s: str) -> str:
@@ -95,6 +95,8 @@ def describe(steps: list) -> str:
             words.append(_KEY_WORDS.get(st.value, f"按 {st.value}"))
         elif st.type == rules.TEXT:
             words.append(f"輸入「{st.value}」")
+        elif st.type == rules.WRAP and isinstance(st.value, (list, tuple)) and len(st.value) == 2:
+            words.append(f"左右加上「{st.value[0]}」「{st.value[1]}」")
         elif st.type == rules.COMMAND and st.value in _COMMAND_WORDS:
             words.append(_COMMAND_WORDS[st.value])
     return "、".join(words)

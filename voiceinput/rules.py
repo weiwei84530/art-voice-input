@@ -1,18 +1,12 @@
-"""Custom operations (自訂操作, 2026-10-11): what a mouse button, a keyboard key or a spoken phrase does.
+"""Custom operations (自訂操作, 2026-10-11): what a spoken phrase does.
 
-A rule is a trigger (a mouse button or keyboard key with a gesture: tap, double tap or hold; or an utterance that is
-exactly a phrase), a situation (any, right after a dictation, text selected) and a list of steps run in order:
-a command (錄音 record, 結束錄音 stop listening, 復原 take back VoiceInput's last change (up to three, see
-session.py), 刪除選取的文字, 刪除剛輸入的文字, 選字), a key combination, text to type, or a wait.
-錄音 is continuous listening (listen.py; on the continuous-mic branch since 2026-10-14): every pause ends a piece
-that is typed at once or run as a command. Hold + 錄音 listens while held; tap or double tap + 錄音 turns it on and
-the next tap or double tap that records turns it off (other gestures work meanwhile). A rule's steps before 錄音 run
-when listening starts, the ones after it when it stops. 刪除選取的文字 works in terminals too; 刪除剛輸入的文字
-deletes the last dictation while the caret is still after it (split from one 刪除 command 2026-10-11, the user's
-choice). 選字 opens the candidate menu for the selection.
-
-For one trigger and gesture the most specific situation wins: selected text, then right after a dictation, then
-any. Unbound gestures are given back to the key (a keyboard key is replayed, a mouse button clicked).
+Since 2026-10-16 only spoken operations are set (the user's design: listening is turned on and off from the
+interface, and one hotkey, config.hotkey, taps it on and off; the key rows that also took back and deleted were
+removed). A rule is an utterance that is exactly a phrase and one step: a command (結束錄音 stop listening, 復原 take
+back VoiceInput's last change, 全選 / 複製 / 剪下 / 貼上), a key combination, text to type, or text typed on both
+sides of the caret or selection (左右輸入文字). The engine still knows mouse and key triggers, gestures, situations
+and several steps: the app builds the hotkey's one rule (a tap that records) from config.hotkey, and old configs
+are read through them (migrate, upgrade).
 """
 import re
 from dataclasses import asdict, dataclass, field
@@ -38,8 +32,8 @@ _ADD_HOTWORD = "add_hotword"   # 加入熱詞, removed 2026-10-11: hotwords are 
 # listening on (the user's request, 2026-10-15: the microphone stays on, the key turns it off), 10: the simple
 # editor (simplify: hold on a selection = 選字 and the spoken 括號 dropped, 2026-10-16), 11 adds the spoken 結束
 # (結束錄音, the user's request the same day), 12 adds 全選 / 複製 / 剪下 / 貼上 (commands) and drops 貼上 = Alt+V,
-# 13 brings the spoken 括號 back as 左右輸入文字 （ ）
-VERSION = 13
+# 13 brings the spoken 括號 back as 左右輸入文字 （ ）, 14 adds 引號 「」 (the key rules went to config.hotkey)
+VERSION = 14
 
 _PUNCT = re.compile(r"[\s，。、！？；：,.!?;:…]+")
 
@@ -72,31 +66,26 @@ class Rule:
         return next((i for i, s in enumerate(self.steps) if s.type == COMMAND and s.value == RECORD), None)
 
 
-def defaults(key: str = "mouse_middle", newline: bool = True, send: bool = True) -> list[Rule]:
-    """The user's own setup (2026-10-14, their request): tap to listen until the next tap; double tap (or say 復原)
-    to take back the last change, on a selection to delete it; spoken 換行 / 送出 press Shift+Enter / Enter (listening
-    goes on: the key turns it off; 送出 stopped it 2026-10-14/15), 標點 types "- ", 貼上 presses Alt+V, 空白 presses
-    Space; 撤銷 is 復原 too, 刪除 presses Backspace (2026-10-15). Hold on a selection for 選字 and the spoken 括號
-    were dropped with the simple editor (2026-10-16): the menu opens by itself while listening."""
-    source = MOUSE if key.startswith("mouse") else KEY
-    out = [Rule(source, key, gesture=TAP, steps=[Step(COMMAND, RECORD)]),
-           Rule(source, key, gesture=DOUBLE, steps=[Step(COMMAND, UNDO)]),
-           Rule(source, key, gesture=DOUBLE, when=SELECTION, steps=[Step(COMMAND, DELETE_SELECTION)])]
-    if newline:
-        out.append(Rule(SPEECH, phrase="換行", steps=[Step(KEYS, "Shift+Enter")]))
-    if send:
-        out.append(Rule(SPEECH, phrase="送出", steps=[Step(KEYS, "Enter")]))
-    out += [Rule(SPEECH, phrase="復原", steps=[Step(COMMAND, UNDO)]),
-            Rule(SPEECH, phrase="撤銷", steps=[Step(COMMAND, UNDO)]),
+def defaults(newline: bool = True, send: bool = True) -> list[Rule]:
+    """The spoken operations (the user's own setup, 2026-10-14/16), in the order the 自訂操作 tab groups them:
+    typing (換行 Shift+Enter, 空白, 標點 "- ", 括號 （ ）, 引號 「」), changing (刪除 Backspace, 復原 / 撤銷), the
+    clipboard (全選 / 複製 / 剪下 / 貼上) and ending (送出 Enter, listening goes on; 結束 turns it off). No key
+    rules since 2026-10-16: the hotkey is config.hotkey."""
+    out = [Rule(SPEECH, phrase="換行", steps=[Step(KEYS, "Shift+Enter")])] if newline else []
+    out += [Rule(SPEECH, phrase="空白", steps=[Step(KEYS, "Space")]),
+            Rule(SPEECH, phrase="標點", steps=[Step(TEXT, "- ")]),
+            Rule(SPEECH, phrase="括號", steps=[Step(WRAP, ["（", "）"])]),
+            Rule(SPEECH, phrase="引號", steps=[Step(WRAP, ["「", "」"])]),
             Rule(SPEECH, phrase="刪除", steps=[Step(KEYS, "Backspace")]),
-            Rule(SPEECH, phrase="結束", steps=[Step(COMMAND, STOP)]),
+            Rule(SPEECH, phrase="復原", steps=[Step(COMMAND, UNDO)]),
+            Rule(SPEECH, phrase="撤銷", steps=[Step(COMMAND, UNDO)]),
             Rule(SPEECH, phrase="全選", steps=[Step(COMMAND, SELECT_ALL)]),
             Rule(SPEECH, phrase="複製", steps=[Step(COMMAND, COPY)]),
             Rule(SPEECH, phrase="剪下", steps=[Step(COMMAND, CUT)]),
-            Rule(SPEECH, phrase="貼上", steps=[Step(COMMAND, PASTE)]),
-            Rule(SPEECH, phrase="標點", steps=[Step(TEXT, "- ")]),
-            Rule(SPEECH, phrase="括號", steps=[Step(WRAP, ["（", "）"])]),
-            Rule(SPEECH, phrase="空白", steps=[Step(KEYS, "Space")])]
+            Rule(SPEECH, phrase="貼上", steps=[Step(COMMAND, PASTE)])]
+    if send:
+        out.append(Rule(SPEECH, phrase="送出", steps=[Step(KEYS, "Enter")]))
+    out.append(Rule(SPEECH, phrase="結束", steps=[Step(COMMAND, STOP)]))
     return out
 
 
@@ -172,6 +161,8 @@ def upgrade(rules: list[Rule], version: int) -> list[Rule]:
         rules.append(Rule(SPEECH, phrase="結束", steps=[Step(COMMAND, STOP)]))
     if version < 13 and not any(r.source == SPEECH and normalize(r.phrase) == "括號" for r in rules):
         rules.append(Rule(SPEECH, phrase="括號", steps=[Step(WRAP, ["（", "）"])]))
+    if version < 14 and not any(r.source == SPEECH and normalize(r.phrase) == "引號" for r in rules):
+        rules.append(Rule(SPEECH, phrase="引號", steps=[Step(WRAP, ["「", "」"])]))
     if version < 12:
         rules[:] = [r for r in rules if not (r.source == SPEECH and normalize(r.phrase) == "貼上"
                                              and [(st.type, st.value) for st in r.steps] == [(KEYS, "Alt+V")])]
@@ -181,26 +172,15 @@ def upgrade(rules: list[Rule], version: int) -> list[Rule]:
     return rules
 
 
-# The simple editor (自訂操作, 2026-10-16, the user's design): one row per thing a key does, one per spoken phrase.
-# Keys: (command, situation, label); a row is one rule, or none when 不使用.
-KEY_ROWS = [(RECORD, ANY, "開關麥克風"), (UNDO, ANY, "復原"), (DELETE_SELECTION, SELECTION, "刪除選取的文字（有選取時）")]
 # Spoken rows (2026-10-16, the user's choice: no built-in rows, every one editable): a phrase box (several phrases
-# separated by 、, one rule each) and one step: keys, text, 復原 (VoiceInput's own, not Ctrl+Z) or 結束錄音.
+# separated by 、, one rule each) and one step: keys, text, 左右輸入文字, 復原 (VoiceInput's own, not Ctrl+Z), 結束錄音
+# or an edit command.
 PHRASES = re.compile(r"[、,，/／;；]+")
 
 
 def phrases(text: str) -> list[str]:
     """復原、撤銷 -> [復原, 撤銷]"""
     return [p.strip() for p in PHRASES.split(text) if p.strip()]
-
-
-def key_rule(rules: list[Rule], command: str, when: str) -> Rule | None:
-    """The rule of a key row: a key or button whose steps are that command alone (錄音: any rule that records)."""
-    for r in rules:
-        if r.enabled and r.source != SPEECH and r.when == when:
-            if command == RECORD and r.record_index() is not None                     or [(st.type, st.value) for st in r.steps] == [(COMMAND, command)]:
-                return r
-    return None
 
 
 def spoken_ok(rule: Rule) -> bool:
@@ -212,15 +192,10 @@ def spoken_ok(rule: Rule) -> bool:
 
 
 def simplify(rules: list[Rule]) -> list[Rule]:
-    """The rules the simple editor can show (2026-10-16): the key rows' rules (a recording rule's other steps
-    dropped) and enabled speech rules of one step, for any situation, the first of a phrase; the rest is dropped
-    (hold on a selection = 選字, the spoken 括號 of two steps)."""
-    out = []
-    for command, when, _ in KEY_ROWS:
-        r = key_rule(rules, command, when)
-        if r is not None:
-            out.append(Rule(r.source, r.key, gesture=r.gesture, when=when, steps=[Step(COMMAND, command)]))
-    seen = set()
+    """The rules the simple editor can show (2026-10-16): enabled speech rules of one step, for any situation, the
+    first of a phrase; the rest is dropped (key rules: the hotkey is config.hotkey; hold on a selection = 選字, the
+    spoken 括號 of two steps)."""
+    out, seen = [], set()
     for r in rules:
         if r.enabled and spoken_ok(r) and normalize(r.phrase) and normalize(r.phrase) not in seen:
             seen.add(normalize(r.phrase))
@@ -278,13 +253,3 @@ def problems(rule: Rule, rules: list[Rule]) -> list[str]:
                 out.append("和上面一條操作的觸發、按法、情境都相同，這條不會生效")
                 break
     return out
-
-
-def bound_keys(rules: list[Rule]) -> set[str]:
-    """Mouse buttons and keyboard keys some rule uses: the hooks take these over."""
-    return {r.key for r in rules if r.enabled and r.source != SPEECH and not problems(r, rules)}
-
-
-def can_record(rules: list[Rule]) -> bool:
-    return any(r.enabled and r.source != SPEECH and r.record_index() is not None and not problems(r, rules)
-               for r in rules)

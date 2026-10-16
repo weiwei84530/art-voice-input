@@ -1,5 +1,6 @@
-"""VoiceInput: single-process tray app. Tap a key or mouse button to listen until the next tap, or hold it to listen
-while held.
+"""VoiceInput: single-process tray app. Listening is turned on and off from the interface (the floating button, the
+bubble by the caret, or the focus coming into a text box: on_focus), or by tapping the one hotkey (a mouse button
+or keyboard key, the 一般 tab; 2026-10-16, the user's design: nothing else is bound to keys any more).
 
 What an utterance does:
 1. Text is selected (UI Automation): the utterance replaces it.
@@ -9,10 +10,9 @@ punctuation name (逗號, 句號 …) is typed as the mark (edit.symbol; a setti
 節 (edit.described, a setting). Dictated text then
 goes through the smart picks (memory.py, single characters only); words are left to X-ASR hotword biasing.
 
-What the mouse buttons and keys do is set by custom operations (rules.py, 2026-10-11). The defaults
-(rules.defaults, the user's setup): tap the middle button to listen; double click it to take back VoiceInput's last
-change (復原), on a selection to delete it; spoken 換行, 送出, 復原 / 撤銷, 刪除 (Backspace) and a few more. While
-listening, a short mouse selection opens 選字 by itself. Gestures no operation takes are given back to the key.
+Spoken operations are set on the 自訂操作 tab (rules.py): 換行, 送出, 復原 / 撤銷, 刪除 (Backspace) and a few more.
+While listening, a short mouse selection opens 選字 by itself. A hold or double tap of the hotkey is given back to
+the key or button.
 
 Recording is continuous listening (listen.py; on the continuous-mic branch since 2026-10-14 the one way, the
 user's choice: no cutting the recording to say a command). Every pause ends a piece: said alone, an operation's
@@ -39,7 +39,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from PySide6.QtCore import QLockFile, QObject, QPointF, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QColor, QGuiApplication, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtGui import QAction, QColor, QCursor, QGuiApplication, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from . import autostart, candidates, cues, edit, models, packs, paths, recordings, rules, sounds, spelling
@@ -56,7 +56,6 @@ from .listen import LEAD, Listener
 from .memory import Memory, is_latin, situation
 from .mute import Muter
 from .output import backspace, copy_text, paste_text, press_chord, press_delete, press_key, restore_now
-from .overlay import Overlay
 from . import picker as picker_mod
 from .picker import Picker
 from .reading import reading_key
@@ -79,7 +78,6 @@ _COMMAND_SCORE = 5.0
 _COMMAND_SLACK = 2
 _WORDS = re.compile(r"[㐀-䶿一-鿿]|[A-Za-z0-9]+")   # a Chinese character or an English word counts one
 _SEL_LOST = "找不到選取的文字，沒有修改"   # a terminal selection that moved or the cursor could not reach
-_NO_RECORD = "目前沒有任何操作會錄音，無法語音輸入。請到「設定 → 自訂操作」加入「錄音」。"
 # from the call to PlaySound until the start sound has left the speakers: measured 0.17s on the user's machine
 # (Realtek speakers, Logi C270 microphone, 2026-10-13); the level bars and muting wait the sound's length plus this,
 # or Kalimba's tail moved the bars and Woodblock (0.19s) was muted before it was heard
@@ -189,14 +187,11 @@ class App(QObject):
         self._speech_sample = 0                  # where the latest speech began (with its lead-in)
         self._draft: _Draft | None = None        # text typed while listening, not committed yet
         self._draft_start = 0                    # the sample the draft's audio starts at (the last commit)
-        self._listen_typed = False               # something was typed or run while listening (send_on_stop)
-        self._listen_hwnd = 0                    # the window it was typed in
         self._quitting = False
         self._marked = None                      # the buffer when the last commit added its sentence-final mark
         self._committed = None                   # (text before it, _Draft, its history step): 復原 may revive it
         self._spans: list = []                   # worker thread: the pieces of the draft's open sentence
         self._ignored: set[str] = set()          # keys pressed while another was held
-        self._could_record = rules.can_record(self.cfg.rules)
         self.hotwords = Hotwords()
         self._pack_stamp = None
         self._load_packs()
@@ -210,9 +205,7 @@ class App(QObject):
         self._busy, self._busy_lock = 0, threading.Lock()   # decoding jobs queued or running
         self.glow = EdgeGlow(lambda: self.listener.level if self._listening else 0.0)
         self.glow.set_style(self.cfg.glow)
-        self.overlay = Overlay(lambda: self.listener.level if self._listening else 0.0,
-                               lambda: self.cfg.spin_while_decoding and self._busy > 0, glow=self.glow)
-        self.overlay.pill = self.cfg.show_indicator
+        self.glow.set_edges(self.cfg.glow_edges)
         self.float_btn = FloatButton(self.cfg.float_pos)
         self.float_btn.clicked.connect(self._float_clicked)
         self.float_btn.moved.connect(self._float_moved)
@@ -226,7 +219,7 @@ class App(QObject):
         self._focus_pool = ThreadPoolExecutor(max_workers=1)   # its UI Automation reads (one COM object per thread)
         self._focus_timer = QTimer(self, interval=300, timeout=self._watch_focus)
         self._focus_timer.start()
-        self.marks = DraftMarks()                # the draft drawn as if selected (highlight_draft)
+        self.marks = DraftMarks(self.cfg.highlight_color)   # the draft drawn as if marked
         self._marks_pool = ThreadPoolExecutor(max_workers=1)   # UI Automation reads for it
         self._marks_busy = False
         self._marks_timer = QTimer(self, interval=150, timeout=self._mark_draft)
@@ -261,7 +254,7 @@ class App(QObject):
         self.record.connect(self.on_record)
 
         self.hotkeys = Hotkeys(self.key_down.emit, self.key_up.emit, self._on_other_key)
-        self.hotkeys.set_keys(rules.bound_keys(self.cfg.rules))
+        self.hotkeys.set_keys(self._hotkeys())
         self.hotkeys.start()
         self._mouse = self._watch_mouse()
         self.worker.submit(self._load_model_job)
@@ -270,8 +263,6 @@ class App(QObject):
         sounds.preload_english()   # 選字's near sounds for English
         if self.cfg.autostart:
             self._set_autostart()   # re-register so the entry follows the app if its folder was moved
-        if not self._could_record:
-            self._notify(_NO_RECORD)
         self._update_float()
 
     @staticmethod
@@ -386,18 +377,19 @@ class App(QObject):
     #         log.exception("%s failed to load", key)
 
     # --- gestures: which operation a press runs ---
+    def _hotkeys(self) -> set:
+        return {self.cfg.hotkey} if self.cfg.hotkey else set()
+
     def _rules_for(self, key: str, gesture: str) -> list:
+        """The hotkey's one operation (2026-10-16, the user's design): a tap turns listening on or off. A hold or a
+        double tap has none and is given back to the key."""
+        if key != self.cfg.hotkey or gesture != TAP:
+            return []
         source = rules.MOUSE if key in MOUSE_TRIGGERS else rules.KEY
-        return rules.candidates(self.cfg.rules, source, key, gesture)
+        return [rules.Rule(source, key, gesture=TAP, steps=[rules.Step(rules.COMMAND, rules.RECORD)])]
 
     def _records_on(self, key: str, gestures) -> bool:
         return any(r.record_index() is not None for g in gestures for r in self._rules_for(key, g))
-
-    def _only_tap_records(self, key: str) -> bool:
-        """The key's only operations are taps that record: a press turns listening on from key-down."""
-        taps = self._rules_for(key, TAP)
-        return (bool(taps) and all(r.record_index() is not None for r in taps)
-                and not self._rules_for(key, DOUBLE) and not self._rules_for(key, HOLD))
 
     def on_key_down(self, key: str, t: float):
         if self._press is not None:          # another key is held: this one is ignored
@@ -419,8 +411,6 @@ class App(QObject):
         # listening starts now, unseen (no lost first syllable), whenever this press may turn it on
         if not self._listening and self._records_on(key, (DOUBLE, HOLD) if double else (TAP, HOLD)):
             self._start_listen(press)
-            if not double and self._only_tap_records(key):
-                self._show_listen(press)
         if double:
             self._decide(press, DOUBLE)
         QTimer.singleShot(int(self.cfg.gesture_time * 1000), lambda: self._hold_check(press, timer=True))
@@ -450,7 +440,7 @@ class App(QObject):
         if not press.held and t - press.down_at >= self.cfg.gesture_time:   # the hold timer has not run yet
             self._hold_check(press)
         if press.first is None and not press.held:
-            if self._rules_for(key, DOUBLE):     # wait to see whether a second press follows
+            if key == self.cfg.hotkey:           # wait to see whether a second press follows (given back)
                 if not self._records_on(key, (TAP,)):
                     self._discard_listen(press)
                 self._pending = press
@@ -534,11 +524,15 @@ class App(QObject):
             self.muter.restore()
 
     def _overlay_idle(self):
-        """Main thread: a press or piece is done; while listening the indicator stays."""
-        if self._listening:
-            self.overlay.show_recording()
+        """Main thread: a press or piece is done (a terminal edit hid the glow): while listening the glow stays."""
+        if self._listening and self._listen_shown:
+            self.glow.show(self._pointer_screen())
         else:
-            self.overlay.hide_overlay()
+            self.glow.hide()
+
+    @staticmethod
+    def _pointer_screen():
+        return QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
 
     # --- listening (the one way to record since 2026-10-14, continuous-mic branch) ---
     @property
@@ -567,7 +561,6 @@ class App(QObject):
 
             def reset():
                 self._draft, self._draft_start = None, begin
-                self._listen_typed, self._listen_hwnd = False, 0
                 self._committed = None
                 self.listener.keep(begin)
             self._on_main(reset)
@@ -585,7 +578,7 @@ class App(QObject):
         self._listen_shown = True
         self.book.new_session()
         self.tray.setIcon(self.icon_rec)
-        self.overlay.show_recording()
+        self.glow.show(self._pointer_screen())
         cues.play(self.cfg.start_sound, "start")
         wait = cues.duration(self.cfg.start_sound, "start")
         if wait:
@@ -609,7 +602,7 @@ class App(QObject):
         if minutes and self._listening and self._listen_shown and self._busy == 0 \
                 and time.monotonic() - self._heard_at > minutes * 60:
             log.info("listen: off after %d minutes without speech", minutes)
-            self._stop_listen(send=False)
+            self._stop_listen()
             self._notify(f"已自動關閉麥克風（{minutes} 分鐘沒有聽到講話）")
 
     # --- the floating button and leaving text (2026-10-16) ---
@@ -649,7 +642,7 @@ class App(QObject):
         """Main thread, every 0.15s while listening: the draft's place read again (it changes as it is retyped, the
         window scrolls) and the boxes drawn there (highlight.py)."""
         d = self._draft
-        if not self.cfg.highlight_draft or d is None or not d.placed or not d.typed or self._moved() \
+        if d is None or not d.placed or not d.typed or self._moved() \
                 or foreground() != self.session.hwnd:
             self.marks.hide()
             return
@@ -722,7 +715,7 @@ class App(QObject):
         self._update_float()
         if mode == "listen" and was is not None and self._listening:
             log.info("listen: off, the focus left the text box")
-            self._stop_listen(send=False, by_focus=True)
+            self._stop_listen(by_focus=True)
 
     def _preview_glow(self, style_id: str):
         """A glow style picked in the settings: shown for a moment (unless listening shows it already)."""
@@ -737,10 +730,9 @@ class App(QObject):
             self.listener.stop(discard=True)
             self._listen_owner = None
 
-    def _stop_listen(self, send: bool = True, by_focus: bool = False):
-        """Listening off. send: by the key (not 送出 / 結束錄音): Enter once the text is in when the setting says so
-        and something was typed while listening. by_focus: the focus left the text box (on_focus); any other way
-        of turning it off keeps the focus from turning it on again in the same box."""
+    def _stop_listen(self, by_focus: bool = False):
+        """Listening off. by_focus: the focus left the text box (on_focus); any other way of turning it off keeps
+        the focus from turning it on again in the same box."""
         if not by_focus and self._box is not None:
             self._box_quiet = True
         self._box_auto = False
@@ -749,7 +741,7 @@ class App(QObject):
         self.book.end_session()
         log.info("listen: off")
         self.tray.setIcon(self.icon_idle)
-        self.overlay.hide_overlay()
+        self.glow.hide()
         self._marks_timer.stop()
         self.marks.hide()
         self._update_float()
@@ -775,13 +767,8 @@ class App(QObject):
                 if done and not self._listening:
                     self.muter.restore()
                     cues.play(self.cfg.stop_sound, "stop")
-                steps = list(after)
-                if send and self.cfg.send_on_stop and self._listen_typed and self.session.buffer \
-                        and foreground() == self._listen_hwnd:   # not into another window (2026-10-15)
-                    log.info("listen: sent on stop")
-                    steps.append(rules.Step(rules.KEYS, "Enter"))
                 if owner:
-                    self._run_steps(owner, steps)
+                    self._run_steps(owner, list(after))
             self.main.emit(run)
         self._decoding(finished)
 
@@ -834,7 +821,7 @@ class App(QObject):
                 return
             if d.sel is not None:
                 if d.sel.term is not None:
-                    self.overlay.hide_now()
+                    self.glow.hide_now()
                 self._close_menu()   # the selection the menu was for is replaced
                 pasted = _paste_over(d.sel, text)
                 self._overlay_idle()
@@ -970,8 +957,6 @@ class App(QObject):
                 self._committed = (b[:len(b) - len(d.typed)], d, self.session.history[-1]) \
                     if d.placed and d.typed and self.session.clean() and b.endswith(d.typed) \
                     and self.session.history else None
-        if command is not None or d is not None and d.final:
-            self._listen_typed, self._listen_hwnd = True, foreground()
         if command is not None:
             # the selection made before the command was said, unless the text before it went there
             sel = ctx.selection
@@ -1000,7 +985,7 @@ class App(QObject):
             if sel is not None:
                 self._close_menu()
                 if sel.term is not None:
-                    self.overlay.hide_now()
+                    self.glow.hide_now()
                 pasted = _paste_over(sel, typed)
                 self._overlay_idle()
                 if pasted:
@@ -1283,7 +1268,6 @@ class App(QObject):
         self.steps.submit(self._steps_job, press, steps, done)
 
     def _steps_job(self, press: _Press, steps: list, done):
-        stop = False
         try:
             for n, step in enumerate(steps):
                 if n:
@@ -1315,28 +1299,14 @@ class App(QObject):
                             self._on_main(lambda: self.session.dictated("\n", None, foreground()))
                         elif step.value == "Backspace":   # one character less, which 復原 can type again
                             self._on_main(self._backspaced)
-                        elif step.value == "Enter":   # sent: nothing left for the end of listening to send
-                            self.session.on_input()
-                            self._listen_typed = False
-                            if press.key == "listen" and self.cfg.stop_on_send:   # 送出 said, and the setting
-                                stop = True
                         else:
                             self.session.on_input()     # the caret may have moved
                 elif step.type == rules.TEXT:
                     self._on_main(lambda t=step.value: self._type_text(t))
-                elif step.type == rules.COMMAND and step.value == rules.DELETE_SELECTION:
-                    ctx = press.probe.result()
-                    self._on_main(lambda: self._delete_selection(press, ctx))
-                elif step.type == rules.COMMAND and step.value in (rules.UNDO, rules.DELETE_DICTATION):
+                elif step.type == rules.COMMAND and step.value == rules.UNDO:
                     self._on_main(self.undo)
                 elif step.type == rules.COMMAND and step.value == rules.STOP:
-                    self._on_main(lambda: self._stop_listen(send=False) if self._listening else None)
-                elif step.type == rules.COMMAND and step.value == rules.PICK:
-                    ctx = press.probe.result()
-                    sel = ctx.selection if press.deleted is None else None
-                    self._on_main(lambda: self._open_candidates(sel, ctx.terms))
-            if stop:
-                self._on_main(lambda: self._stop_listen(send=False) if self._listening else None)
+                    self._on_main(lambda: self._stop_listen() if self._listening else None)
         except Exception:
             log.exception("steps failed")
         finally:
@@ -1382,7 +1352,7 @@ class App(QObject):
     def _replace_selection(self, press: _Press, sel, text: str):
         """Main thread: text typed over a terminal selection."""
         if sel.term is not None:
-            self.overlay.hide_now()
+            self.glow.hide_now()
         pasted = _paste_over(sel, text)
         self._overlay_idle()
         if not pasted:
@@ -1437,7 +1407,7 @@ class App(QObject):
             return
         log.info("delete %r on %s", sel.text, sel.app)
         if sel.term is not None:
-            self.overlay.hide_now()
+            self.glow.hide_now()
         deleted = _delete_selection(sel)
         if sel.term is not None:
             self._overlay_idle()
@@ -1694,7 +1664,7 @@ class App(QObject):
         lead = sel.text.index(text)
         log.info("menu pick: %s -> %s", text, word)
         if sel.term is not None:
-            self.overlay.hide_now()
+            self.glow.hide_now()
         pasted = _paste_over(sel, sel.text[:lead] + word + sel.text[lead + len(text):])
         if sel.term is not None:
             self._overlay_idle()
@@ -1738,19 +1708,13 @@ class App(QObject):
         self.settings.activateWindow()
 
     def apply_settings(self):
-        self.hotkeys.set_keys(rules.bound_keys(self.cfg.rules))
-        if self.overlay.pill != self.cfg.show_indicator:
-            self.overlay.set_pill(self.cfg.show_indicator)
-        if self.glow.style_id != self.cfg.glow:
+        self.hotkeys.set_keys(self._hotkeys())
+        if self.glow.style_id != self.cfg.glow or self.glow.edges != self.cfg.glow_edges:
             self.glow.set_style(self.cfg.glow)
-            if self._listening and self.cfg.glow:
-                self.glow.show(self.overlay.screen())
-        can = rules.can_record(self.cfg.rules)
-        if self._could_record and not can:
-            self._notify(_NO_RECORD)
-        if not can and self._listening:   # nothing could turn it off any more
-            self._stop_listen(send=False)
-        self._could_record = can
+            self.glow.set_edges(self.cfg.glow_edges)
+            if self._listening and self._listen_shown and self.cfg.glow:
+                self.glow.show(self._pointer_screen())
+        self.marks.set_color(self.cfg.highlight_color)
         self._update_float()
         if self.cfg.on_focus != "bubble":
             self.bubble.hide()
