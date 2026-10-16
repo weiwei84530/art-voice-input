@@ -30,6 +30,8 @@ class Style:
     colors: tuple       # stops around the screen (conical gradient), first = last
     turn: float         # turns per second of the colors around the screen (0: still)
     pulse: float        # breathing when quiet: 0 none, 1 strong
+    depth: float = 1.0  # how far in it reaches, times DEPTH
+    bright: float = 1.0  # opacity, times the usual
 
 
 STYLES = [
@@ -40,6 +42,25 @@ STYLES = [
     Style("red", "錄音紅", ("#ff453a", "#ff6b5e", "#ff2d20", "#ff453a"), 0.0, 1.0),
 ]
 BY_ID = {s.id: s for s in STYLES}
+CUSTOM = "custom"   # 自訂 (2026-10-16, the user's request): config.glow_custom, started from the style shown before
+CUSTOM_KEYS = ("colors", "turn", "pulse", "depth", "bright")
+
+
+def custom_from(style: Style) -> dict:
+    """A style's parameters as config.glow_custom holds them: its colors without the repeated last one."""
+    colors = list(style.colors[:-1]) if style.colors[0] == style.colors[-1] else list(style.colors)
+    return {"colors": colors[:4], "turn": style.turn, "pulse": style.pulse, "depth": style.depth,
+            "bright": style.bright}
+
+
+def style_for(style_id: str, custom: dict | None) -> Style | None:
+    """The style picked: a preset, or 自訂 from its parameters (missing ones from 彩虹)."""
+    if style_id != CUSTOM:
+        return BY_ID.get(style_id)
+    c = {**custom_from(STYLES[0]), **(custom or {})}
+    colors = [x for x in c["colors"] if QColor(x).isValid()] or ["#3d7bff"]
+    return Style(CUSTOM, "自訂", tuple(colors + [colors[0]]), float(c["turn"]), float(c["pulse"]),
+                 min(max(float(c["depth"]), 0.4), 2.0), min(max(float(c["bright"]), 0.3), 1.6))
 # which edges glow (the 外觀 tab, 2026-10-16, the user's request): id -> (label, top, bottom, left, right)
 EDGES = {"all": ("上下左右", True, True, True, True), "tb": ("只有上下", True, True, False, False),
          "lr": ("只有左右", False, False, True, True), "top": ("只有上", True, False, False, False),
@@ -51,13 +72,14 @@ def _strength(level: int) -> float:
     return 0.45 + 0.55 * level / (_LEVELS - 1)
 
 
-def _profile(dist: np.ndarray, strength: float) -> np.ndarray:
+def _profile(dist: np.ndarray, strength: float, depth: float = 1.0, bright: float = 1.0) -> np.ndarray:
     """Opacity at `dist` px from an edge: bright at the edge, fading inward."""
-    x = np.clip(dist / (DEPTH * strength), 0, 1)
-    return (1 - x) ** 2.4 * (0.35 + 0.6 * strength)
+    x = np.clip(dist / (DEPTH * depth * strength), 0, 1)
+    return np.clip((1 - x) ** 2.4 * (0.35 + 0.6 * strength) * bright, 0, 1)
 
 
-def mask(screen: QRect, rect: QRect, strength: float, edges=(True, True, True, True)) -> QImage:
+def mask(screen: QRect, rect: QRect, strength: float, edges=(True, True, True, True), depth: float = 1.0,
+         bright: float = 1.0) -> QImage:
     """The falloff over `rect` (screen coordinates) at 1/_SCALE: white, its alpha the glow's opacity, every glowing
     edge of the screen counted (so a strip's corners match its neighbours'); edges: (top, bottom, left, right)."""
     w, h = -(-rect.width() // _SCALE), -(-rect.height() // _SCALE)
@@ -67,7 +89,7 @@ def mask(screen: QRect, rect: QRect, strength: float, edges=(True, True, True, T
     keep = np.ones_like(X)
     for on, dist in zip(edges, (Y, screen.height() - Y, X, screen.width() - X)):
         if on:
-            keep *= 1 - _profile(dist, strength)
+            keep *= 1 - _profile(dist, strength, depth, bright)
     a = (np.clip(1 - keep, 0, 1) * 255).astype(np.uint32)
     argb = np.ascontiguousarray((a << 24) | (a << 16) | (a << 8) | a)   # premultiplied white
     return QImage(argb.tobytes(), w, h, w * 4, QImage.Format_ARGB32_Premultiplied).copy()
@@ -150,14 +172,23 @@ class EdgeGlow:
         self.edges = "all"
 
     @property
-    def style_id(self) -> str:
-        return self._style.id if self._style else ""
+    def style(self) -> "Style | None":
+        return self._style
 
-    def set_style(self, style_id: str):
-        self._style = BY_ID.get(style_id)
+    def set_style(self, style: "Style | None"):
+        """A Style (style_for), or None for no glow; shown at once in the new style when on."""
+        old, self._style = self._style, style
         self._shown = None
-        if self._style is None:
+        if style is None:
             self.hide_now()
+        elif old is None or (old.depth, old.bright) != (style.depth, style.bright):
+            screen = QGuiApplication.screenAt(self._screen.center()) if self._on else None
+            self._screen = QRect()   # the masks depend on them: placed again
+            if self._on:
+                self._place(screen)
+                self._render()
+                for s in self._strips:
+                    s.update()
 
     def set_edges(self, edges: str):
         if edges not in EDGES:
@@ -203,16 +234,18 @@ class EdgeGlow:
         if g == self._screen:
             return
         self._screen = g
-        d = min(DEPTH, g.height() // 4, g.width() // 4)
+        st = self._style or STYLES[0]
+        d = min(round(DEPTH * st.depth), g.height() // 4, g.width() // 4)
         _, top, bottom, left, right = EDGES[self.edges]
         side_top, side_h = g.top() + (d if top else 0), g.height() - (d if top else 0) - (d if bottom else 0)
         rects = [QRect(g.left(), g.top(), g.width(), d) if top else None,
                  QRect(g.left(), g.bottom() - d + 1, g.width(), d) if bottom else None,
                  QRect(g.left(), side_top, d, side_h) if left else None,
                  QRect(g.right() - d + 1, side_top, d, side_h) if right else None]
-        key = (g.x(), g.y(), g.width(), g.height(), self.edges)
+        key = (g.x(), g.y(), g.width(), g.height(), self.edges, st.depth, st.bright)
         if key not in self._masks:
-            self._masks[key] = [[mask(g, r, _strength(k), (top, bottom, left, right)) for k in range(_LEVELS)]
+            self._masks[key] = [[mask(g, r, _strength(k), (top, bottom, left, right), st.depth, st.bright)
+                                 for k in range(_LEVELS)]
                                 if r is not None else [] for r in rects]
         for s, r, m in zip(self._strips, rects, self._masks[key]):
             if r is not None:

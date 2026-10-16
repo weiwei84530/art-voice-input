@@ -46,7 +46,7 @@ from . import autostart, candidates, cues, edit, models, packs, paths, recording
 from .asr import SAMPLE_RATE, Recognizer
 from .config import Config
 from .floatbtn import Bubble, FloatButton
-from .glow import EdgeGlow
+from .glow import EdgeGlow, style_for
 from .highlight import DraftMarks, draft_rects
 from .logbook import LogBook, esc
 from .hotwords import Hotwords
@@ -204,8 +204,10 @@ class App(QObject):
 
         self._busy, self._busy_lock = 0, threading.Lock()   # decoding jobs queued or running
         self.glow = EdgeGlow(lambda: self.listener.level if self._listening else 0.0)
-        self.glow.set_style(self.cfg.glow)
+        self.glow.set_style(style_for(self.cfg.glow, self.cfg.glow_custom))
         self.glow.set_edges(self.cfg.glow_edges)
+        self._preview_end = QTimer(self, singleShot=True,
+                                   timeout=lambda: None if self._listening else self.glow.hide())
         self.float_btn = FloatButton(self.cfg.float_pos)
         self.float_btn.clicked.connect(self._float_clicked)
         self.float_btn.moved.connect(self._float_moved)
@@ -718,11 +720,13 @@ class App(QObject):
             self._stop_listen(by_focus=True)
 
     def _preview_glow(self, style_id: str):
-        """A glow style picked in the settings: shown for a moment (unless listening shows it already)."""
-        self.glow.set_style(style_id)
+        """A glow style picked, changed or previewed in the settings: shown for a moment (unless listening shows it
+        already); a change while it shows restarts the moment."""
+        self.glow.set_style(style_for(style_id, self.cfg.glow_custom))
+        self.glow.set_edges(self.cfg.glow_edges)
         if not self._listening:
             self.glow.show(QGuiApplication.screenAt(self.settings.geometry().center()))
-            QTimer.singleShot(2500, lambda: None if self._listening else self.glow.hide())
+            self._preview_end.start(3000)
 
     def _discard_listen(self, press: _Press):
         """The press that started listening unseen does something else: the microphone off, nothing kept."""
@@ -745,11 +749,11 @@ class App(QObject):
         self._marks_timer.stop()
         self.marks.hide()
         self._update_float()
-        done = self.cfg.stop_sound and self.cfg.stop_sound_at == "done"
-        if not done:
-            self.muter.restore()
-            if self.cfg.stop_sound:
-                cues.play(self.cfg.stop_sound, "stop")
+        # the end sound marks the microphone going off, nothing about the text (the user's choice, 2026-10-16: the
+        # 文字輸入完成時 option was removed)
+        self.muter.restore()
+        if self.cfg.stop_sound:
+            cues.play(self.cfg.stop_sound, "stop")
         after = self._after_steps(owner) if owner else []
         end = self.listener.now
 
@@ -764,9 +768,6 @@ class App(QObject):
                                  final=True, spans=spans)
 
             def run():
-                if done and not self._listening:
-                    self.muter.restore()
-                    cues.play(self.cfg.stop_sound, "stop")
                 if owner:
                     self._run_steps(owner, list(after))
             self.main.emit(run)
@@ -1717,8 +1718,9 @@ class App(QObject):
 
     def apply_settings(self):
         self.hotkeys.set_keys(self._hotkeys())
-        if self.glow.style_id != self.cfg.glow or self.glow.edges != self.cfg.glow_edges:
-            self.glow.set_style(self.cfg.glow)
+        style = style_for(self.cfg.glow, self.cfg.glow_custom)
+        if self.glow.style != style or self.glow.edges != self.cfg.glow_edges:
+            self.glow.set_style(style)
             self.glow.set_edges(self.cfg.glow_edges)
             if self._listening and self._listen_shown and self.cfg.glow:
                 self.glow.show(self._pointer_screen())

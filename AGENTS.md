@@ -115,6 +115,14 @@ day with everything behind them (the user's choice, what they had unticked): 用
 (`send_on_stop`), 說「送出」時關閉麥克風 (`stop_on_send`), 錄音時顯示指示器 and the whole indicator (`overlay.py`, the
 pill at the bottom, its red dot spinning while decoding, `spin_while_decoding`); the draft's mark is always on (its
 checkbox `highlight_draft` removed). Paragraphs below that describe these are history.
+Later the same day (the user's requests): the 結束音在 choice was removed (`stop_sound_at`; the end sound marks the
+microphone going off, nothing about the text); tooltips over the controls were replaced by an ⓘ after each setting's
+name (`settings._Info`, its text shows only while the pointer is on it: tooltips popped up whenever the pointer
+rested on a control; one ⓘ per 詞庫 list instead of tooltips on its rows; ✕ has none); the glow has a 預覽 button
+and a 自訂 style (`glow.CUSTOM`, `config.glow_custom`: 2-4 colors, 旋轉速度, 呼吸, 寬度 (depth), 亮度 (bright),
+started from the style shown before, applied when a slider is let go and shown for 3s). A launch after a run was
+killed while listening unmutes the speakers (`mute.recover`, a marker file `.muted` while our mute is on: the
+agents' restarts with Stop-Process left the user's computer muted).
 
 Four tabs, sized for the log: 一般 (microphone, "mute the speakers while recording", punctuation names, "selected 。 →
 ，", "節日的節" (described characters), autostart; the menu timeout was removed

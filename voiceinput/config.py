@@ -23,6 +23,8 @@ class Config:
     hotkey: str = "mouse_middle"
     glow: str = ""                 # glow.py style along the screen's edges while listening, "" for none
     glow_edges: str = "all"        # which edges glow (glow.EDGES): all, tb, lr, top, bottom
+    # the 自訂 glow (glow == "custom"): colors (2-4), turn, pulse, depth, bright (glow.CUSTOM_KEYS); 2026-10-16
+    glow_custom: dict = field(default_factory=dict)
     # the floating microphone button's place (on_focus "float"), as fractions of the screen's free range
     float_pos: list = field(default_factory=lambda: [0.98, 0.88])
     # when the focus comes into a text box (2026-10-16, the user's requests): "" nothing, "bubble" a small microphone
@@ -50,7 +52,6 @@ class Config:
     # while listening, when the text typed so far is decoded again and fixed: "command" (a spoken command or the
     # end of listening) or "pause" (every pause); the user's choice of default, 2026-10-14
     commit_at: str = "command"
-    stop_sound_at: str = "stop"   # when the end sound plays: "stop" (recording stops) or "done" (text is in)
     save_recordings: bool = False   # development only, to be removed before release (recordings.py)
     rules: list = field(default_factory=rules.defaults)   # custom operations (rules.Rule)
     rules_version: int = RULES_VERSION

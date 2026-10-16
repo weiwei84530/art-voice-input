@@ -7,11 +7,12 @@ import html
 import os
 
 from pypinyin import lazy_pinyin
-from PySide6.QtCore import QEvent, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QIcon, QImage, QPainter, QPen, QPixmap, QTextDocument
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QColorDialog, QComboBox, QDialog,
                                QDialogButtonBox, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-                               QPushButton, QScrollArea, QSizePolicy, QTabWidget, QTextBrowser, QToolButton,
+                               QPushButton, QScrollArea, QSizePolicy, QSlider, QTabWidget, QTextBrowser,
+                               QToolButton,
                                QToolTip, QVBoxLayout, QWidget)
 
 from . import audio, cues, hotwords, packs, recordings, rules
@@ -175,7 +176,7 @@ _PACK_SHOWN = 5   # terms shown after a pack's name
 
 def _date_label(added: str) -> QLabel:
     """The date of an entry; the time, kept for sorting (2026-10-14), only in the tooltip."""
-    label = QLabel(added[:10], toolTip=f"加入時間：{added}")
+    label = QLabel(added[:10])
     label.setStyleSheet("color: gray")
     return label
 
@@ -206,9 +207,63 @@ def _problem_label() -> QLabel:
 
 
 def _remove_button(tip: str, slot) -> QPushButton:
-    b = QPushButton("✕", toolTip=tip, clicked=slot)
+    b = QPushButton("✕", clicked=slot)   # no tooltip: only ⓘ explains (2026-10-16), ✕ needs none
     b.setFixedWidth(28)
     return b
+
+
+def _info_icon() -> QImage:
+    """A small gray circle with an i, drawn at twice the size for sharp edges."""
+    img = QImage(32, 32, QImage.Format_ARGB32_Premultiplied)
+    img.fill(0)
+    img.setDevicePixelRatio(2)
+    p = QPainter(img)
+    p.setRenderHint(QPainter.Antialiasing)
+    gray = QColor("#8A9099")
+    p.setPen(QPen(gray, 1.2))
+    p.drawEllipse(1.5, 1.5, 13, 13)
+    p.setPen(Qt.NoPen)
+    p.setBrush(gray)
+    p.drawEllipse(7.1, 4.2, 1.8, 1.8)
+    p.drawRoundedRect(7.2, 6.9, 1.6, 5.2, 0.8, 0.8)
+    p.end()
+    return img
+
+
+class _Info(QLabel):
+    """ⓘ after a setting's name: its explanation shows only while the pointer is on it (2026-10-16, the user's
+    request: tooltips over the controls popped up whenever the pointer rested there)."""
+
+    def __init__(self, tip: str):
+        super().__init__()
+        self.tip = tip
+        self.setPixmap(QPixmap.fromImage(_info_icon()))
+        self.setFixedSize(18, 18)
+        self.setAlignment(Qt.AlignCenter)
+
+    def enterEvent(self, e):
+        QToolTip.showText(self.mapToGlobal(QPoint(self.width(), self.height())), self.tip, self)
+
+    def leaveEvent(self, e):
+        QToolTip.hideText()
+
+
+def _titled(text: str, tip: str) -> QWidget:
+    """A form row's name with its ⓘ."""
+    return _with_info(QLabel(text), tip, stretch=False)
+
+
+def _with_info(widget, tip: str, stretch: bool = True) -> QWidget:
+    """widget, then its ⓘ (a check box's text has no name column)."""
+    box = QWidget()
+    h = QHBoxLayout(box)
+    h.setContentsMargins(0, 0, 0, 0)
+    h.setSpacing(4)
+    h.addWidget(widget)
+    h.addWidget(_Info(tip))
+    if stretch:
+        h.addStretch()
+    return box
 
 
 class KeyCapture(QLineEdit):
@@ -271,43 +326,35 @@ class SettingsDialog(QDialog):
         for name in audio.list_input_devices():
             self.mic.addItem(name, name)
         self.punct = QCheckBox("只說標點符號的名字時，輸入該符號")
-        self.punct.setToolTip("逗號、句號、句點、問號、驚嘆號、感嘆號、頓號、分號、冒號、點點點、刪節號、省略號；"
-                              "整句只有這個名字才算，例如「逗號很重要」照常輸入")
         self.period_comma = QCheckBox("選取句號後講話，句號改成逗號並接上講的內容")
         self.period_comma.setToolTip("今天很好。明天見 → 選取「。」講「我們去公園」→ 今天很好，我們去公園。明天見")
         self.autostart = QCheckBox("開機時自動啟動")
-        self.commit_at = QComboBox(toolTip="停頓時字會先打出來並修正；定稿後才固定下來")
+        self.commit_at = QComboBox()
         self.commit_at.addItem("講指令或關錄音時", "command")
         self.commit_at.addItem("每次停頓時", "pause")
         self.mute = QCheckBox("錄音時暫時靜音電腦音效")
-        self.mute.setToolTip("麥克風開著時把喇叭靜音，關閉麥克風後恢復；原本就靜音的話不會動")
         self.describe = QCheckBox("說「詞＋的＋字」時只輸入那個字，例如「節日的節」")
-        self.describe.setToolTip("整句剛好是「某個詞的某個字」才算，輸入的是詞裡讀音相同的那個字")
-        self.hotkey = QComboBox(toolTip="按一下開麥克風，再按一下關；按住或連按兩下會照常交給原本的程式"
-                                        "（例如滑鼠中鍵照樣能用）")
+        self.hotkey = QComboBox()
         self.hotkey.addItem("不使用", "")
         for k, label in MOUSE_TRIGGERS.items():
             self.hotkey.addItem(f"滑鼠{label}", k)
         for k, (label, _) in KEY_TRIGGERS.items():
             self.hotkey.addItem(f"鍵盤 {label}", k)
-        self.on_focus = QComboBox(toolTip="游標放進輸入框（含終端機）時：游標旁出現小麥克風氣泡（一打字就收起來）；"
-                                          "或出現可拖動的浮動按鈕（不能打字的地方會隱藏，拖到哪就留在哪）；"
-                                          "或直接開麥克風，離開到網頁空白處、按鈕、桌面時關掉，用按鍵關掉後要換個輸入框才會再自動開。"
-                                          "點氣泡或按鈕開始錄音，文字打到原本的輸入框")
+        self.on_focus = QComboBox()
         self.on_focus.addItem("不做事", "")
         self.on_focus.addItem("游標旁顯示語音氣泡", "bubble")
         self.on_focus.addItem("顯示可拖動的浮動按鈕", "float")
         self.on_focus.addItem("自動開麥克風（離開時關閉）", "listen")
-        self.auto_off = QComboBox(toolTip="麥克風開著卻一直沒聽到人聲時自動關掉，避免忘了關；關掉時播結束音，不按 Enter")
+        self.auto_off = QComboBox()
         self.auto_off.addItem("不自動關閉", 0)
         for m in (1, 3, 5, 10, 30):
             self.auto_off.addItem(f"{m} 分鐘沒講話", m)
         # development only, to be removed before release (the user's plan): recordings.py
         self.keep_audio = QCheckBox("保存錄音（測試用）")
-        self.keep_audio.setToolTip("每句話存成 wav，並記下辨識結果與之後的選字、刪除，用來以真實聲音檢查辨識；不會自動刪除")
         folder = QPushButton("開啟錄音資料夾", clicked=self._open_recordings)
         audio_row = QHBoxLayout()
-        audio_row.addWidget(self.keep_audio)
+        audio_row.addWidget(_with_info(self.keep_audio, "每句話存成 wav，並記下辨識結果與之後的選字、刪除，"
+                                                        "用來以真實聲音檢查辨識；不會自動刪除", stretch=False))
         audio_row.addWidget(folder)
         audio_row.addStretch()
         self.status = QLabel()
@@ -316,14 +363,22 @@ class SettingsDialog(QDialog):
 
         form = QFormLayout()
         form.addRow("麥克風", self.mic)
-        form.addRow("麥克風快捷鍵", self.hotkey)
-        form.addRow("定稿時機", self.commit_at)
-        form.addRow("游標進到輸入框時", self.on_focus)
-        form.addRow("自動關閉麥克風", self.auto_off)
-        form.addRow("", self.mute)
-        form.addRow("", self.punct)
+        form.addRow(_titled("麥克風快捷鍵", "按一下開麥克風，再按一下關。按住或連按兩下會照常交給原本的程式"
+                                      "（例如滑鼠中鍵照樣能用）"), self.hotkey)
+        form.addRow(_titled("定稿時機", "講話時，每次停頓字會先打出來並修正；定稿後就固定下來不再改"), self.commit_at)
+        form.addRow(_titled("游標進到輸入框時", "游標放進輸入框（含終端機）時：\n"
+                                          "・語音氣泡：游標旁出現小麥克風，點了開始錄音，一打字就收起來\n"
+                                          "・浮動按鈕：可拖動的按鈕，只在能打字的地方出現，拖到哪就留在哪\n"
+                                          "・自動開麥克風：離開到網頁空白處、按鈕、桌面時關掉；用快捷鍵或說「結束」關掉後，"
+                                          "要換個輸入框才會再自動開"), self.on_focus)
+        form.addRow(_titled("自動關閉麥克風", "麥克風開著卻一直沒聽到人聲時自動關掉，避免忘了關；關掉時播結束音"),
+                    self.auto_off)
+        form.addRow("", _with_info(self.mute, "麥克風開著時把喇叭靜音，關閉麥克風後恢復；原本就靜音的話不會動"))
+        form.addRow("", _with_info(self.punct, "逗號、句號、句點、問號、驚嘆號、感嘆號、頓號、分號、冒號、點點點、刪節號、"
+                                               "省略號；整句只有這個名字才算，例如「逗號很重要」照常輸入"))
         # form.addRow("", self.period_comma)   # not carried over to continuous listening yet
-        form.addRow("", self.describe)
+        form.addRow("", _with_info(self.describe, "整句剛好是「某個詞的某個字」，而且「的」前面是字典裡的詞才算"
+                                                  "（例如「這個字是教育的育」）；輸入的是詞裡讀音相同的那個字"))
         form.addRow("", self.autostart)
         form.addRow("開發測試", audio_row)
         page = QWidget()
@@ -348,17 +403,15 @@ class SettingsDialog(QDialog):
             for cue_id, name, *_sources in cues.SOUNDS:
                 box.addItem(name, cue_id)
             box.addItem("無", "")
-        self.start_sound.setToolTip("麥克風打開時播放；選了會先播一次")
-        self.stop_sound.setToolTip("麥克風關掉時播放；選了會先播一次")
         # a set picks both sounds at once; 自定義 shows a drop-down for each (the user's design, 2026-10-13)
-        self.sound_set = QComboBox(toolTip="同一組的開始音與結束音；選「自定義」可分別挑選")
+        self.sound_set = QComboBox()
         for cue_id, name, *_sources in cues.SOUNDS:
             self.sound_set.addItem(name, cue_id)
         self.sound_set.addItem("無", "")
         self.sound_set.addItem("自定義", None)
         self._set_timer = QTimer(self, singleShot=True,
                                  timeout=lambda: cues.play(self._set_timer.property("cue"), "stop"))
-        self.sound_listen = QPushButton("試聽", clicked=self._play_sounds, toolTip="依序播放開始音與結束音")
+        self.sound_listen = QPushButton("試聽", clicked=self._play_sounds)
         self.sound_listen.setFixedWidth(44)
         self.custom_sounds = QWidget()
         custom = QHBoxLayout(self.custom_sounds)
@@ -372,52 +425,67 @@ class SettingsDialog(QDialog):
         sound_row.addWidget(self.sound_listen)
         sound_row.addWidget(self.custom_sounds)
         sound_row.addStretch()
-        self.stop_at = QComboBox(toolTip="開了「錄音時暫時靜音電腦音效」時，停止錄音就恢復聲音，好播結束音")
-        self.stop_at.addItem("停止錄音時", "stop")
-        self.stop_at.addItem("文字輸入完成時", "done")
-        stop_at_row = QHBoxLayout()
-        stop_at_row.addWidget(QLabel("結束音在"))
-        stop_at_row.addWidget(self.stop_at)
-        stop_at_row.addWidget(QLabel("播放"))
-        stop_at_row.addStretch()
 
-        self.glow = QComboBox(toolTip="麥克風開著時，螢幕邊緣亮起一圈光，講話時會變亮；選了會先亮一下讓你看")
+        self.glow = QComboBox()
         self.glow.addItem("關閉", "")
         for st in glowmod.STYLES:
             self.glow.addItem(st.name, st.id)
-        self.glow_edges = QComboBox(toolTip="光暈出現在螢幕的哪幾邊")
+        self.glow.addItem("自訂", glowmod.CUSTOM)
+        self.glow_edges = QComboBox()
         for k, (label, *_edges) in glowmod.EDGES.items():
             self.glow_edges.addItem(label, k)
+        self.glow_preview_button = QPushButton("預覽", clicked=self._preview)
         glow_row = QHBoxLayout()
         glow_row.addWidget(self.glow)
         glow_row.addWidget(self.glow_edges)
+        glow_row.addWidget(self.glow_preview_button)
         glow_row.addStretch()
+
+        # 自訂 (2026-10-16, the user's request): 2-4 colors and four sliders, applied when a slider is let go
+        self.glow_custom = QWidget()
+        g = QGridLayout(self.glow_custom)
+        g.setContentsMargins(0, 0, 0, 0)
+        g.setHorizontalSpacing(8)
+        self.glow_colors = QHBoxLayout()
+        self.glow_colors.setSpacing(4)
+        g.addWidget(QLabel("顏色"), 0, 0)
+        g.addLayout(self.glow_colors, 0, 1)
+        self.glow_sliders = {}
+        for row, (key, label, lo, hi, scale) in enumerate((("turn", "旋轉速度", 0, 40, 100), ("pulse", "呼吸", 0, 100, 100),
+                                                          ("depth", "寬度", 40, 200, 100),
+                                                          ("bright", "亮度", 30, 160, 100)), 1):
+            slider = QSlider(Qt.Horizontal, minimum=lo, maximum=hi, tracking=False)
+            slider.setProperty("scale", scale)
+            slider.valueChanged.connect(lambda v, k=key, sc=scale: self._custom_changed(k, v / sc))
+            slider.wheelEvent = lambda e, w=slider: _scroll_instead(w, e)
+            self.glow_sliders[key] = slider
+            g.addWidget(QLabel(label), row, 0)
+            g.addWidget(slider, row, 1)
+        g.setColumnStretch(1, 1)
 
         # the draft's mark: a few colors and 自訂 (the user's request, 2026-10-16)
         self.mark_group = QButtonGroup(self, exclusive=True)
         mark_row = QHBoxLayout()
         mark_row.setSpacing(4)
         for color, name in MARK_COLORS:
-            b = QToolButton(checkable=True, toolTip=name, icon=_swatch(color), autoRaise=True)
+            b = QToolButton(checkable=True, icon=_swatch(color), autoRaise=True)
             b.setProperty("color", color)
             self.mark_group.addButton(b)
             mark_row.addWidget(b)
-        self.mark_custom = QToolButton(checkable=True, toolTip="自訂的顏色", autoRaise=True)
+        self.mark_custom = QToolButton(checkable=True, autoRaise=True)
         self.mark_group.addButton(self.mark_custom)
         mark_row.addWidget(self.mark_custom)
         mark_row.addWidget(QPushButton("自訂…", clicked=self._pick_mark_color))
         mark_row.addStretch()
         self.mark_group.buttonClicked.connect(self._mark_clicked)
-        note = QLabel("麥克風開著時，講完還可能被修正的字會疊上這個顏色，定稿後消失；只是畫在上面，不是選取")
-        note.setStyleSheet("color: gray")
-        note.setWordWrap(True)
 
         form = QFormLayout()
-        form.addRow("螢幕邊緣光暈", glow_row)
-        form.addRow("草稿反白顏色", mark_row)
-        form.addRow("", note)
-        form.addRow("提示音", sound_row)
-        form.addRow("", stop_at_row)
+        form.addRow(_titled("螢幕邊緣光暈", "麥克風開著時，螢幕邊緣亮起一圈光，講話時會變亮；可以選只亮哪幾邊。"
+                                      "選了或按「預覽」會先亮一下讓你看"), glow_row)
+        form.addRow("", self.glow_custom)
+        form.addRow(_titled("草稿反白顏色", "麥克風開著時，講完還可能被修正的字會疊上這個顏色，定稿後消失"), mark_row)
+        form.addRow(_titled("提示音", "開始音在麥克風打開時、結束音在關掉時播放。同一組的開始音與結束音一起選；"
+                                   "選「自定義」可分別挑選"), sound_row)
         page = QWidget()
         v = QVBoxLayout(page)
         v.addLayout(form)
@@ -426,10 +494,66 @@ class SettingsDialog(QDialog):
         self.start_sound.currentIndexChanged.connect(lambda: self._sound_changed(self.start_sound, "start"))
         self.stop_sound.currentIndexChanged.connect(lambda: self._sound_changed(self.stop_sound, "stop"))
         self.sound_set.currentIndexChanged.connect(self._sound_set_changed)
-        self.stop_at.currentIndexChanged.connect(self._apply)
         self.glow.currentIndexChanged.connect(self._glow_changed)
         self.glow_edges.currentIndexChanged.connect(self._glow_changed)
         return page
+
+    def _glow_params(self) -> dict:
+        """The 自訂 glow's parameters, complete."""
+        base = glowmod.custom_from(glowmod.STYLES[0])
+        return {**base, **{k: v for k, v in self.cfg.glow_custom.items() if k in glowmod.CUSTOM_KEYS}}
+
+    def _show_glow(self):
+        """The 自訂 panel only for 自訂, showing its parameters; 預覽 and the edges only with a glow."""
+        on = bool(self.glow.currentData())
+        self.glow_edges.setEnabled(on)
+        self.glow_preview_button.setEnabled(on)
+        custom = self.glow.currentData() == glowmod.CUSTOM
+        self.glow_custom.setVisible(custom)
+        if not custom:
+            return
+        c = self._glow_params()
+        for key, slider in self.glow_sliders.items():
+            slider.blockSignals(True)
+            slider.setValue(round(float(c[key]) * slider.property("scale")))
+            slider.blockSignals(False)
+        _clear_layout(self.glow_colors)
+        for i, color in enumerate(c["colors"]):
+            b = QToolButton(icon=_swatch(color), autoRaise=True, clicked=lambda _=False, i=i: self._custom_color(i))
+            self.glow_colors.addWidget(b)
+        if len(c["colors"]) < 4:
+            self.glow_colors.addWidget(QToolButton(text="＋", autoRaise=True, clicked=lambda: self._custom_color(-1)))
+        if len(c["colors"]) > 2:
+            self.glow_colors.addWidget(QToolButton(text="－", autoRaise=True, clicked=self._custom_fewer))
+        self.glow_colors.addStretch()
+
+    def _custom_changed(self, key: str, value):
+        c = self._glow_params()
+        c[key] = round(value, 2) if isinstance(value, float) else value
+        self.cfg.glow_custom = c
+        self._save()
+        self._show_glow()
+        self._preview()
+
+    def _custom_color(self, i: int):
+        """A color of the 自訂 glow changed (i), or added (-1)."""
+        colors = list(self._glow_params()["colors"])
+        start = QColor(colors[i] if i >= 0 else colors[-1])
+        c = QColorDialog.getColor(start, self, "光暈顏色")
+        if not c.isValid():
+            return
+        if i >= 0:
+            colors[i] = c.name()
+        else:
+            colors.append(c.name())
+        self._custom_changed("colors", colors)
+
+    def _custom_fewer(self):
+        self._custom_changed("colors", list(self._glow_params()["colors"])[:-1])
+
+    def _preview(self):
+        if self.glow.currentData():
+            self.glow_preview.emit(self.glow.currentData())
 
     def _show_mark_color(self):
         """The button of the current color checked; a color of one's own on the 自訂 swatch."""
@@ -471,9 +595,9 @@ class SettingsDialog(QDialog):
         self.keep_audio.setChecked(self.cfg.save_recordings)
         self.start_sound.setCurrentIndex(max(0, self.start_sound.findData(self.cfg.start_sound)))
         self.stop_sound.setCurrentIndex(max(0, self.stop_sound.findData(self.cfg.stop_sound)))
-        self.stop_at.setCurrentIndex(max(0, self.stop_at.findData(self.cfg.stop_sound_at)))
         self.commit_at.setCurrentIndex(max(0, self.commit_at.findData(self.cfg.commit_at)))
         self.glow.setCurrentIndex(max(0, self.glow.findData(self.cfg.glow)))
+        self._show_glow()
         i = self.auto_off.findData(self.cfg.auto_off_minutes)
         if i < 0:   # a value set by hand in config.json
             self.auto_off.addItem(f"{self.cfg.auto_off_minutes} 分鐘沒講話", self.cfg.auto_off_minutes)
@@ -505,16 +629,19 @@ class SettingsDialog(QDialog):
         self.cfg.save_recordings = self.keep_audio.isChecked()
         self.cfg.start_sound = self.start_sound.currentData()
         self.cfg.stop_sound = self.stop_sound.currentData()
-        self.cfg.stop_sound_at = self.stop_at.currentData()
         self.cfg.commit_at = self.commit_at.currentData()
         self.cfg.glow = self.glow.currentData()
         self.cfg.auto_off_minutes = self.auto_off.currentData()
         self._save()
 
     def _glow_changed(self):
+        if not self._loading and self.glow.currentData() == glowmod.CUSTOM and not self.cfg.glow_custom:
+            # 自訂 starts from the style shown before it
+            self.cfg.glow_custom = glowmod.custom_from(glowmod.BY_ID.get(self.cfg.glow, glowmod.STYLES[0]))
         self._apply()
-        if not self._loading and self.glow.currentData():
-            self.glow_preview.emit(self.glow.currentData())
+        self._show_glow()
+        if not self._loading:
+            self._preview()
 
     def _sound_changed(self, box, kind: str):
         if not self._loading:
@@ -526,10 +653,9 @@ class SettingsDialog(QDialog):
         return self.sound_set.currentData() is None
 
     def _show_sounds(self):
-        """The 開始 / 結束 drop-downs only for 自定義; 試聽 and the timing only when there is something to play."""
+        """The 開始 / 結束 drop-downs only for 自定義; 試聽 only when there is something to play."""
         self.custom_sounds.setVisible(self._custom())
         self.sound_listen.setEnabled(bool(self.start_sound.currentData() or self.stop_sound.currentData()))
-        self.stop_at.setEnabled(bool(self.stop_sound.currentData()))
 
     def _sound_set_changed(self):
         cue_id = self.sound_set.currentData()
@@ -563,7 +689,13 @@ class SettingsDialog(QDialog):
     def _hotwords_page(self) -> QWidget:
         """Four sections, one open at a time (2026-10-14, the user's design): the open one fills the page and
         scrolls inside, the other headers stay in view; the open one is remembered (hotword_section)."""
-        self.pack_list, no_packs, pack_body = _card_list("")
+        pack_top = QHBoxLayout()
+        pack_note = QLabel("勾選的詞包裡的詞比較容易被辨識出來")
+        pack_note.setStyleSheet("color: gray")
+        pack_top.addWidget(_with_info(pack_note, f"整包的詞以優先度 {_shown(packs.PCT)} 辨識；選字選過或被換掉的詞會列在"
+                                                 "詞庫列表，以那裡的優先度為準。「編輯」用記事本開啟這個詞包的文字檔："
+                                                 "一行一個詞，存檔後下次說話就生效"))
+        self.pack_list, no_packs, pack_body = _card_list("", pack_top)
         no_packs.hide()
         self._pack_stamp = None
 
@@ -573,17 +705,19 @@ class SettingsDialog(QDialog):
         add = QPushButton("加入")
         add.clicked.connect(self._add_hotword)
         self.hw_input.setFixedWidth(180)
-        hw_top = self._sort_row(HOTWORD_SORTS, "hotword_sort")   # 排序 [drop-down] … [input] [加入]
+        hw_top = self._sort_row(HOTWORD_SORTS, "hotword_sort",   # 排序 [drop-down] ⓘ … [input] [加入]
+                                "優先度：0% 不影響辨識；正的越容易辨識成這個詞，負的越不容易。選字選到會提高，被換掉會降低")
         hw_top.addWidget(self.hw_input)
         hw_top.addWidget(add)
         self.hw_list, self.hw_empty, hw_body = _card_list(
             "詞庫裡還沒有詞。選字時選了詞語（被換掉的詞也會列出，優先度較低），或在上面輸入詞語，就會加到這裡。", hw_top)
         self.pick_list, self.pick_empty, pick_body = _card_list(
             "還沒有記下的字。用選字換掉單一個中文字，就會記下它前後的字，之後在同樣的前後文自動換成那個字。",
-            self._sort_row(PICK_SORTS, "pick_sort"))
+            self._sort_row(PICK_SORTS, "pick_sort", "「這個ying3片是 → 這個影片是」：聽成這個讀音、前後是這些字時，"
+                                                    "自動換成右邊的字"))
         self.alias_list, self.alias_empty, alias_body = _card_list(
             "還沒有強制替換。選字或打字把英文換成另一種拼法的詞（例如 Dipsick 換成 DeepSeek），之後辨識出舊拼法就一律改成新的。",
-            self._sort_row(ALIAS_SORTS, "alias_sort"))
+            self._sort_row(ALIAS_SORTS, "alias_sort", "辨識出左邊的拼法時，一律改成右邊的詞"))
 
         self._sections = {}
         page = QWidget()
@@ -615,13 +749,15 @@ class SettingsDialog(QDialog):
             self.cfg.hotword_section = key
             self.cfg.save()
 
-    def _sort_row(self, sorts, setting: str) -> QHBoxLayout:
-        """排序 and its drop-down; the choice is saved as cfg.<setting>."""
+    def _sort_row(self, sorts, setting: str, tip: str = "") -> QHBoxLayout:
+        """排序 and its drop-down (the choice is saved as cfg.<setting>), and the list's ⓘ."""
         combo = _combo(sorts, getattr(self.cfg, setting))
         combo.currentIndexChanged.connect(lambda: self._sort_changed(setting, combo.currentData()))
         row = QHBoxLayout()
         row.addWidget(QLabel("排序"))
         row.addWidget(combo)
+        if tip:
+            row.addWidget(_Info(tip))
         row.addStretch()
         return row
 
@@ -654,17 +790,14 @@ class SettingsDialog(QDialog):
         for pack in packs.available():
             card, row = _card()
             box = QCheckBox(f"{pack.name}（{len(pack.words)}）", checked=pack.id in self.cfg.packs)
-            box.setToolTip(f"整包的詞以優先度 {_shown(packs.PCT)} 辨識；選字選過或被換掉的詞會列在詞庫列表，以那裡的優先度為準")
             box.toggled.connect(lambda on, i=pack.id: self._toggle_pack(i, on))
             box.setMinimumWidth(150)
             row.addWidget(box)
             terms = QLabel("、".join(pack.words[:_PACK_SHOWN]) + ("…" if len(pack.words) > _PACK_SHOWN else ""))
             terms.setStyleSheet("color: gray")
             terms.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)   # cut, never widening the window
-            terms.setToolTip("、".join(pack.words))
             row.addWidget(terms, 1)
-            edit = QPushButton("編輯", toolTip="用記事本開啟這個詞包的文字檔：一行一個詞，存檔後下次說話就生效",
-                               clicked=lambda _=False, i=pack.id: self._edit_pack(i))
+            edit = QPushButton("編輯", clicked=lambda _=False, i=pack.id: self._edit_pack(i))
             row.addWidget(edit)
             self.pack_list.addWidget(card)
 
@@ -692,7 +825,6 @@ class SettingsDialog(QDialog):
             row.addWidget(_date_label(h.added))
             percent = QLabel()
             _show_pct(percent, h.pct)
-            percent.setToolTip("優先度：0% 不影響辨識；正的越容易辨識成這個詞，負的越不容易。選字選到會提高，被換掉會降低")
             percent.setMinimumWidth(48)
             percent.setAlignment(Qt.AlignCenter)
             row.addWidget(percent)
@@ -716,7 +848,6 @@ class SettingsDialog(QDialog):
             right = "".join(e["right"])
             label = QLabel(f"{html.escape(left + e['key'] + right)} <span style='color:gray'>→</span> "
                            f"{html.escape(left + e['value'] + right)}")
-            label.setToolTip(f"聽成 {e['key']}、前後是這些字時，換成「{e['value']}」")
             row.addWidget(label)
             row.addStretch(1)
             row.addWidget(_date_label(e["added"]))
@@ -740,7 +871,6 @@ class SettingsDialog(QDialog):
         for alias, word, added in rows:
             card, row = _card()
             label = QLabel(f"{html.escape(alias)} <span style='color:gray'>→</span> {html.escape(word)}")
-            label.setToolTip(f"辨識出「{alias}」時一律改成「{word}」")
             row.addWidget(label)
             row.addStretch(1)
             row.addWidget(_date_label(added))
@@ -913,8 +1043,8 @@ class SettingsDialog(QDialog):
         _clear_layout(self.rules_body)
         note = QLabel("整句只說這些話時才執行。可以填好幾種說法，用「、」分開。")
         note.setStyleSheet("color: gray")
-        note.setWordWrap(True)
-        self.rules_body.addWidget(note)
+        self.rules_body.addWidget(_with_info(note, "「左右輸入文字」：說出時在游標左右加入這兩段文字，游標留在中間；"
+                                                   "有選取文字時加在選取的文字兩邊"))
         self._own.sort(key=_place)   # by what they do (stable: rows of one kind keep their order)
         grid = QGridLayout()
         grid.setHorizontalSpacing(6)
@@ -950,7 +1080,6 @@ class SettingsDialog(QDialog):
                     box = QLineEdit(pair[k], placeholderText=hint)
                     box.textEdited.connect(lambda t, r=row, k=k: (r[2].__setitem__(k, t), self._rules_edited()))
                     h.addWidget(box)
-                value.setToolTip("說出時在游標左右加入這兩段文字，游標留在中間；有選取文字時加在選取的文字兩邊")
             else:
                 value = QLabel(_COMMAND_NOTES.get(row[2], ""))
                 value.setStyleSheet("color: gray")
