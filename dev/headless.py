@@ -11,7 +11,7 @@ focus watcher reads: text box N, or a place where nothing can be typed), click (
 hotkey:NAME (the key or button the next steps press, default mouse_middle), rules:default (the default operations),
 rule:JSON (add an operation, rules.Rule.from_dict), at:WORD (put the caret right after the last WORD; at: puts it at
 the end), say:TEXT (dictate TEXT as if recognized), set:NAME=VALUE (change a setting in memory only; apply: as the settings window does after a change), packs:ID+ID (tick term packs, in memory only) or key:BACK (the
-user presses Backspace n times: key:BACK*3), dbl:MS (a double tap, each press MS ms long), dblbusy (a double tap whose release is handled 0.5s late), pick:N / pickw:WORD (click a row of the 選字 menu), feed:WAV (while
+user presses Backspace n times: key:BACK*3), key:ENTER (the user presses Enter), dbl:MS (a double tap, each press MS ms long), dblbusy (a double tap whose release is handled 0.5s late), pick:N / pickw:WORD (click a row of the 選字 menu), feed:WAV (while
 continuous listening is on: WAV and 1s of silence reach the microphone; feed:WAV+WAV joins clips with 0.6s pauses),
 logshot:NAME (the 辨識紀錄 tab saved as <dir>/NAME.png), wait:SEC (silence for SEC seconds), tap0 (a tap; the next step starts once it is known to be one,
 while queued work still runs), racemove:WORD (the caret moves after the last WORD, at the end when empty, right
@@ -448,6 +448,12 @@ try:
             pump(0.3)
             A.settings.grab().save(f"{S}/{step[8:]}.png")
             print(f"[辨識紀錄截圖 {S}/{step[8:]}.png]")
+            continue
+        if step == "key:ENTER":   # the user presses Enter (sends: the box empties)
+            A._on_other_key(0x0D)
+            box.text, box.caret, box.sel = "", 0, None
+            pump(1.0)
+            print(f"[按 Enter] 聽寫中：{A._listening}")
             continue
         if step.startswith("key:BACK"):
             n = int(step.split("*")[1]) if "*" in step else 1

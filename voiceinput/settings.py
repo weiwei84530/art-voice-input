@@ -391,6 +391,7 @@ class SettingsDialog(QDialog):
         self.period_comma = QCheckBox("選取句號後講話，句號改成逗號並接上講的內容")
         self.period_comma.setToolTip("今天很好。明天見 → 選取「。」講「我們去公園」→ 今天很好，我們去公園。明天見")
         self.autostart = QCheckBox("開機時自動啟動")
+        self.stop_on_enter = QCheckBox("送出訊息後自動關閉麥克風")
         self.mute = QCheckBox("錄音時暫時靜音電腦音效")
         self.describe = QCheckBox("說「詞＋的＋字」時只輸入那個字，例如「節日的節」")
         self.hotkey = QComboBox()
@@ -436,6 +437,8 @@ class SettingsDialog(QDialog):
         form.addRow("", self.no_way)
         form.addRow(_titled("自動關閉麥克風", "麥克風開著卻一直沒聽到人聲時自動關掉，避免忘了關；關掉時播結束音"),
                     self.auto_off)
+        form.addRow("", _with_info(self.stop_on_enter, "按 Enter（或 Ctrl+Enter）送出，或說「送出」之後，麥克風就自動關掉，"
+                                                       "適合講完一則訊息就結束的用法。Shift+Enter 換行不算"))
         form.addRow("", _with_info(self.mute, "麥克風開著時把喇叭靜音，關閉麥克風後恢復；原本就靜音的話不會動"))
         form.addRow("", _with_info(self.punct, "逗號、句號、句點、問號、驚嘆號、感嘆號、頓號、分號、冒號、點點點、刪節號、"
                                                "省略號；整句只有這個名字才算，例如「逗號很重要」照常輸入"))
@@ -455,7 +458,8 @@ class SettingsDialog(QDialog):
         self.hotkey.currentIndexChanged.connect(self._apply)
         self.on_focus.currentIndexChanged.connect(self._apply)
         self.auto_off.currentIndexChanged.connect(self._apply)
-        for box in (self.punct, self.period_comma, self.describe, self.autostart, self.mute, self.keep_audio):
+        for box in (self.punct, self.period_comma, self.describe, self.autostart, self.mute, self.keep_audio,
+                    self.stop_on_enter):
             box.toggled.connect(self._apply)
         return page
 
@@ -647,7 +651,9 @@ class SettingsDialog(QDialog):
         on = bool(style_id)
         for w in (self.glow_edges, self.glow_motion, self.glow_params_box):
             w.setEnabled(on)
-        self.glow_preview_button.setEnabled(on and not self._preview_done.isActive())
+        playing = self._preview_done.isActive()
+        self.glow_preview_button.setEnabled(on and not playing)
+        self.glow_preview_button.setText("播放中…" if playing else "▶ 預覽")
         self.glow_reset.setEnabled(on and glowmod.edited(style_id, self.cfg.glow_edits))
         for i in range(1, self.glow.count()):
             st = glowmod.BY_ID[self.glow.itemData(i)]
@@ -738,8 +744,9 @@ class SettingsDialog(QDialog):
         """The glow shown for a moment (App._preview_glow); ▶ 預覽 disabled meanwhile."""
         if self.glow.currentData():
             self.glow_preview.emit(self.glow.currentData())
-            self.glow_preview_button.setEnabled(False)
             self._preview_done.start()
+            self.glow_preview_button.setEnabled(False)
+            self.glow_preview_button.setText("播放中…")
 
     def _show_mark_color(self):
         """The button of the current color checked; a color of one's own on the 自訂 swatch."""
@@ -772,6 +779,7 @@ class SettingsDialog(QDialog):
         self.punct.setChecked(self.cfg.punctuation_names)
         self.period_comma.setChecked(self.cfg.period_to_comma)
         self.autostart.setChecked(self.cfg.autostart)
+        self.stop_on_enter.setChecked(self.cfg.stop_on_enter)
         self.mute.setChecked(self.cfg.mute_while_recording)
         self.describe.setChecked(self.cfg.describe_char)
         self.hotkey.setCurrentIndex(max(0, self.hotkey.findData(self.cfg.hotkey)))
@@ -820,6 +828,7 @@ class SettingsDialog(QDialog):
         self.cfg.punctuation_names = self.punct.isChecked()
         self.cfg.period_to_comma = self.period_comma.isChecked()
         self.cfg.autostart = self.autostart.isChecked()
+        self.cfg.stop_on_enter = self.stop_on_enter.isChecked()
         self.cfg.mute_while_recording = self.mute.isChecked()
         self.cfg.describe_char = self.describe.isChecked()
         self.cfg.hotkey = self.hotkey.currentData()
@@ -866,13 +875,16 @@ class SettingsDialog(QDialog):
         """The 開始 / 結束 drop-downs only for 自定義; 試聽 only when there is something to play, and not while it
         plays."""
         self.custom_sounds.setVisible(self._custom())
+        playing = self._sound_done.isActive()
         self.sound_listen.setEnabled(bool(self.start_sound.currentData() or self.stop_sound.currentData())
-                                     and not self._sound_done.isActive())
+                                     and not playing)
+        self.sound_listen.setText("播放中…" if playing else "▶ 試聽")
 
     def _playing(self, seconds: float):
         """A sound plays for that long: 試聽 disabled meanwhile."""
         self._sound_done.start(int(seconds * 1000) + 100)
         self.sound_listen.setEnabled(False)
+        self.sound_listen.setText("播放中…")
 
     def _sound_set_changed(self):
         cue_id = self.sound_set.currentData()

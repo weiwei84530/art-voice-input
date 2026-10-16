@@ -250,10 +250,27 @@ class Bubble(_OnTop):
         self._at = None   # the click it shows by (physical pixels)
 
     def show_at(self, pt):
-        """By the click at pt (x, y) in physical pixels: just right of it, centered on it, kept on screen."""
+        """By the click at pt (x, y) in physical pixels: just right of it, centered on it, kept on screen. Fading in,
+        also when it showed by another click: that one goes at once (the user's design, 2026-10-16)."""
         self._at = tuple(pt)
+        if self.isVisible():
+            self._grow.stop()
+            self._fade.stop()
+            self.k, self.alpha, self.leaving = 1.0, 0.0, False
+            self._place()
+            self.update()
+            self._fade_to(1.0, 160)
+            return
         self._place()
-        self.fade_in(140)   # nothing when it shows already (moved to the new click)
+        self.fade_in(160)
+
+    def fade_out(self, ms: int = 160):
+        """Out where it is (the focus went where nothing can be typed), then hidden."""
+        if not self.isVisible() or self.leaving:
+            return
+        self.leaving = True
+        self._grow.stop()
+        self._fade_to(0.0, ms)
 
     def _place(self):
         if self._at is None:

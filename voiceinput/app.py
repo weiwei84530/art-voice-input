@@ -287,7 +287,12 @@ class App(QObject):
             return True
 
     def _on_other_key(self, vk: int):
-        """Keyboard hook thread: a key the user pressed (injected keys never get here); it closes the 選字 menu."""
+        """Keyboard hook thread: a key the user pressed (injected keys never get here); it closes the 選字 menu.
+        Enter (or Ctrl+Enter, not Shift or Alt) sends: with 送出後關閉麥克風 listening turns off."""
+        if vk == 0x0D and self._listening and self.cfg.stop_on_enter and not _held(0x10) and not _held(0x12) \
+                and not _ours(foreground()):
+            log.info("listen: off, Enter pressed")
+            self.main.emit(lambda: self._stop_listen() if self._listening else None)
         self.session.on_input()
         term_watcher.forget()
         self.main.emit(self.picker.dismiss)
@@ -768,7 +773,7 @@ class App(QObject):
                 self._update_float()
             return
         was, self._box = self._box, None
-        self.bubble.hide()
+        self.bubble.fade_out()   # the user's request, 2026-10-16
         self._update_float()
         if mode == "listen" and was is not None and self._listening:
             log.info("listen: off, the focus left the text box")
@@ -1358,6 +1363,7 @@ class App(QObject):
         self.steps.submit(self._steps_job, press, steps, done)
 
     def _steps_job(self, press: _Press, steps: list, done):
+        stop = False
         try:
             for n, step in enumerate(steps):
                 if n:
@@ -1392,12 +1398,18 @@ class App(QObject):
                             self._on_main(self._backspaced)
                         else:
                             self.session.on_input()     # the caret may have moved
+                            # 送出 said, with 送出後關閉麥克風: listening off once the steps are done
+                            stop = stop or (step.value in ("Enter", "Ctrl+Enter") and press.key == "listen"
+                                            and self.cfg.stop_on_enter)
                 elif step.type == rules.TEXT:
                     self._on_main(lambda t=step.value: self._type_text(t))
                 elif step.type == rules.COMMAND and step.value == rules.UNDO:
                     self._on_main(self.undo)
                 elif step.type == rules.COMMAND and step.value == rules.STOP:
                     self._on_main(lambda: self._stop_listen() if self._listening else None)
+            if stop:
+                log.info("listen: off, sent")
+                self._on_main(lambda: self._stop_listen() if self._listening else None)
         except Exception:
             log.exception("steps failed")
         finally:
@@ -1876,6 +1888,19 @@ def _no_mark_first(command) -> bool:
         return False
     st = op.steps[0]
     return (st.type, st.value) in ((rules.KEYS, "Backspace"), (rules.COMMAND, rules.UNDO))
+
+
+def _held(vk: int) -> bool:
+    import ctypes
+    return bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000)
+
+
+def _ours(hwnd: int) -> bool:
+    """The window is VoiceInput's own (its settings): an Enter there sends nothing."""
+    import ctypes
+    pid = ctypes.c_ulong()
+    ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return pid.value == os.getpid()
 
 
 def _go_on(d) -> None:

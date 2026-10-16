@@ -178,6 +178,12 @@ not be read): 柔光 ~17% of one core at 24 fps, 流星 ~32% at 24 (~44% before 
 most of it is painting the strips at full size and handing them to Windows, which grows with the frame rate. The
 CPU slows down between frames, so a frame there costs ~4x what a busy benchmark loop measures: measure such things
 on the real screen at the real frame rate (scratchpad scripts: glow_fps.py, glow_prof.py).
+Then (the user's requests): the bubble fades in at each click (one showing by an earlier click goes at once) and
+fades out when the focus goes where nothing can be typed (`Bubble.fade_out`; typing and the wheel still hide it at
+once); ▶ 預覽 / ▶ 試聽 read 播放中… while disabled; 一般 has 送出訊息後自動關閉麥克風 (`stop_on_enter`, off by
+default): Enter or Ctrl+Enter pressed (not Shift / Alt, not in VoiceInput's own windows; `App._on_other_key`) or a
+spoken operation's Enter step (送出; `_steps_job`) turns listening off. It brings back, for Enter in any form, what
+`stop_on_send` (removed the same day) did for 送出 alone.
 選字's 模糊音 (2026-10-16 evening, the user's requests): ㄩㄣ with ㄧㄣ, ㄈ with ㄏㄨ (飛 / 灰, 發 / 花), ㄋ with ㄌ
 (`candidates._FUZZY`); a word only fuzzy-alike is listed from dictionary frequency 3 (`app._FUZZY_MIN`: 官癮, 灌嬰
 were offered for 光陰); the user's hotwords are matched by sound too (`candidates.rank_of`), so words McBopomofo

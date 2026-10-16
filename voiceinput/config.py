@@ -52,6 +52,9 @@ class Config:
     # minutes without speech after which listening turns itself off, 0 never (the user's request, 2026-10-15: a
     # microphone left on by mistake; 5 their choice of default)
     auto_off_minutes: int = 5
+    # 送出後關閉麥克風 (2026-10-16, the user's request): Enter (or Ctrl+Enter) pressed, or a spoken operation's Enter
+    # step (送出), turns listening off; Shift+Enter (a new line) does not
+    stop_on_enter: bool = False
     hotword_sort: str = "date"     # order of the 詞庫 tab (settings.HOTWORD_SORTS)
     pick_sort: str = "date"        # order of 選字記憶 on the 詞庫 tab (settings.PICK_SORTS)
     alias_sort: str = "date"       # order of 英文強制替換 (settings.ALIAS_SORTS)
