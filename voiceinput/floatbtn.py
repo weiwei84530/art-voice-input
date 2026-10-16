@@ -1,4 +1,4 @@
-"""The floating microphone button (2026-10-16, the user's request; on_focus "float"): on top, fading in while listening
+"""The floating microphone button (2026-10-16, the user's request; show_float): on top, fading in while listening
 is off and the focus is where text can be typed; a click turns listening on. It never takes focus, so the text goes
 to the window that had it, as with the key. Dragged, it stays where it was dropped; its place is kept as a fraction of the screen, and it shows on the
 screen the pointer is on at that same place (the user has three screens).
@@ -238,7 +238,7 @@ class _OnTop(OrbButton):
 
 
 class Bubble(_OnTop):
-    """The small microphone bubble by the point a click put the caret in a text box (on_focus "bubble"; 2026-10-16,
+    """The small microphone bubble by the point a click put the caret in a text box (show_bubble; 2026-10-16,
     the user's requests: by the caret at first, but Notion, LINE and web pages reported the caret's place wrong, so
     by the click, which is where the user looks): a click on it turns listening on; it goes when the user types,
     scrolls or the focus leaves; it grows and fades out when listening starts and comes back in its place when

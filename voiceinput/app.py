@@ -1,5 +1,5 @@
 """VoiceInput: single-process tray app. Listening is turned on and off from the interface (the floating button, the
-bubble by the caret, or the focus coming into a text box: on_focus), or by tapping the one hotkey (a mouse button
+bubble by a click in a text box: show_float / show_bubble; the focus coming into a text box: auto_listen), or by tapping the one hotkey (a mouse button
 or keyboard key, the 一般 tab; 2026-10-16, the user's design: nothing else is bound to keys any more).
 
 What an utterance does:
@@ -221,8 +221,8 @@ class App(QObject):
         self.bubble.clicked.connect(lambda: self._listen_now("bubble"))
         self._own_hwnds = {self.float_btn.hwnd(), self.bubble.hwnd()}
         self._apply_look()   # clicks on these are not caret moves
-        self._box = None                         # the text box the focus is in (on_focus), its identity
-        self._click = None                       # (point, time) of a click the bubble may show by (on_focus "bubble")
+        self._box = None                         # the text box the focus is in, its identity
+        self._click = None                       # (point, time) of a click the bubble may show by
         self._bubble_back = False                # the bubble showed when listening started: it comes back after
         self._box_quiet = False                  # listening was turned off by hand in it: not on again by itself
         self._box_auto = False                   # listening was turned on by the focus
@@ -343,7 +343,7 @@ class App(QObject):
             elif msg in (0x20A, 0x20E):   # the wheel: the view scrolls, the marks would trail behind it
                 if self.marks.visible():
                     self.main.emit(self._scrolling)
-                if self.cfg.on_focus == "bubble":
+                if self.cfg.show_bubble:
                     self.main.emit(self.bubble.hide)   # the user's request, 2026-10-16
             elif msg == 0x202:
                 term_watcher.mouse_up(data.pt.x, data.pt.y)
@@ -630,12 +630,12 @@ class App(QObject):
 
     # --- the floating button and leaving text (2026-10-16) ---
     def _update_float(self, event: str = ""):
-        """Main thread: in on_focus "float" the floating button fades in while the focus is where text can be typed
+        """Main thread: with show_float the floating button fades in while the focus is where text can be typed
         (the user's request, 2026-10-16: listening is for editing text), anywhere with float_text_only off. When
         listening starts ("start") it grows and fades out with the glow, and comes back as the glow goes ("stop"),
         unless float_keep keeps it on screen."""
         b = self.float_btn
-        if self.cfg.on_focus != "float" or self._quitting:
+        if not self.cfg.show_float or self._quitting:
             show = False
         else:
             show = (self._box is not None or not self.cfg.float_text_only) \
@@ -727,8 +727,10 @@ class App(QObject):
         self.marks.hide()
 
     def _watch_focus(self):
-        """Main thread, every 0.3s when on_focus is set: where the focus is, read on a thread (UI Automation)."""
-        if not self.cfg.on_focus or self._focus_busy or self._quitting:
+        """Main thread, every 0.3s with a button by text boxes or auto_listen: where the focus is, read on a thread
+        (UI Automation)."""
+        if not (self.cfg.show_bubble or self.cfg.show_float or self.cfg.auto_listen) or self._focus_busy \
+                or self._quitting:
             return
         self._focus_busy = True
 
@@ -741,20 +743,20 @@ class App(QObject):
     def _clicked(self, pt):
         """Main thread: a left click (not a drag) outside our windows. With the bubble, the focus is read soon after
         (where the click put it): in a text box the bubble shows by the click (2026-10-16, the user's design)."""
-        if self.cfg.on_focus != "bubble" or self._listening:
+        if not self.cfg.show_bubble or self._listening:
             return
         self._click = (pt, time.monotonic())
         QTimer.singleShot(120, self._watch_focus)
 
     def _focus_seen(self, editable, key, started: float = 0.0):
-        """Main thread (the user's requests, 2026-10-16). The focus is in a text box: "bubble" shows the bubble by a
-        click that has just been made (in it); a new one (another control or window) with "listen" turns listening on, unless it was turned off by
-        hand in this box. The focus went where nothing can be typed (a web page's blank part, a button, the
+        """Main thread (the user's requests, 2026-10-16). The focus is in a text box: the bubble shows by a click that
+        has just been made (in it); a new one (another control or window) with auto_listen turns listening on, unless
+        it was turned off by hand in this box; the floating button shows. The focus went where nothing can be typed (a web page's blank part, a button, the
         desktop): the bubble goes, and listening is turned off (when it was in a text box before: listening may be
         turned on by hand anywhere). Unknown places and VoiceInput's own windows change nothing."""
         self._focus_busy = False
-        mode = self.cfg.on_focus
-        if not mode or editable is None:
+        bubble, floating, auto = self.cfg.show_bubble, self.cfg.show_float, self.cfg.auto_listen
+        if not (bubble or floating or auto) or editable is None:
             return
         click = None
         if self._click is not None and self._click[1] <= started:   # a read begun before it says nothing of it
@@ -763,19 +765,19 @@ class App(QObject):
             new = key != self._box
             if new:
                 self._box, self._box_quiet = key, False
-            if mode == "listen" and not self._listening and not self._box_quiet:
+            if auto and not self._listening and not self._box_quiet:
                 log.info("listen: on, the focus is in a text box")
                 if self._listen_now("focus", quiet=True):
                     self._box_auto = True
-            elif mode == "bubble" and not self._listening and click and time.monotonic() - click[1] < 1.5:
+            if bubble and not self._listening and click and time.monotonic() - click[1] < 1.5:
                 self.bubble.show_at(click[0])
-            elif mode == "float":
+            if floating:
                 self._update_float()
             return
         was, self._box = self._box, None
         self.bubble.fade_out()   # the user's request, 2026-10-16
         self._update_float()
-        if mode == "listen" and was is not None and self._listening:
+        if auto and was is not None and self._listening:
             log.info("listen: off, the focus left the text box")
             self._stop_listen(by_focus=True)
 
@@ -796,7 +798,7 @@ class App(QObject):
             self._listen_owner = None
 
     def _stop_listen(self, by_focus: bool = False):
-        """Listening off. by_focus: the focus left the text box (on_focus); any other way of turning it off keeps
+        """Listening off. by_focus: the focus left the text box (auto_listen); any other way of turning it off keeps
         the focus from turning it on again in the same box."""
         if not by_focus and self._box is not None:
             self._box_quiet = True
@@ -810,7 +812,7 @@ class App(QObject):
         self._marks_timer.stop()
         self.marks.hide()
         self._update_float("stop")
-        if self.cfg.on_focus == "bubble" and self._box is not None and self._bubble_back:
+        if self.cfg.show_bubble and self._box is not None and self._bubble_back:
             self.bubble.come_back_here()   # back in its place as the glow fades out
         # the end sound marks the microphone going off, nothing about the text (the user's choice, 2026-10-16: the
         # 文字輸入完成時 option was removed)
@@ -1842,7 +1844,7 @@ class App(QObject):
         self.marks.set_color(self.cfg.highlight_color)
         self._apply_look()
         self._update_float()
-        if self.cfg.on_focus != "bubble":
+        if not self.cfg.show_bubble:
             self.bubble.hide()
         self._set_autostart()
 

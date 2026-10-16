@@ -65,7 +65,8 @@ def _does(kind: str, value) -> str:
     if kind == rules.TEXT:
         return f"輸入「{value}」"
     if kind == rules.WRAP and isinstance(value, (list, tuple)) and len(value) == 2:
-        return f"左右加上 {value[0]}{value[1]}，游標留在中間"   # with a selection: around it (the note's ⓘ)
+        # one line for both cases (the user's request, 2026-10-16)
+        return f"加上 {value[0]}{value[1]}，游標在中間；有選取時包住選取文字"
     return {rules.UNDO: "收回 VoiceInput 剛做的修改（一次一步）", rules.STOP: "關閉麥克風（不按 Enter）",
             rules.SELECT_ALL: "全選（終端機裡無法全選）", rules.COPY: "複製選取的文字",
             rules.CUT: "剪下選取的文字", rules.PASTE: "貼上剪貼簿的內容（有選取時取代它）"}.get(value, "")
@@ -400,11 +401,7 @@ class SettingsDialog(QDialog):
             self.hotkey.addItem(f"滑鼠{label}", k)
         for k, (label, _) in KEY_TRIGGERS.items():
             self.hotkey.addItem(f"鍵盤 {label}", k)
-        self.on_focus = QComboBox()
-        self.on_focus.addItem("不做事", "")
-        self.on_focus.addItem("點進輸入框時顯示語音氣泡", "bubble")
-        self.on_focus.addItem("顯示可拖動的浮動按鈕", "float")
-        self.on_focus.addItem("自動開麥克風（離開時關閉）", "listen")
+        self.auto_listen = QCheckBox("點進輸入框時自動開麥克風")
         self.auto_off = QComboBox()
         self.auto_off.addItem("不自動關閉", 0)
         for m in (1, 3, 5, 10, 30):
@@ -425,18 +422,17 @@ class SettingsDialog(QDialog):
         form.addRow("麥克風", self.mic)
         form.addRow(_titled("麥克風快捷鍵", "按一下開麥克風，再按一下關。按住或連按兩下會照常交給原本的程式"
                                       "（例如滑鼠中鍵照樣能用）"), self.hotkey)
-        form.addRow(_titled("游標進到輸入框時", "游標放進輸入框（含終端機）時：\n"
-                                          "・語音氣泡：用滑鼠點進可以打字的地方時，點擊處旁出現小麥克風，點了開始錄音；"
-                                          "打字或捲動滾輪就收起來\n"
-                                          "・浮動按鈕：可拖動的按鈕，只在能打字的地方出現，拖到哪就留在哪\n"
-                                          "・自動開麥克風：離開到網頁空白處、按鈕、桌面時關掉；用快捷鍵或說「結束」關掉後，"
-                                          "要換個輸入框才會再自動開"), self.on_focus)
         # nothing left to turn listening on (the tray notice of the key rows' days, now said here)
         self.no_way = _problem_label()
-        self.no_way.setText("目前沒有任何方式能開麥克風：請設定「麥克風快捷鍵」，或在「游標進到輸入框時」選一種方式")
+        self.no_way.setText("目前沒有任何方式能開麥克風：請設定「麥克風快捷鍵」、勾選「點進輸入框時自動開麥克風」，"
+                            "或在外觀頁勾選「輸入框旁的按鈕」")
+        self.no_way.setWordWrap(True)
         form.addRow("", self.no_way)
         form.addRow(_titled("自動關閉麥克風", "麥克風開著卻一直沒聽到人聲時自動關掉，避免忘了關；關掉時播結束音"),
                     self.auto_off)
+        form.addRow("", _with_info(self.auto_listen, "游標進到輸入框（含終端機）就開麥克風，離開到網頁空白處、按鈕、"
+                                                     "桌面時關掉。用快捷鍵、說「結束」或送出關掉後，要換個輸入框才會再自動開；"
+                                                     "可以搭配外觀頁的「輸入框旁的按鈕」在原地重新打開"))
         form.addRow("", _with_info(self.stop_on_enter, "按 Enter（或 Ctrl+Enter）送出，或說「送出」之後，麥克風就自動關掉，"
                                                        "適合講完一則訊息就結束的用法。Shift+Enter 換行不算"))
         form.addRow("", _with_info(self.mute, "麥克風開著時把喇叭靜音，關閉麥克風後恢復；原本就靜音的話不會動"))
@@ -456,7 +452,7 @@ class SettingsDialog(QDialog):
 
         self.mic.currentIndexChanged.connect(self._apply)
         self.hotkey.currentIndexChanged.connect(self._apply)
-        self.on_focus.currentIndexChanged.connect(self._apply)
+        self.auto_listen.toggled.connect(self._apply)
         self.auto_off.currentIndexChanged.connect(self._apply)
         for box in (self.punct, self.period_comma, self.describe, self.autostart, self.mute, self.keep_audio,
                     self.stop_on_enter):
@@ -569,9 +565,6 @@ class SettingsDialog(QDialog):
             w.clicked.connect(w.clicked_demo)
         look_row = QHBoxLayout()
         look_row.addWidget(self.button_look)
-        look_row.addSpacing(8)
-        for w in self.look_samples:
-            look_row.addWidget(w, 0, Qt.AlignVCenter)
         look_row.addStretch()
         self.button_look.currentIndexChanged.connect(self._look_changed)
         self.orb_lite = QCheckBox("節流模式")
@@ -603,11 +596,33 @@ class SettingsDialog(QDialog):
                                        stretch=False))
         float_row.addStretch()
 
+        # 輸入框旁的按鈕 (moved from 一般's 游標進到輸入框時, 2026-10-16, the user's design: two checkboxes, both may be
+        # on, each with its example after it; auto_listen became a 一般 checkbox that may go with either)
+        self.show_bubble = QCheckBox("語音氣泡：點進輸入框時出現在點擊處旁")
+        self.show_float = QCheckBox("浮動按鈕：停在螢幕上，可拖動")
+        button_rows = QVBoxLayout()
+        button_rows.setSpacing(0)
+        for box, sample in ((self.show_bubble, self.look_samples[1]), (self.show_float, self.look_samples[0])):
+            box.toggled.connect(self._apply)
+            row = QHBoxLayout()
+            row.addWidget(box)
+            row.addSpacing(4)
+            row.addWidget(sample, 0, Qt.AlignVCenter)
+            row.addStretch()
+            button_rows.addLayout(row)
+
         form = QFormLayout()
+        form.addRow(_titled("輸入框旁的按鈕", "提醒你這裡可以用語音輸入，點一下就開麥克風：\n"
+                                         "・語音氣泡：用滑鼠點進可以打字的地方時，點擊處旁出現小按鈕；打字、捲動滾輪或"
+                                         "點到不能打字的地方就收起來\n"
+                                         "・浮動按鈕：停在螢幕上的按鈕，拖到哪就留在哪；下面可以設定何時顯示。勾「按下後不隱藏」"
+                                         "就是一個固定位置的開關\n"
+                                         "兩個可以同時勾，也可以和一般頁的「點進輸入框時自動開麥克風」一起用。右邊是實際大小的範例，"
+                                         "滑鼠移上去或點一下可以看動畫"), button_rows)
         form.addRow(_titled("按鈕樣式", "浮動按鈕和語音氣泡的樣子：原本的麥克風，或跟光暈同色的能量球"
-                                     "（沒開光暈時用彩虹的顏色）。右邊是實際大小的範例"), look_row)
+                                     "（沒開光暈時用彩虹的顏色）。上面的勾選框旁有實際大小的範例"), look_row)
         form.addRow(_titled("按鈕大小", "浮動按鈕和語音氣泡的大小，100% 是標準大小；上面的範例會跟著變"), size_row)
-        form.addRow(_titled("浮動按鈕", "一般頁「游標進到輸入框時」選浮動按鈕才有作用"), float_row)
+        form.addRow(_titled("浮動按鈕", "勾了上面的「浮動按鈕」才有作用"), float_row)
         form.addRow(_titled("螢幕邊緣光暈", "麥克風開著時，螢幕邊緣亮起一圈光，講話時會變亮。依序選顏色樣式、"
                                       "動態（柔光／波浪：邊緣像浪一樣起伏／流星：兩道光繞著螢幕跑／漣漪：一圈圈往內擴散）"
                                       "和亮哪幾邊；下面是樣式的參數，可以直接調整，調過的樣式會標「（已編輯）」，"
@@ -783,7 +798,9 @@ class SettingsDialog(QDialog):
         self.mute.setChecked(self.cfg.mute_while_recording)
         self.describe.setChecked(self.cfg.describe_char)
         self.hotkey.setCurrentIndex(max(0, self.hotkey.findData(self.cfg.hotkey)))
-        self.on_focus.setCurrentIndex(max(0, self.on_focus.findData(self.cfg.on_focus)))
+        self.auto_listen.setChecked(self.cfg.auto_listen)
+        self.show_bubble.setChecked(self.cfg.show_bubble)
+        self.show_float.setChecked(self.cfg.show_float)
         self.glow_edges.setCurrentIndex(max(0, self.glow_edges.findData(self.cfg.glow_edges)))
         self._show_mark_color()
         self.keep_audio.setChecked(self.cfg.save_recordings)
@@ -832,7 +849,9 @@ class SettingsDialog(QDialog):
         self.cfg.mute_while_recording = self.mute.isChecked()
         self.cfg.describe_char = self.describe.isChecked()
         self.cfg.hotkey = self.hotkey.currentData()
-        self.cfg.on_focus = self.on_focus.currentData()
+        self.cfg.auto_listen = self.auto_listen.isChecked()
+        self.cfg.show_bubble = self.show_bubble.isChecked()
+        self.cfg.show_float = self.show_float.isChecked()
         self.cfg.glow_edges = self.glow_edges.currentData()
         self.cfg.glow_motion = self.glow_motion.currentData()
         self.cfg.button_look = self.button_look.currentData()
@@ -849,9 +868,10 @@ class SettingsDialog(QDialog):
         self._show_no_way()
 
     def _show_no_way(self):
-        self.no_way.setVisible(not self.cfg.hotkey and not self.cfg.on_focus)
+        self.no_way.setVisible(not (self.cfg.hotkey or self.cfg.auto_listen or self.cfg.show_bubble
+                                    or self.cfg.show_float))
         for box in (self.float_text_only, self.float_keep):
-            box.setEnabled(self.cfg.on_focus == "float")
+            box.setEnabled(self.cfg.show_float)
 
     def _glow_changed(self):
         self._apply()

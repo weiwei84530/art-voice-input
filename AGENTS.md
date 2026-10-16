@@ -184,6 +184,14 @@ once); ▶ 預覽 / ▶ 試聽 read 播放中… while disabled; 一般 has 送�
 default): Enter or Ctrl+Enter pressed (not Shift / Alt, not in VoiceInput's own windows; `App._on_other_key`) or a
 spoken operation's Enter step (送出; `_steps_job`) turns listening off. It brings back, for Enter in any form, what
 `stop_on_send` (removed the same day) did for 送出 alone.
+Then (the user's design) 游標進到輸入框時 (`on_focus`, one choice of 不做事 / bubble / float / listen) was split, as they
+may go together: 外觀's 輸入框旁的按鈕 has two checkboxes, 語音氣泡 (`show_bubble`) and 浮動按鈕 (`show_float`), each
+with its animated example after it (28px / 44px; 按鈕樣式 keeps only its drop-down), both may be on (浮動按鈕 with
+按下後不隱藏 is a fixed place to turn listening off); 一般's 點進輸入框時自動開麥克風 (`auto_listen`, above 送出訊息後自動關閉
+麥克風) may go with either. `Config.load` migrates on_focus. The red 沒有任何方式能開麥克風 shows when none of the hotkey,
+auto_listen and the two buttons is on. Still open (asked, not decided): with auto_listen, listening turned off by
+送出 / the idle timeout stays off in that box until the focus leaves it. 自訂操作's 括號 / 引號 rows read 加上 （），
+游標在中間；有選取時包住選取文字 (one line, the user's request).
 選字's 模糊音 (2026-10-16 evening, the user's requests): ㄩㄣ with ㄧㄣ, ㄈ with ㄏㄨ (飛 / 灰, 發 / 花), ㄋ with ㄌ
 (`candidates._FUZZY`); a word only fuzzy-alike is listed from dictionary frequency 3 (`app._FUZZY_MIN`: 官癮, 灌嬰
 were offered for 光陰); the user's hotwords are matched by sound too (`candidates.rank_of`), so words McBopomofo

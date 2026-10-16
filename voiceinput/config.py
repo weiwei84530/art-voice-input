@@ -33,7 +33,7 @@ class Config:
     button_scale: int = 100
     # each glow style's changed parameters: style id -> colors (2-4), turn, pulse, depth, bright (glow.PARAM_KEYS)
     glow_edits: dict = field(default_factory=dict)
-    # the floating microphone button's place (on_focus "float"), as fractions of the screen's free range
+    # the floating microphone button's place (show_float), as fractions of the screen's free range
     float_pos: list = field(default_factory=lambda: [0.98, 0.88])
     # the floating button only while text can be typed where the focus is and listening is off; False: always, while
     # listening too, a click turning it off (2026-10-16, the user's request)
@@ -45,7 +45,14 @@ class Config:
     # bubble by the caret (a click listens), "float" the draggable floating button, shown only while text can be
     # typed where the focus is, "listen" listening turns on, and off when the focus leaves for a place where nothing
     # can be typed
-    on_focus: str = ""
+    # 輸入框旁的按鈕 (the 外觀 tab, two checkboxes; 2026-10-16, the user's design: they were one choice with
+    # auto_listen): the bubble by the click that put the focus in a text box, and the draggable floating button
+    # (kept on screen with float_keep, a fixed place to turn listening off); either may go with auto_listen
+    show_bubble: bool = False
+    show_float: bool = False
+    # 點進輸入框時自動開麥克風 (the 一般 tab): a text box the focus comes into turns listening on, leaving it for a
+    # place where nothing can be typed turns it off
+    auto_listen: bool = False
     # the color the draft is marked with (highlight.py), #AARRGGBB; highlighter yellow by default, unlike a
     # selection's blue (2026-10-16, the user's choice: a selection-blue draft passed for a selection)
     highlight_color: str = "#78FFE45C"
@@ -78,8 +85,12 @@ class Config:
             return cls()
         known = {k: v for k, v in data.items() if k in cls.__dataclass_fields__ and k not in ("rules", "rules_version")}
         cfg = cls(**known)
-        if data.get("float_button", False) and not data.get("on_focus"):
-            cfg.on_focus = "float"   # the floating button's checkbox (2026-10-16, a few hours) became this choice
+        if "show_bubble" not in data and "show_float" not in data:
+            # on_focus, one choice of "", bubble, float, listen until the evening of 2026-10-16, split in two; the
+            # floating button's checkbox (a few hours that day) before it
+            on_focus = data.get("on_focus") or ("float" if data.get("float_button") else "")
+            cfg.show_bubble, cfg.show_float = on_focus == "bubble", on_focus == "float"
+            cfg.auto_listen = on_focus == "listen"
         if data.get("glow") == "custom":   # the 自訂 style (2026-10-16, a few hours): 彩虹 changed that way
             cfg.glow = "siri"
             cfg.glow_edits = {"siri": data.get("glow_custom") or {}}
