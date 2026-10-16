@@ -27,10 +27,11 @@ log = logging.getLogger("voiceinput")
 _DICT = Path(__file__).resolve().parent / "dict" / "words.tsv.gz"
 _CACHE = DATA_DIR / "cache" / "word_index.pkl"
 _OLD_CACHE = DATA_DIR / "cache" / "pinyin_index.pkl"   # the jieba index, removed on first build
-_CACHE_VERSION = 2   # the index keys depend on _FUZZY
+_CACHE_VERSION = 3   # the index keys depend on _FUZZY
 _CJK = re.compile(r"^[㐀-䶿一-鿿]+$")
 _TONES = re.compile("[ˊˇˋ˙]")
-_FUZZY = [("ㄓ", "ㄗ"), ("ㄔ", "ㄘ"), ("ㄕ", "ㄙ"), ("ㄤ", "ㄢ"), ("ㄖ", "ㄌ")]
+# ㄩㄣ with ㄧㄣ (雲 / 銀, 軍 / 今; 2026-10-16, the user's request)
+_FUZZY = [("ㄓ", "ㄗ"), ("ㄔ", "ㄘ"), ("ㄕ", "ㄙ"), ("ㄤ", "ㄢ"), ("ㄖ", "ㄌ"), ("ㄩㄣ", "ㄧㄣ")]
 _ENG = re.compile("(?<![ㄨㄩ])ㄥ")   # eng/en and ing/in, but not ong/un or iong/ün
 
 _index: dict[str, list[tuple[str, str, int]]] | None = None   # fuzzy key -> [(word, toned reading, frequency)]
