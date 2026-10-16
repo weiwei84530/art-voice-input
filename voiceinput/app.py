@@ -211,6 +211,7 @@ class App(QObject):
         self.glow.set_style(style_for(self.cfg.glow, self.cfg.glow_edits))
         self.glow.set_edges(self.cfg.glow_edges)
         self.glow.set_motion(self.cfg.glow_motion)
+        self.glow.set_lite(self.cfg.orb_lite)
         self._preview_end = QTimer(self, singleShot=True,
                                    timeout=lambda: None if self._listening else self.glow.hide())
         self.float_btn = FloatButton(self.cfg.float_pos)
@@ -1825,6 +1826,7 @@ class App(QObject):
             self.glow.set_motion(self.cfg.glow_motion)
             if self._listening and self._listen_shown and self.cfg.glow:
                 self.glow.show(self._pointer_screen())
+        self.glow.set_lite(self.cfg.orb_lite)
         self.marks.set_color(self.cfg.highlight_color)
         self._apply_look()
         self._update_float()

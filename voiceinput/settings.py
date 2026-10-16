@@ -515,7 +515,7 @@ class SettingsDialog(QDialog):
         glow_row.addStretch()
 
         # always shown and editable (the user's design, 2026-10-16; a separate 自訂 style before): the parameters
-        # of the style picked, 2-4 colors and four sliders, saved when a slider is let go; a style changed shows
+        # of the style picked, 2-6 colors and four sliders, saved when a slider is let go; a style changed shows
         # （已編輯） in the drop-down and 恢復預設 puts it back
         self.glow_params_box = QWidget()
         g = QGridLayout(self.glow_params_box)
@@ -602,8 +602,6 @@ class SettingsDialog(QDialog):
         form = QFormLayout()
         form.addRow(_titled("按鈕樣式", "浮動按鈕和語音氣泡的樣子：原本的麥克風，或跟光暈同色的能量球"
                                      "（沒開光暈時用彩虹的顏色）。右邊是實際大小的範例"), look_row)
-        form.addRow("", _with_info(self.orb_lite, "能量球用較省 CPU 的畫法：每秒 15 張、光暈較粗略、光點和細絲較少。"
-                                                  "不勾時每秒 30 張、細節完整，比較好看"))
         form.addRow(_titled("按鈕大小", "浮動按鈕和語音氣泡的大小，100% 是標準大小；上面的範例會跟著變"), size_row)
         form.addRow(_titled("浮動按鈕", "一般頁「游標進到輸入框時」選浮動按鈕才有作用"), float_row)
         form.addRow(_titled("螢幕邊緣光暈", "麥克風開著時，螢幕邊緣亮起一圈光，講話時會變亮。依序選顏色樣式、"
@@ -615,6 +613,12 @@ class SettingsDialog(QDialog):
         form.addRow(_titled("草稿反白顏色", "麥克風開著時，講完還可能被修正的字會疊上這個顏色，定稿後消失"), mark_row)
         form.addRow(_titled("提示音", "開始音在麥克風打開時、結束音在關掉時播放。同一組的開始音與結束音一起選；"
                                    "選「自定義」可分別挑選"), sound_row)
+        # 節流模式 covers the edge glow too since 2026-10-16 (the user's request), so it has a row of its own
+        form.addRow(_titled("效能", "動畫用多少 CPU"),
+                    _with_info(self.orb_lite, "勾選後動畫改用較省 CPU 的畫法：能量球每秒 15 張、光暈較粗略、光點和細絲較少；"
+                                              "螢幕邊緣光暈的波浪、流星、漣漪每秒 24 張。不勾時能量球每秒 30 張、細節完整；"
+                                              "會移動的邊緣光暈每秒 48 張，比較順，但光暈的 CPU 用量約多七成"
+                                              "（柔光兩種模式都是每秒 24 張）"))
         page = QWidget()
         v = QVBoxLayout(page)
         v.addLayout(form)
@@ -657,7 +661,7 @@ class SettingsDialog(QDialog):
         for i, color in enumerate(c["colors"]):
             b = QToolButton(icon=_swatch(color), autoRaise=True, clicked=lambda _=False, i=i: self._glow_color(i))
             self.glow_colors.addWidget(b)
-        if len(c["colors"]) < 4:
+        if len(c["colors"]) < glowmod.MAX_COLORS:
             self.glow_colors.addWidget(QToolButton(text="＋", autoRaise=True, clicked=lambda: self._glow_color(-1)))
         if len(c["colors"]) > 2:
             self.glow_colors.addWidget(QToolButton(text="－", autoRaise=True, clicked=self._glow_fewer))

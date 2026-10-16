@@ -165,6 +165,19 @@ little smaller and thicker (radius 0.29 of the canvas, line 0.075). The hover sh
 「100%（標準）」 / 「90%」) scales the floating button, the bubble and the tab's examples (`OrbButton.set_look(...,
 scale)`; the examples keep room for 125% so the row does not move). 一般's 定稿時機 (`commit_at`) was removed: a draft
 is committed on a command or the end of listening, or at a pause once longer than 60s.
+Later still (the user's requests): 液態金屬's light is in the colors of the drop's edge next to it, turning with it,
+like 流光's (it was one color at a time); measured offscreen, the same steady CPU (frames are cached, ~2-2.7% of a
+core either way), the first loop ~0.2ms more per frame. 草本 became quiet Japanese greens (青磁, 抹茶, 苔, a pale
+washi green; slower turn 0.05, pulse 0.25) and 紫金 purple flowing into orange-yellow and back. A style may have up
+to 6 colors (`glow.MAX_COLORS`; cut to 4 before, so changing any slider of 彩虹 dropped its fifth). The edge glow's
+colors are looked up with numpy (`glow.angles`, `colors_lut`, `render`; Qt's conical gradient painted each frame
+cost ~4ms; the result differs by at most 2/255) and the masks are float32 arrays. 節流模式 moved to a row of its own
+(效能) and covers the glow: without it 波浪 / 流星 / 漣漪 run at 48 fps (`glow.FINE_FPS`; 流星 looked choppy at 24),
+柔光 stays at 24. Measured on the user's screen (1920x1080, i5-8500 with 6 cores, this process only; dwm.exe could
+not be read): 柔光 ~17% of one core at 24 fps, 流星 ~32% at 24 (~44% before the numpy colors) and ~50-59% at 48;
+most of it is painting the strips at full size and handing them to Windows, which grows with the frame rate. The
+CPU slows down between frames, so a frame there costs ~4x what a busy benchmark loop measures: measure such things
+on the real screen at the real frame rate (scratchpad scripts: glow_fps.py, glow_prof.py).
 選字's 模糊音 (2026-10-16 evening, the user's requests): ㄩㄣ with ㄧㄣ, ㄈ with ㄏㄨ (飛 / 灰, 發 / 花), ㄋ with ㄌ
 (`candidates._FUZZY`); a word only fuzzy-alike is listed from dictionary frequency 3 (`app._FUZZY_MIN`: 官癮, 灌嬰
 were offered for 光陰); the user's hotwords are matched by sound too (`candidates.rank_of`), so words McBopomofo

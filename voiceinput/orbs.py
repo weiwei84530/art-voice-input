@@ -299,10 +299,22 @@ def _liquid(p, s, ph, h, colors, px, fine):
         pt = QPointF(c + math.cos(a) * r, c + math.sin(a) * r)
         path.moveTo(pt) if i == 0 else path.lineTo(pt)
     path.closeSubpath()
-    glow = _drift(colors, ph * len(colors))
+    # its light in the colors of the drop's edge next to it, turning with it, like 流光's (the user's request,
+    # 2026-10-16: one color at a time did not match the drop)
+    p.save()
+    p.setOpacity(0.55 + 0.3 * h)
+    if fine:
+        k = R / c
+        p.drawImage(QRectF(0, 0, s, s), _masked(px, s, _conic(c, c, ph, colors),
+                                                [(0, 1), (k * 0.9, 1), (k * 1.15, 0.5), (k * 1.35, 0.18), (1, 0)]))
+    else:
+        def light(q):
+            q.setPen(Qt.NoPen)
+            q.setBrush(_conic(c, c, ph, colors))
+            _disc(q, c, c, R * 1.2)
+        p.drawImage(QRectF(0, 0, s, s), _blurred(px, s, light))
+    p.restore()
     p.setPen(Qt.NoPen)
-    p.fillRect(QRectF(0, 0, s, s), _radial(c, c, R * 1.4, [(0, _c(glow, 0.7 + 0.2 * h)), (0.6, _c(glow, 0.35)),
-                                                            (1, _c(glow, 0))]))
     p.fillPath(path, _conic(c, c, ph, colors))
     p.save()
     p.setClipPath(path)
