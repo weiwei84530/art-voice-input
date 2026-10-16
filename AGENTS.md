@@ -123,6 +123,10 @@ and a 自訂 style (`glow.CUSTOM`, `config.glow_custom`: 2-4 colors, 旋轉速�
 started from the style shown before, applied when a slider is let go and shown for 3s). A launch after a run was
 killed while listening unmutes the speakers (`mute.recover`, a marker file `.muted` while our mute is on: the
 agents' restarts with Stop-Process left the user's computer muted).
+選字's 模糊音 (2026-10-16 evening, the user's requests): ㄩㄣ with ㄧㄣ, ㄈ with ㄏㄨ (飛 / 灰, 發 / 花), ㄋ with ㄌ
+(`candidates._FUZZY`); a word only fuzzy-alike is listed from dictionary frequency 3 (`app._FUZZY_MIN`: 官癮, 灌嬰
+were offered for 光陰); the user's hotwords are matched by sound too (`candidates.rank_of`), so words McBopomofo
+lacks (光暈) can be offered once they are in 詞庫.
 On 自訂操作 the default operations' rows (`settings._BUILT_IN`, the steps of `rules.defaults`) are always listed
 with their action and value fixed (the user's choice): only the phrase is edited, empty turns one off (no warning;
 an empty phrase is no trigger in `rules._same_trigger`). Every other row is listed under 自訂, the last group, next
@@ -556,9 +560,10 @@ removed the same day they were built: the user corrects by selecting with the mo
   against 362, and of 211 short texts the only new "commands" were two misheard 換行). No code change had made
   it worse: the misses were borderline decodes.
 - **Described characters** (`edit.described`, 2026-10-11, the user picked it among ideas for exact text by voice;
-  a 一般 checkbox, on by default). Since 2026-10-16 (the user's rule) what comes before 的 must be a dictionary word
-  (`candidates.is_word`), after an optional 這個字是 / 這個字 / 就是 / <the character>是: their 只是顯示的是 and
-  不過顯示的是 typed 是; 顯示的是 still types 示, 張雨薇的薇 (a name) no longer works. Before: an utterance that is exactly <words>的<character> types only that character when
+  a 一般 checkbox, on by default). Since 2026-10-16 (the user's rule, tightened the same evening) everything before 的 must
+  be exactly one dictionary word (`candidates.is_word`), no lead-in (這個字是教育的育, 偉是偉大的偉 no longer
+  count: the user wants a narrow spell people know they are saying, and the checkbox to turn it off); their
+  只是顯示的是 and 不過顯示的是 typed 是; 顯示的是 still types 示, 張雨薇的薇 (a name) does not work. Before: an utterance that is exactly <words>的<character> types only that character when
   the last 4 characters before 的 contain it, or one that sounds like it (X-ASR wrote 一張的章: 張 is typed). Also
   這個字是教育的育, 偉是偉大的偉 (said that way in the log before the feature existed). Typed as is, like a
   punctuation mark (replaces a selection, no smart picks). A character that only sounds like it counts only when

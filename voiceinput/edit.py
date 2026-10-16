@@ -30,8 +30,7 @@ def symbol(formatted: str) -> str | None:
     return SYMBOLS.get(_PUNCT.sub("", formatted))
 
 
-_DESCRIBED = re.compile(r"^([㐀-䶿一-鿿]{2,8})的([㐀-䶿一-鿿])$")
-_LEAD = re.compile(r"^(?:這個字是|這個字|就是)")   # what may come before the word: 這個字是教育的育
+_DESCRIBED = re.compile(r"^([㐀-䶿一-鿿]{2,6})的([㐀-䶿一-鿿])$")
 
 
 def _sounds(ch: str) -> set[str]:
@@ -39,28 +38,20 @@ def _sounds(ch: str) -> set[str]:
 
 
 def described(formatted: str) -> str | None:
-    """The character when the whole utterance describes one (節日的節 -> 節), else None. The word before 的 must be a
-    dictionary word (2026-10-16, the user's rule: 只是顯示的是 and 不過顯示的是 are sentences, and typed 是), after an
-    optional lead-in (這個字是 …); it holds the character, or one that sounds like it (X-ASR wrote 一張的章, 測試的是)."""
+    """The character when the whole utterance is <word>的<character> (節日的節 -> 節), else None. The part before 的
+    must be one dictionary word, nothing else (2026-10-16, the user's rule, so the user knows what they are doing:
+    只是顯示的是 typed 是; lead-ins such as 這個字是教育的育 no longer count, and the setting turns it all off). The
+    word holds the character, or one that sounds like it (X-ASR wrote 一張的章, 節日的結: the word's is typed)."""
     from . import candidates
     m = _DESCRIBED.match(_PUNCT.sub("", formatted))
     if not m:
         return None
-    before, ch = m.groups()
-    words = [before]
-    lead = _LEAD.match(before)
-    cut = lead.end() if lead else 2 if before.startswith(ch + "是") else 0   # or the character itself: 偉是偉大的偉
-    if cut and len(before) - cut >= 2:
-        words.append(before[cut:])
-    for word in words:
-        if not candidates.is_word(word):
-            continue
-        if ch in word:
-            return ch
-        hit = next((c for c in reversed(word) if _sounds(c) & _sounds(ch)), None)
-        if hit:
-            return hit
-    return None
+    word, ch = m.groups()
+    if not candidates.is_word(word):
+        return None
+    if ch in word:
+        return ch
+    return next((c for c in reversed(word) if _sounds(c) & _sounds(ch)), None)
 
 
 def continue_sentence(formatted: str) -> str:

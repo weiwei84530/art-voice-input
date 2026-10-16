@@ -390,8 +390,9 @@ class SettingsDialog(QDialog):
         form.addRow("", _with_info(self.punct, "逗號、句號、句點、問號、驚嘆號、感嘆號、頓號、分號、冒號、點點點、刪節號、"
                                                "省略號；整句只有這個名字才算，例如「逗號很重要」照常輸入"))
         # form.addRow("", self.period_comma)   # not carried over to continuous listening yet
-        form.addRow("", _with_info(self.describe, "整句剛好是「某個詞的某個字」，而且「的」前面是字典裡的詞才算"
-                                                  "（例如「這個字是教育的育」）；輸入的是詞裡讀音相同的那個字"))
+        form.addRow("", _with_info(self.describe, "整句剛好是「詞＋的＋字」，而且「的」前面整段就是一個字典裡的詞才算"
+                                                  "（例如「教育的育」；「這個字是教育的育」不算）；輸入的是詞裡讀音相同的那個字。"
+                                                  "不想要這個功能就取消勾選"))
         form.addRow("", self.autostart)
         form.addRow("開發測試", audio_row)
         page = QWidget()
