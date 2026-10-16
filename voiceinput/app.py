@@ -1028,9 +1028,13 @@ class App(QObject):
         return raw
 
     def _bias_words(self, ctx) -> list:
-        """Hotwords and on-screen terms, as the recognizer takes them."""
+        """Hotwords and on-screen terms, as the recognizer takes them. Not a command's phrase: a word picked in 選字
+        is a hotword too, and the user's 括號 at 200% turned their 逗號 and 換行 said alone into 括號 (2026-10-16, 5
+        of their recordings; commands are boosted all together, and only for a short piece)."""
         self._load_packs()
-        return _bias(self.hotwords.bias() + [(t, _SCREEN_TERM_SCORE) for t in ctx.terms])
+        commands = {rules.normalize(w) for w in self._command_words()}
+        words = [(w, s) for w, s in self.hotwords.bias() if rules.normalize(w) not in commands]
+        return _bias(words + [(t, _SCREEN_TERM_SCORE) for t in ctx.terms])
 
     @staticmethod
     def _short(raw: str, names: list) -> bool:
