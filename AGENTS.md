@@ -483,6 +483,30 @@ double middle = 復原 (on a selection 刪除選取的文字), hold middle on a 
 送出 presses Enter and listening goes on, the key turns it off (the user's request, 2026-10-15, rules_version 9 removes
 the 結束錄音 step that rules_version 5 had added on 2026-10-14; an Enter step leaves nothing for send_on_stop)), `gesture_time` 0.15s, mute while listening, the AI pack ticked, word list by date.
 
+## Command recognition lab (2026-10-17, `dev/cmdlab`)
+
+The user's goal: commands said alone recognized more reliably (換行 most of all) and faster, without heavy resources;
+the solution must work for other users too (no per-user acoustic training). Measured on the saved recordings of
+continuous listening (929 commands, 571 text pieces cut by the VAD as the app cuts them; doubtful ones labeled by the
+user). Press-and-talk recordings are left out: their files keep the start sound the app cut out before recognizing.
+- Current path (plain decode, commands boosted again when short): 96.7% of commands, 0 false triggers; 31 missed,
+  21 of them 換行 (heard as 換好, 換他們, One home, Well um, Hang Hung). 23% of commands need the second decode.
+- Rejected: a second X-ASR in onnxruntime scoring each command (RNN-T log-likelihood vs the free decode): best
+  recall with the current path (99.4%) but +260MB RAM and no faster, and it confuses the user's 換行 with 問號.
+  sherpa-onnx keyword spotters (zh-en 3M, wenetspeech 3.3M; +23MB, 2% of a core): 65-82% alone, and with the
+  current path 11 false triggers on text that mentions a command (如果說送出, 標點符號). Phonetic matching of the
+  decoded text (pinyin or English via CMUdict): cannot tell 你好 from 句號. Higher boost scores: 6-7 gain 2-3, 8+
+  lose more.
+- Works: a piece with at most 1.2s of speech (the VAD's start/end) decoded first with the commands boosted, the audio
+  padded with 0.3s of zeros at both ends, then the current path if that is no command: 98.7%, misses 31 -> 10
+  (換行 21 -> 8), 0 false triggers, 2 wrong commands (one a mislabel). Padding alone fixed 23 of the 31 misses: X-ASR
+  turns a command into English when the audio starts or ends without silence (cutting 0.1s of tail lost 7%). The
+  padded decode takes ~126ms against ~90ms, but most commands then need one decode instead of up to two.
+- Speed (median, from the log): VAD wait 0.3s, piece decode 0.16s (0.25s with the second decode), and when a draft
+  is before the command its commit decode 0.24s (p90 0.50s), whose text equals the draft shown in 91% of cases: run
+  it alongside the piece's decode. Acting after 0.15s of silence: as a try only (fallback to 0.3s), for commands whose
+  false trigger costs little; at 0.15s about 5 new false triggers in 616 utterances (自行刪除, 新增一個引號).
+
 ## Spoken edit commands (2026-10-16)
 
 全選 / 複製 / 剪下 / 貼上 are commands (rules.EDIT_COMMANDS; defaults, rules_version 12, which also drops the user's
