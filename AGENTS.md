@@ -535,6 +535,9 @@ user). Press-and-talk recordings are left out: their files keep the start sound 
   over replaced the 好 that 複製 had copied, and 世界 was pasted back (the user's report; the clipboard held the last
   selection). `output.watch_clipboard` keeps the clipboard's last texts (not a paste's borrowing); when the clipboard
   equals the selection, the text before it is pasted (`output.text_before`).
+- Since the same night `candidates.sounds_alike` needs the same tones (the user's choice after seeing the list of
+  words it took for commands: 都好, 問好, 分好, 福祉, 閃出, 借書, 圈選, 掛號 differ only in tones). Still taken: 封號
+  -> 分號 (ㄥ/ㄣ), 據點 -> 句點 (same reading); 金嘆號, 換一航 still work; lab numbers unchanged (918/929, 0 of 571).
 - A change made while the text before the caret was only known by reading it (`Session.known`, `Step.read`: a
   Backspace after the caret moved) is taken back by 復原 only when the caret's line read as 復原 was said still ends
   with what VoiceInput expects (`_still_reads`); otherwise, or when it cannot be read, a tray notice says so and
