@@ -416,6 +416,10 @@ class SettingsDialog(QDialog):
                                           "・浮動按鈕：可拖動的按鈕，只在能打字的地方出現，拖到哪就留在哪\n"
                                           "・自動開麥克風：離開到網頁空白處、按鈕、桌面時關掉；用快捷鍵或說「結束」關掉後，"
                                           "要換個輸入框才會再自動開"), self.on_focus)
+        # nothing left to turn listening on (the tray notice of the key rows' days, now said here)
+        self.no_way = _problem_label()
+        self.no_way.setText("目前沒有任何方式能開麥克風：請設定「麥克風快捷鍵」，或在「游標進到輸入框時」選一種方式")
+        form.addRow("", self.no_way)
         form.addRow(_titled("自動關閉麥克風", "麥克風開著卻一直沒聽到人聲時自動關掉，避免忘了關；關掉時播結束音"),
                     self.auto_off)
         form.addRow("", _with_info(self.mute, "麥克風開著時把喇叭靜音，關閉麥克風後恢復；原本就靜音的話不會動"))
@@ -698,6 +702,7 @@ class SettingsDialog(QDialog):
         self.sound_set.setCurrentIndex(self.sound_set.findData(self.cfg.start_sound) if same
                                        else self.sound_set.count() - 1)
         self._show_sounds()
+        self._show_no_way()
         self._loading = False
         self.refresh_rules()
         self.refresh_hotwords()
@@ -726,6 +731,10 @@ class SettingsDialog(QDialog):
         self.cfg.glow = self.glow.currentData()
         self.cfg.auto_off_minutes = self.auto_off.currentData()
         self._save()
+        self._show_no_way()
+
+    def _show_no_way(self):
+        self.no_way.setVisible(not self.cfg.hotkey and not self.cfg.on_focus)
 
     def _glow_changed(self):
         if not self._loading and self.glow.currentData() == glowmod.CUSTOM and not self.cfg.glow_custom:

@@ -197,7 +197,9 @@ off moves to the interface): the key rows below and what only they did (double t
 deletes it, the hold / double tap gesture time setting) were removed. One hotkey is left, 麥克風快捷鍵 on the 一般 tab
 (`config.hotkey`, a mouse button or key or 不使用, migrated from the key that recorded): a tap turns listening on or
 off; a hold or a double tap is given back to the key or button (`App._rules_for` builds the tap's one rule; a tap
-waits `gesture_time`, 0.15s, for a second press, the audio is kept from key-down). The spoken rows are listed by
+waits `gesture_time`, 0.15s, for a second press, the audio is kept from key-down). With 麥克風快捷鍵 不使用 and
+游標進到輸入框時 不做事 nothing turns listening on: the 一般 tab says so in red under them (`no_way`; the user's
+choice over a tray notice, which the key rows' days had). The spoken rows are listed by
 what they do (`settings._GROUPS` / `_ORDER`, the user's choice, also for rows they add): 輸入 (換行, 空白, text,
 左右輸入文字: 括號 （ ）, 引號 「」, rules_version 14), 修改 (Backspace, Delete, 復原), 剪貼簿 (全選 / 複製 / 剪下 /
 貼上), 其他 (other keys), 結束 (Enter, 結束錄音).
