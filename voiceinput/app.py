@@ -207,6 +207,7 @@ class App(QObject):
         self.glow = EdgeGlow(lambda: self.listener.level if self._listening else 0.0)
         self.glow.set_style(style_for(self.cfg.glow, self.cfg.glow_custom))
         self.glow.set_edges(self.cfg.glow_edges)
+        self.glow.set_motion(self.cfg.glow_motion)
         self._preview_end = QTimer(self, singleShot=True,
                                    timeout=lambda: None if self._listening else self.glow.hide())
         self.float_btn = FloatButton(self.cfg.float_pos)
@@ -725,6 +726,7 @@ class App(QObject):
         already); a change while it shows restarts the moment."""
         self.glow.set_style(style_for(style_id, self.cfg.glow_custom))
         self.glow.set_edges(self.cfg.glow_edges)
+        self.glow.set_motion(self.cfg.glow_motion)
         if not self._listening:
             self.glow.show(QGuiApplication.screenAt(self.settings.geometry().center()))
             self._preview_end.start(3000)
@@ -1725,9 +1727,10 @@ class App(QObject):
     def apply_settings(self):
         self.hotkeys.set_keys(self._hotkeys())
         style = style_for(self.cfg.glow, self.cfg.glow_custom)
-        if self.glow.style != style or self.glow.edges != self.cfg.glow_edges:
+        if self.glow.style != style or self.glow.edges != self.cfg.glow_edges                 or self.glow.motion != self.cfg.glow_motion:
             self.glow.set_style(style)
             self.glow.set_edges(self.cfg.glow_edges)
+            self.glow.set_motion(self.cfg.glow_motion)
             if self._listening and self._listen_shown and self.cfg.glow:
                 self.glow.show(self._pointer_screen())
         self.marks.set_color(self.cfg.highlight_color)

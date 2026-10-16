@@ -67,7 +67,9 @@ def _swatch(color: str) -> QIcon:
     p.setPen(QColor(0, 0, 0, 60))
     p.drawRect(pm.rect().adjusted(0, 0, -1, -1))
     p.end()
-    return QIcon(pm)
+    icon = QIcon(pm)
+    icon.addPixmap(pm, QIcon.Disabled)   # a preset's colors stay visible where they cannot be changed
+    return icon
 
 HOTWORD_SORTS = [("weight", "優先度（高→低）"), ("name", "名稱 A→Z"), ("name_desc", "名稱 Z→A"),
                  ("date", "日期（新→舊）"), ("date_old", "日期（舊→新）")]
@@ -448,14 +450,19 @@ class SettingsDialog(QDialog):
         self.glow_edges = QComboBox()
         for k, (label, *_edges) in glowmod.EDGES.items():
             self.glow_edges.addItem(label, k)
+        self.glow_motion = QComboBox()
+        for k, label in glowmod.MOTIONS.items():
+            self.glow_motion.addItem(label, k)
         self.glow_preview_button = QPushButton("預覽", clicked=self._preview)
         glow_row = QHBoxLayout()
         glow_row.addWidget(self.glow)
+        glow_row.addWidget(self.glow_motion)
         glow_row.addWidget(self.glow_edges)
         glow_row.addWidget(self.glow_preview_button)
         glow_row.addStretch()
 
-        # 自訂 (2026-10-16, the user's request): 2-4 colors and four sliders, applied when a slider is let go
+        # always shown (the user's request, 2026-10-16): a preset's parameters, greyed out; 自訂's, to change: 2-4
+        # colors and four sliders, applied when a slider is let go
         self.glow_custom = QWidget()
         g = QGridLayout(self.glow_custom)
         g.setContentsMargins(0, 0, 0, 0)
@@ -494,8 +501,10 @@ class SettingsDialog(QDialog):
         self.mark_group.buttonClicked.connect(self._mark_clicked)
 
         form = QFormLayout()
-        form.addRow(_titled("螢幕邊緣光暈", "麥克風開著時，螢幕邊緣亮起一圈光，講話時會變亮；可以選只亮哪幾邊。"
-                                      "選了或按「預覽」會先亮一下讓你看"), glow_row)
+        form.addRow(_titled("螢幕邊緣光暈", "麥克風開著時，螢幕邊緣亮起一圈光，講話時會變亮。依序選顏色樣式、"
+                                      "動態（柔光／波浪：邊緣像浪一樣起伏／流星：兩道光繞著螢幕跑／漣漪：一圈圈往內擴散）"
+                                      "和亮哪幾邊；下面是樣式的參數，選「自訂」才能調整。選了或按「預覽」會先亮一下讓你看"),
+                    glow_row)
         form.addRow("", self.glow_custom)
         form.addRow(_titled("草稿反白顏色", "麥克風開著時，講完還可能被修正的字會疊上這個顏色，定稿後消失"), mark_row)
         form.addRow(_titled("提示音", "開始音在麥克風打開時、結束音在關掉時播放。同一組的開始音與結束音一起選；"
@@ -510,6 +519,7 @@ class SettingsDialog(QDialog):
         self.sound_set.currentIndexChanged.connect(self._sound_set_changed)
         self.glow.currentIndexChanged.connect(self._glow_changed)
         self.glow_edges.currentIndexChanged.connect(self._glow_changed)
+        self.glow_motion.currentIndexChanged.connect(self._glow_changed)
         return page
 
     def _glow_params(self) -> dict:
@@ -518,15 +528,15 @@ class SettingsDialog(QDialog):
         return {**base, **{k: v for k, v in self.cfg.glow_custom.items() if k in glowmod.CUSTOM_KEYS}}
 
     def _show_glow(self):
-        """The 自訂 panel only for 自訂, showing its parameters; 預覽 and the edges only with a glow."""
+        """The parameters of the style picked, which only 自訂 lets change (the user's design, 2026-10-16); 預覽,
+        the motion and the edges only with a glow."""
         on = bool(self.glow.currentData())
-        self.glow_edges.setEnabled(on)
-        self.glow_preview_button.setEnabled(on)
+        for w in (self.glow_edges, self.glow_motion, self.glow_preview_button):
+            w.setEnabled(on)
         custom = self.glow.currentData() == glowmod.CUSTOM
-        self.glow_custom.setVisible(custom)
-        if not custom:
-            return
-        c = self._glow_params()
+        preset = glowmod.BY_ID.get(self.glow.currentData())
+        c = self._glow_params() if custom or preset is None else glowmod.custom_from(preset)
+        self.glow_custom.setEnabled(custom)
         for key, slider in self.glow_sliders.items():
             slider.blockSignals(True)
             slider.setValue(round(float(c[key]) * slider.property("scale")))
@@ -611,6 +621,7 @@ class SettingsDialog(QDialog):
         self.stop_sound.setCurrentIndex(max(0, self.stop_sound.findData(self.cfg.stop_sound)))
         self.commit_at.setCurrentIndex(max(0, self.commit_at.findData(self.cfg.commit_at)))
         self.glow.setCurrentIndex(max(0, self.glow.findData(self.cfg.glow)))
+        self.glow_motion.setCurrentIndex(max(0, self.glow_motion.findData(self.cfg.glow_motion)))
         self._show_glow()
         i = self.auto_off.findData(self.cfg.auto_off_minutes)
         if i < 0:   # a value set by hand in config.json
@@ -640,6 +651,7 @@ class SettingsDialog(QDialog):
         self.cfg.hotkey = self.hotkey.currentData()
         self.cfg.on_focus = self.on_focus.currentData()
         self.cfg.glow_edges = self.glow_edges.currentData()
+        self.cfg.glow_motion = self.glow_motion.currentData()
         self.cfg.save_recordings = self.keep_audio.isChecked()
         self.cfg.start_sound = self.start_sound.currentData()
         self.cfg.stop_sound = self.stop_sound.currentData()

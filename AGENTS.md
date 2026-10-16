@@ -123,6 +123,13 @@ and a 自訂 style (`glow.CUSTOM`, `config.glow_custom`: 2-4 colors, 旋轉速�
 started from the style shown before, applied when a slider is let go and shown for 3s). A launch after a run was
 killed while listening unmutes the speakers (`mute.recover`, a marker file `.muted` while our mute is on: the
 agents' restarts with Stop-Process left the user's computer muted).
+The glow's parameters are always shown under it, a preset's greyed out, 自訂's to change (the user's design,
+2026-10-16 evening). 動態 (`glow_motion`, `glow.MOTIONS`, the user's request for three, one with waves): 柔光 (as
+before: masks made once per level), 波浪 (the inner edge rolls along the edges, waves growing with the voice), 流星
+(two heads with tails run around the screen over a faint glow), 漣漪 (rings move inward from the edges). Those
+compute their mask every frame (`motion_mask`) on parts of the strips near each edge, the falloff from a table and
+along-edge values in one row or column: 2-3ms a frame for four strips at 1920x1080 (12ms as first written), so
+about 5-8% of a core more than 柔光 at 24 fps; their strips are deeper (`_REACH`) so waves are not cut off.
 選字's 模糊音 (2026-10-16 evening, the user's requests): ㄩㄣ with ㄧㄣ, ㄈ with ㄏㄨ (飛 / 灰, 發 / 花), ㄋ with ㄌ
 (`candidates._FUZZY`); a word only fuzzy-alike is listed from dictionary frequency 3 (`app._FUZZY_MIN`: 官癮, 灌嬰
 were offered for 光陰); the user's hotwords are matched by sound too (`candidates.rank_of`), so words McBopomofo

@@ -61,6 +61,10 @@ def style_for(style_id: str, custom: dict | None) -> Style | None:
     colors = [x for x in c["colors"] if QColor(x).isValid()] or ["#3d7bff"]
     return Style(CUSTOM, "自訂", tuple(colors + [colors[0]]), float(c["turn"]), float(c["pulse"]),
                  min(max(float(c["depth"]), 0.4), 2.0), min(max(float(c["bright"]), 0.3), 1.6))
+# how it moves (the 外觀 tab, 2026-10-16, the user's request for three, one of them waves): 柔光 is the glow as it
+# was (falloff masks made once per level); the others compute their mask every frame (motion_mask)
+MOTIONS = {"soft": "柔光", "wave": "波浪", "comet": "流星", "ripple": "漣漪"}
+_REACH = {"soft": 1.0, "wave": 1.9, "comet": 1.5, "ripple": 1.0}   # strip depth, times the style's
 # which edges glow (the 外觀 tab, 2026-10-16, the user's request): id -> (label, top, bottom, left, right)
 EDGES = {"all": ("上下左右", True, True, True, True), "tb": ("只有上下", True, True, False, False),
          "lr": ("只有左右", False, False, True, True), "top": ("只有上", True, False, False, False),
@@ -95,6 +99,89 @@ def mask(screen: QRect, rect: QRect, strength: float, edges=(True, True, True, T
     return QImage(argb.tobytes(), w, h, w * 4, QImage.Format_ARGB32_Premultiplied).copy()
 
 
+_LUT = (1 - np.linspace(0, 1, 1024)) ** 2.4   # the falloff's shape, looked up instead of a power per pixel
+
+
+def _falloff(dist: np.ndarray, reach, gain) -> np.ndarray:
+    """_profile through the table: reach (px) and gain (opacity) may be arrays that broadcast with dist."""
+    i = np.minimum(dist / reach, 1.0) * 1023
+    return _LUT[i.astype(np.intp)] * gain
+
+
+def geometry(screen: QRect, rect: QRect, edges) -> dict:
+    """Per pixel of a strip at 1/_SCALE (screen coordinates): for each glowing edge within reach (top, bottom,
+    left, right) the part of the strip near it with the distance to it and the position along it; the nearest
+    edge's distance, and the place around the screen's perimeter (clockwise from the top-left corner)."""
+    w, h = -(-rect.width() // _SCALE), -(-rect.height() // _SCALE)
+    xs = rect.left() - screen.left() + (np.arange(w) + 0.5) * _SCALE
+    ys = rect.top() - screen.top() + (np.arange(h) + 0.5) * _SCALE
+    X, Y = np.meshgrid(xs, ys)
+    W, H = screen.width(), screen.height()
+    top, bottom, left, right = edges
+    sides = []   # (distance, along, perimeter place)
+    if top:
+        sides.append((Y, X, X))
+    if right:
+        sides.append((W - X, Y, W + Y))
+    if bottom:
+        sides.append((H - Y, W - X, W + H + (W - X)))
+    if left:
+        sides.append((X, H - Y, 2 * W + H + (H - Y)))
+    D = np.stack([d for d, _, _ in sides])
+    near = D.argmin(0)
+    cutoff = min(rect.width(), rect.height()) + _SCALE   # the strip's depth: nothing reaches further in
+    close = []
+    for dist, along, _ in sides:
+        rows, cols = np.nonzero(dist < cutoff)
+        if len(rows):   # only that part of the strip: in the top strip the left edge matters near the corner
+            sl = (slice(rows.min(), rows.max() + 1), slice(cols.min(), cols.max() + 1))
+            a = along[sl]
+            a = a[:1, :] if np.all(a == a[:1, :]) else a[:, :1]   # along an edge: one row or one column
+            close.append((sl, dist[sl], a))
+    P = np.choose(near, [pp for _, _, pp in sides])
+    return {"w": w, "h": h, "sides": close, "dmin": D.min(0), "Pi": (P // _SCALE).astype(np.intp),
+            "L": 2 * (W + H)}
+
+
+def motion_mask(geo: dict, motion: str, st: Style, t: float, level: float) -> QImage:
+    """A strip's falloff for a moving glow at t seconds, level 0..1 (the voice): 波浪 rolls the glow's inner edge
+    along the screen's edges in waves that grow with the voice; 流星 sends two bright heads with tails around the
+    screen over a faint glow; 漣漪 sends rings inward from the edges, brighter with the voice."""
+    strength = 0.45 + 0.55 * min(1.0, level)
+    reach = DEPTH * st.depth
+    if motion == "wave":
+        keep = np.ones((geo["h"], geo["w"]))
+        amp = 0.32 + 0.4 * level
+        for sl, dist, along in geo["sides"]:
+            mod = (1 + amp * np.sin(along / 40.0 - t * 2.6)) * (1 + 0.18 * np.sin(along / 97.0 + t * 1.3))
+            sm = strength * mod
+            keep[sl] *= 1 - _falloff(dist, reach * sm, np.minimum((0.35 + 0.6 * sm) * st.bright, 1.0))
+        a = 1 - keep
+    elif motion == "comet":
+        L = geo["L"]
+        P = np.arange(L // _SCALE + 2) * _SCALE   # the band along the perimeter, then looked up per pixel
+        speed = L * (0.08 + st.turn * 0.4) * (1 + level)
+        band = np.zeros(len(P))
+        for k in range(2):
+            behind = (t * speed + k * L / 2 - P) % L   # px behind the head
+            tail = np.exp(-np.minimum(behind, L * 0.3) / (L * 0.05)) * (behind < L * 0.3)
+            front = np.exp(-np.minimum((L - behind) / 70.0, 6.0) ** 2)   # the head fades in ahead of it
+            band = np.maximum(band, tail + front)
+        band = band[geo["Pi"]]
+        sb = strength * (0.5 + 0.95 * band)
+        a = _falloff(geo["dmin"], reach * sb, np.minimum((0.35 + 0.6 * sb) * st.bright, 1.0)) * (0.3 + 0.9 * band)
+    else:   # ripple
+        d = geo["dmin"]
+        a = _falloff(d, reach * strength * 0.75, (0.35 + 0.45 * strength) * st.bright * 0.5)
+        for k in range(3):
+            ph = (t / 1.8 + k / 3) % 1.0
+            ring = np.exp(-((d - ph * reach * 0.95) / 14.0) ** 2) * (1 - ph) ** 1.6
+            a = np.maximum(a, ring * (0.4 + 0.55 * level) * st.bright)
+    a = (np.clip(a, 0, 1) * 255).astype(np.uint32)
+    argb = np.ascontiguousarray((a << 24) | (a << 16) | (a << 8) | a)
+    return QImage(argb.tobytes(), geo["w"], geo["h"], geo["w"] * 4, QImage.Format_ARGB32_Premultiplied).copy()
+
+
 def frame(style: Style, t: float, level: float) -> tuple[int, float]:
     """(mask level, angle of the colors) at t seconds, level 0..1 (the voice)."""
     breathe = 0.5 + 0.5 * math.sin(t * 2.2)
@@ -102,10 +189,8 @@ def frame(style: Style, t: float, level: float) -> tuple[int, float]:
     return min(_LEVELS - 1, round(energy * (_LEVELS - 1))), round(-t * style.turn * 360, 1)
 
 
-def render(style: Style, screen: QRect, rect: QRect, masks: list, t: float, level: float) -> QImage:
-    """`rect` of the glow at t seconds, level 0..1 (the voice), at 1/_SCALE."""
-    k, angle = frame(style, t, level)
-    m = masks[k]
+def render(style: Style, screen: QRect, rect: QRect, m: QImage, angle: float) -> QImage:
+    """`rect` of the glow, its colors turned to angle, cut by the falloff m, at 1/_SCALE."""
     img = QImage(m.size(), QImage.Format_ARGB32_Premultiplied)
     img.fill(0)
     p = QPainter(img)
@@ -139,7 +224,9 @@ class _Strip(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.image: QImage | None = None
-        self.masks: list = []
+        self.masks: list = []          # 柔光: the falloff per level
+        self.geo: dict | None = None   # the other motions: what motion_mask needs
+        self.on = False                # its edge glows
 
     def paintEvent(self, _):
         if self.image is None:
@@ -167,9 +254,10 @@ class EdgeGlow:
             self._fades.append(fade)
         self._on = False
         self._shown = None   # the frame drawn last (frame())
-        self._masks = {}     # (x, y, w, h, edges) of a screen -> each strip's masks
+        self._masks = {}     # (x, y, w, h, edges, depth, bright) of a screen -> each strip's masks
         self._ticks = 0
         self.edges = "all"
+        self.motion = "soft"
 
     @property
     def style(self) -> "Style | None":
@@ -198,6 +286,20 @@ class EdgeGlow:
             self._screen = QRect()   # placed again at the next show
             self.hide_now()
 
+    def set_motion(self, motion: str):
+        if motion not in MOTIONS:
+            motion = "soft"
+        if motion != self.motion:
+            self.motion = motion
+            self._screen = QRect()   # strips of another depth: placed again at the next show
+            if self._on:
+                screen = QGuiApplication.screenAt(QCursor.pos())
+                self._place(screen)
+                self._shown = None
+                self._render()
+                for s in self._strips:
+                    s.update()
+
     def show(self, screen=None):
         if self._style is None or self._on:
             return
@@ -208,7 +310,7 @@ class EdgeGlow:
         self._shown = None
         self._render()
         for s, fade in zip(self._strips, self._fades):
-            if not s.masks:
+            if not s.on:
                 continue   # an edge that does not glow
             s.setWindowOpacity(0.0)
             s.show()
@@ -235,24 +337,27 @@ class EdgeGlow:
             return
         self._screen = g
         st = self._style or STYLES[0]
-        d = min(round(DEPTH * st.depth), g.height() // 4, g.width() // 4)
+        d = min(round(DEPTH * st.depth * _REACH[self.motion]), g.height() // 4, g.width() // 4)
         _, top, bottom, left, right = EDGES[self.edges]
         side_top, side_h = g.top() + (d if top else 0), g.height() - (d if top else 0) - (d if bottom else 0)
         rects = [QRect(g.left(), g.top(), g.width(), d) if top else None,
                  QRect(g.left(), g.bottom() - d + 1, g.width(), d) if bottom else None,
                  QRect(g.left(), side_top, d, side_h) if left else None,
                  QRect(g.right() - d + 1, side_top, d, side_h) if right else None]
+        edges = (top, bottom, left, right)
+        soft = self.motion == "soft"
         key = (g.x(), g.y(), g.width(), g.height(), self.edges, st.depth, st.bright)
-        if key not in self._masks:
-            self._masks[key] = [[mask(g, r, _strength(k), (top, bottom, left, right), st.depth, st.bright)
-                                 for k in range(_LEVELS)]
+        if soft and key not in self._masks:
+            self._masks[key] = [[mask(g, r, _strength(k), edges, st.depth, st.bright) for k in range(_LEVELS)]
                                 if r is not None else [] for r in rects]
-        for s, r, m in zip(self._strips, rects, self._masks[key]):
+        for i, (s, r) in enumerate(zip(self._strips, rects)):
+            s.on = r is not None
             if r is not None:
                 s.setGeometry(r)
             else:
                 s.hide()
-            s.masks = m
+            s.masks = self._masks[key][i] if soft else []
+            s.geo = geometry(g, r, edges) if r is not None and not soft else None
 
     def hide(self):
         if not self._on:
@@ -283,7 +388,7 @@ class EdgeGlow:
         # fast up, slow down, like a level meter
         self._level += (target - self._level) * (0.5 if target > self._level else 0.08)
         self._ticks += 1
-        if self._level < 0.05 and self._ticks % 2:   # quiet: the colors only drift, half the frames do
+        if self._level < 0.05 and self._ticks % 2 and self.motion == "soft":   # quiet: half the frames
             return
         if self._render():
             for s in self._strips:
@@ -292,11 +397,15 @@ class EdgeGlow:
     def _render(self) -> bool:
         """False when the frame would look as the last one did (a still style, the same level)."""
         t = time.monotonic() - self._t0
-        shown = frame(self._style, t, self._level)
-        if shown == self._shown:
-            return False
-        self._shown = shown
+        k, angle = frame(self._style, t, self._level)
+        if self.motion == "soft":
+            if (k, angle) == self._shown:
+                return False
+            self._shown = (k, angle)
         for s in self._strips:
-            if s.masks:
-                s.image = render(self._style, self._screen, s.geometry(), s.masks, t, self._level)
+            if not s.on:
+                continue
+            m = s.masks[k] if self.motion == "soft" else motion_mask(s.geo, self.motion, self._style, t,
+                                                                      self._level)
+            s.image = render(self._style, self._screen, s.geometry(), m, angle)
         return True
