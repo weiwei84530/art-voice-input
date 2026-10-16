@@ -1279,11 +1279,12 @@ class App(QObject):
             for n, step in enumerate(steps):
                 if n:
                     time.sleep(_STEP_GAP)
-                # a spoken operation with text selected in a terminal acts on the selection, not at the cursor
-                # (the user's request, 2026-10-16: in Claude Code a mouse selection leaves the cursor where it was,
-                # and 刪除 deleted there)
+                # a spoken operation with text selected acts on the selection (the user's request, 2026-10-16: in
+                # Claude Code a mouse selection leaves the cursor where it was, and 刪除 deleted there), recorded so
+                # that 復原 brings it back (the user's request the same day: the mouse selection had ended what 復原
+                # could take back)
                 sel = press.probe.result().selection if press.key == "listen" and press.deleted is None else None
-                if sel is not None and sel.term is not None and (
+                if sel is not None and (
                         step.type == rules.KEYS and step.value in ("Backspace", "Delete") or step.type == rules.TEXT):
                     if step.type == rules.TEXT:
                         self._on_main(lambda t=step.value: self._replace_selection(press, sel, t))
@@ -1357,7 +1358,7 @@ class App(QObject):
         self.session.wrapped(left, right, foreground())
 
     def _replace_selection(self, press: _Press, sel, text: str):
-        """Main thread: text typed over a terminal selection."""
+        """Main thread: text typed over a selection."""
         if sel.term is not None:
             self.glow.hide_now()
         pasted = _paste_over(sel, text)
