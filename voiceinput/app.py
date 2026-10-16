@@ -977,6 +977,9 @@ class App(QObject):
         op, typed, entry = command
         if op is not None:
             log.info("spoken operation: %s", op.phrase)
+            # 刪除, 剪下, 復原 … may take away the text the 選字 menu is for (the user's request, 2026-10-16: it
+            # stayed after 刪除)
+            self._close_menu()
             seen = Context(sel, ctx.terms, ctx.caret)
             self._run_steps(_Press("listen", _Known(seen), time.monotonic(), False), op.steps)
         else:

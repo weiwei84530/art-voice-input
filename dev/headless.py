@@ -77,8 +77,8 @@ class Box:
         """Shift+Enter types a newline; Enter sends the text (the box is emptied); others are printed."""
         if vks == (0x10, 0x0D):
             self.paste("\n")
-        elif vks == (0x08,):
-            self.back(1)
+        elif vks == (0x08,):   # Backspace deletes a selection, as in a real text box
+            self.delete() if self.sel else self.back(1)
         elif vks == (0x0D,):
             print(f"      [送出] {self.text!r}")
             self.text, self.caret = "", 0
@@ -403,7 +403,7 @@ try:
                 parts += [load(name), np.zeros(int(0.6 * 16000), np.float32)]
             feed(np.concatenate(parts[:-1]))
             pump(3.0)
-            print(f"[{step}] → 文字框：{box.text[:box.caret] + '|' + box.text[box.caret:]!r}")
+            print(f"[{step}] → 文字框：{box.text[:box.caret] + '|' + box.text[box.caret:]!r}{menu()}")
             continue
         if step == "click":
             user_input()
