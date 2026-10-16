@@ -11,7 +11,8 @@ focus watcher reads: text box N, or a place where nothing can be typed), click (
 hotkey:NAME (the key or button the next steps press, default mouse_middle), rules:default (the default operations),
 rule:JSON (add an operation, rules.Rule.from_dict), at:WORD (put the caret right after the last WORD; at: puts it at
 the end), say:TEXT (dictate TEXT as if recognized), op:PHRASE (a spoken operation of the
-user's config run without audio), clip:TEXT (the box's clipboard; the real one is never read), set:NAME=VALUE (change a setting in memory only; apply: as the settings window does after a change), packs:ID+ID (tick term packs, in memory only) or key:BACK (the
+user's config run without audio), clip:TEXT (the box's clipboard; the real one is never read), nocaret (the next
+probe cannot read the caret's line), set:NAME=VALUE (change a setting in memory only; apply: as the settings window does after a change), packs:ID+ID (tick term packs, in memory only) or key:BACK (the
 user presses Backspace n times: key:BACK*3), key:ENTER (the user presses Enter), dbl:MS (a double tap, each press MS ms long), dblbusy (a double tap whose release is handled 0.5s late), pick:N / pickw:WORD (click a row of the 選字 menu), feed:WAV (while
 continuous listening is on: WAV and 1s of silence reach the microphone; feed:WAV+WAV joins clips with 0.6s pauses),
 logshot:NAME (the 辨識紀錄 tab saved as <dir>/NAME.png), wait:SEC (silence for SEC seconds), tap0 (a tap; the next step starts once it is known to be one,
@@ -152,9 +153,13 @@ class Listener(appmod.Listener):
 appmod.Listener = Listener
 
 
+no_caret = []   # nocaret: the next probe cannot read the caret's line (as UI Automation fails in some apps)
+
+
 class Probe:
     def __init__(self, *_):
-        self._ctx = selection.Context(box.selection(), [], box.caret_context())
+        caret = None if no_caret and no_caret.pop() else box.caret_context()
+        self._ctx = selection.Context(box.selection(), [], caret)
 
     def result(self, timeout=2.0):
         return self._ctx
@@ -403,6 +408,9 @@ try:
             A._run_command((rule, None, {}), ctx, ctx.selection)
             pump(1.0)
             print(f"[說 {step[3:]}] → 文字框：{box.text[:box.caret] + '|' + box.text[box.caret:]!r}")
+            continue
+        if step == "nocaret":
+            no_caret.append(True)
             continue
         if step.startswith("clip:"):
             box.clip = step[5:]

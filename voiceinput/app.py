@@ -1488,7 +1488,7 @@ class App(QObject):
                 elif step.type == rules.TEXT:
                     self._on_main(lambda t=step.value: self._type_text(t))
                 elif step.type == rules.COMMAND and step.value == rules.UNDO:
-                    self._on_main(self.undo)
+                    self._on_main(lambda: self.undo(press.probe.result() if press.key == "listen" else None))
                 elif step.type == rules.COMMAND and step.value == rules.STOP:
                     self._on_main(lambda: self._stop_listen() if self._listening else None)
             if stop:
@@ -1630,7 +1630,7 @@ class App(QObject):
         self.session.replaced_selection(sel.before, "", foreground(), sel.before + sel.text)
         self.record.emit({"time": time.strftime("%H:%M:%S"), "kind": "刪除", "main": sel.text})
 
-    def undo(self):
+    def undo(self, ctx=None):
         """Main thread, 復原 (and 刪除剛輸入的文字): take back VoiceInput's last change while it is still right before
         the caret: all of them while the caret has not moved, one each time; a draft's are its pauses' updates. After one,
         what is left of the draft (or of the draft the last commit typed) is a draft again, its text fixed (decoded
@@ -1645,6 +1645,12 @@ class App(QObject):
             moved = s.dirty or s.hwnd != foreground()
             self._notify("無法復原：游標移動、點擊或打字之後就不能再復原了" if moved and s.history else
                          "沒有可以復原的了")
+            return
+        if step.read and not _still_reads(s.buffer, ctx):
+            # what it would type back was read from the screen after the caret moved, and the screen does not show
+            # that now (or cannot be read): rather nothing than the wrong text (2026-10-17, the user's request)
+            log.info("undo: the text before the caret is not what was read, not taken back")
+            self._notify("無法確定游標前的文字，這次不復原（避免打回錯的字）")
             return
         d = self._draft
         restore = step.restore   # the draft as it was before this update, its open sentence still open
@@ -2001,6 +2007,12 @@ def _no_mark_first(command) -> bool:
 
 def _clipboard_text() -> str:
     return QGuiApplication.clipboard().text()
+
+
+def _still_reads(buffer: str, ctx) -> bool:
+    """Whether the line before the caret, read when 復原 was said (ctx.caret), ends with the buffer's last line."""
+    caret = ctx.caret if ctx is not None else None
+    return bool(caret) and caret[0].endswith(buffer.split("\n")[-1])
 
 
 def _plain(text: str) -> str:

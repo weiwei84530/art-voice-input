@@ -42,6 +42,9 @@ class Step:
     utterances: list        # Session.utterances before the change, restored when it is deleted
     tail: int = 0           # characters it also put after the caret (左右輸入文字), deleted with it
     restore: object = None  # a draft's update: (the draft as it was before, its open sentence's pieces), App.undo
+    # a change made while the text before the caret was known by reading it (Session.known), not by typing it: 復原
+    # types back what it took, so it checks that reading again first (App.undo)
+    read: bool = False
 
 
 class Session:
@@ -52,6 +55,7 @@ class Session:
         self.dirty = True
         self.utterances: list[Utterance] = []
         self.history: list[Step] = []          # the last changes, oldest first, while they can be taken back
+        self.read = False                      # the buffer starts with text read before the caret (known)
 
     def on_input(self):
         """The user pressed a key or clicked (hook threads): the caret may have moved."""
@@ -66,7 +70,7 @@ class Session:
         """Record a paste of text at the caret."""
         with self._lock:
             if self.dirty or hwnd != self.hwnd:
-                self.buffer, self.utterances, self.history = "", [], []
+                self.buffer, self.utterances, self.history, self.read = "", [], [], False
             before, prior = self.buffer, list(self.utterances)
             start = len(self.buffer)
             self.buffer += text
@@ -89,7 +93,7 @@ class Session:
         """Record an edit of a selection: the caret now follows new, with before (rest of the line) ahead.
         undo_to: what 復原 turns before + new back into (before + the selected text), None when it cannot be."""
         with self._lock:
-            self.buffer, self.utterances = before + new, []
+            self.buffer, self.utterances, self.read = before + new, [], False
             self.history = [Step(undo_to, self.buffer, [])] if undo_to is not None else []
             self.hwnd, self.dirty = hwnd, False
 
@@ -109,13 +113,13 @@ class Session:
         """The text before the caret is known to end with before (read with UI Automation) after the caret moved:
         what follows starts a new history from there."""
         with self._lock:
-            self.buffer, self.utterances, self.history = before, [], []
+            self.buffer, self.utterances, self.history, self.read = before, [], [], True
             self.hwnd, self.dirty = hwnd, False
 
     def changed(self, new: str):
         """The caller turned the buffer into new: a change 復原 can take back."""
         with self._lock:
-            self._push(Step(self.buffer, new, list(self.utterances)))
+            self._push(Step(self.buffer, new, list(self.utterances), read=self.read))
             self.buffer, self.utterances, self.dirty = new, [], False
 
     def plan_to(self, after: str) -> tuple[int, str]:
