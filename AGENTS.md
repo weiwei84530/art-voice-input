@@ -521,7 +521,13 @@ user). Press-and-talk recordings are left out: their files keep the start sound 
   only as read in its words, so 還行 is not 換行; spellings of one punctuation name count as one): the user's
   驚嘆號 said jin came out as 金嘆號 and the boost made it 金看號 (checked before boosting); no false trigger on the
   571 labeled text pieces. Their 換一行 was never a command: 自訂操作 had 下一行.
-- 復原 takes back the spoken 空白 (Space), 剪下 / 貼上 in ordinary apps (the selection read when it was said; a
+  A review the same night: a command the dictionary lists is compared in the readings it lists (換行 huan hang), any
+  reading of a 多音字 only in one it lacks (下一行): any reading let 放心 / 反省 / 喚醒 / 換新 said alone be 換行 (行
+  as xing) and 夠好 句號 (句 as gou). Still alike in the dictionary (frequency 5+, toneless or the fuzzy pairs, so
+  "exact text only" for punctuation names below no longer holds): 都好 逗號, 問好 / 文豪 問號, 分好 / 封號 分號, 據點
+  句點, 掛號 括號 (Taiwan reads 括 gua), 鬍子 / 父子 / 福祉 複製, 閃出 刪除, 降下 剪下, 圈選 全選, 借書 結束.
+- 復原 takes back the spoken 空白 (Space; when it or 換行 replaced a selection in an ordinary app, the selection
+  comes back: recorded as typed at the caret, 復原 took back the space alone), 剪下 / 貼上 in ordinary apps (the selection read when it was said; a
   paste only for one line of at most 300 characters, `_plain`: Claude Code turns a block into [Pasted text]) and a
   Backspace after the caret moved (the line before the caret read when it was said, `Session.known`); after a move
   the history starts from there. `dev/headless.py` has op:PHRASE and clip:TEXT for testing these.

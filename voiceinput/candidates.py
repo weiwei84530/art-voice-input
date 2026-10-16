@@ -144,16 +144,23 @@ def rank_of(word: str, other: str) -> int | None:
 def sounds_alike(a: str, b: str) -> bool:
     """Whether b (Traditional Chinese, as written) sounds like a, character by character, without tones and with
     the fuzzy pairs: a spoken command the recognizer wrote as a homophone (金嘆號 for the user's 驚嘆號, said jin;
-    換一航). Any reading of a 多音字 in a counts (行 is hang in 換一行), b only as read in its words (還行 is hai
-    xing, not 換行). Only for short phrases."""
+    換一航). a as the dictionary reads it when it is a word (換行 is huan hang); else any reading of a 多音字 in a
+    counts (行 is hang in 換一行, which the dictionary lacks). b only as read in its words (還行 is hai xing, not
+    換行). Only for short phrases.
+    Any reading of each character of a dictionary word too let in readings the word is never said with (2026-10-17,
+    a review): 行 as xing made 放心, 反省, 喚醒, 換新 said alone 換行 (Shift+Enter), 句 as gou made 夠好 句號."""
     if len(a) != len(b) or not _CJK.match(a) or not _CJK.match(b):
         return False
     load()
     said = [_key(s) for s in _pypinyin_reading(b).split()]
     if len(said) != len(b):
         return False
-    return all(x == y or k in {_key(r) for r in (_words[x][1] if x in _words else [_pypinyin_reading(x)])}
-               for x, y, k in zip(a, b, said))
+    if a in _words:
+        heard = [r.split() for r in _words[a][1]]
+        allowed = [{_key(r[i]) for r in heard if len(r) == len(a)} for i in range(len(a))]
+    else:
+        allowed = [{_key(r) for r in (_words[x][1] if x in _words else [_pypinyin_reading(x)])} for x in a]
+    return all(x == y or k in keys for x, y, k, keys in zip(a, b, said, allowed))
 
 
 COMMON = 5   # frequency from which a word counts as common (McBopomofo lists many obscure words at 1-2)

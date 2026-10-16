@@ -85,7 +85,6 @@ _COMMAND_SLACK = 2
 # of the 31 misses. Most commands then need one decode instead of up to two.
 _FIRST_MAX = 1.2
 _PAD = 0.3
-_QUICK_SLACK = int(0.1 * SAMPLE_RATE)   # samples: a piece ending this soon after a quick command's speech is that one
 _WORDS = re.compile(r"[㐀-䶿一-鿿]|[A-Za-z0-9]+")   # a Chinese character or an English word counts one
 _SEL_LOST = "找不到選取的文字，沒有修改"   # a terminal selection that moved or the cursor could not reach
 # from the call to PlaySound until the start sound has left the speakers: measured 0.17s on the user's machine
@@ -207,7 +206,7 @@ class App(QObject):
         # commit right after it reuses the text instead of decoding the same audio again (dev/cmdlab, 2026-10-17:
         # 0.24s median before a command, the same text in 91% of the user's commits)
         self._live = None
-        self._quick_done = None                  # worker thread: (speech end, hi) of the command a quick piece ran
+        self._quick_done = None                  # worker thread: the end (hi) of a quick piece run as a command
         # the pieces of a draft 復原 brought back as it was, for the worker to take up (_take_restored)
         self._restored_spans, self._restore_lock = None, threading.Lock()
         self._ignored: set[str] = set()          # keys pressed while another was held
@@ -874,7 +873,7 @@ class App(QObject):
 
     def _on_listen_quick(self, piece):
         """Listener thread: short speech after a pause stopped for listen.QUICK_SILENCE (config.early_commands): a
-        command whose false trigger costs little runs now, before the piece ends (_piece_job, quick)."""
+        command runs now, before the piece ends (_piece_job, quick)."""
         with self._early_lock:
             if self._early_pieces is not None:   # the press is not known to listen yet
                 return
@@ -1219,12 +1218,15 @@ class App(QObject):
         try:
             done = self._quick_done
             if not quick and done is not None:
-                if piece.end <= done[0] + _QUICK_SLACK:   # the command a quick piece already ran
+                # the piece the quick one was cut from: dropped when its speech ends within the quick piece's audio
+                # (the VAD ends a piece where the silence began, whatever silence it waits for: the same sample, give
+                # or take a window), else only what follows is this piece
+                self._quick_done = None
+                if piece.end <= done:
                     log.info("piece already run at the short pause")
                     return
-                self._quick_done = None
-                if piece.start < done[1]:   # speech went on after it: only what follows is this piece
-                    piece = replace(piece, lo=done[1], start=max(piece.start, done[1]))
+                if piece.start < done:
+                    piece = replace(piece, lo=done, start=done)
             # what earlier pieces asked of the main thread is done; a draft the user moved away from stays as it
             # is, and this piece starts a new one (over the selection made meanwhile)
             state = {}
@@ -1250,7 +1252,7 @@ class App(QObject):
                 op, typed = self._command(format_text(raw, True, steps), ctx, steps, raw) if raw else (None, None)
                 if not _quick_ok(op, typed):
                     return   # the piece decides
-                self._quick_done = (piece.end, piece.hi)
+                self._quick_done = piece.hi
                 log.info("quick piece: %s", raw)
             self._spans = [p for p in self._spans if p.start >= anchor] + [piece]
             raw = raw or self._decode(audio, ctx, commands=True)
@@ -1470,7 +1472,12 @@ class App(QObject):
                         press_chord(*vks)
                         if step.value in ("Shift+Enter", "Space"):   # a new line or a space, which 復原 takes back
                             ch = "\n" if step.value == "Shift+Enter" else " "
-                            self._on_main(lambda c=ch: self.session.dictated(c, None, foreground()))
+                            if sel is not None and sel.term is None:
+                                # typed over the selection: 復原 brings it back (recorded as typed at the caret, it
+                                # took back the space alone and the selected text stayed lost; 2026-10-17, a review)
+                                self._on_main(lambda c=ch, s=sel: self._typed_over(press, s, c))
+                            else:
+                                self._on_main(lambda c=ch: self.session.dictated(c, None, foreground()))
                         elif step.value == "Backspace":   # one character less, which 復原 can type again
                             self._on_main(lambda: self._backspaced(press))
                         else:
@@ -1519,6 +1526,11 @@ class App(QObject):
             s.known(caret[0], foreground())
         s.changed(s.buffer[:-1])
 
+    def _typed_over(self, press: _Press, sel, text: str):
+        """Main thread: a key or Ctrl+X / Ctrl+V of an ordinary app replaced the selection with text."""
+        press.deleted = sel
+        self.session.replaced_selection(sel.before, text, foreground(), sel.before + sel.text)
+
     def _wrap(self, press: _Press, value, sel):
         """Main thread: 左右輸入文字 (2026-10-16, the user's request): left and right typed around the selection, or
         around the caret, which stays between them; 復原 takes it back as one change."""
@@ -1558,11 +1570,9 @@ class App(QObject):
             press_chord(0x11, {rules.SELECT_ALL: 0x41, rules.COPY: 0x43, rules.CUT: 0x58, rules.PASTE: 0x56}[command])
             # 剪下 / 貼上 are changes 復原 takes back (2026-10-17, the user's request) when what they did is known
             if command == rules.CUT and sel is not None:
-                press.deleted = sel
-                self.session.replaced_selection(sel.before, "", foreground(), sel.before + sel.text)
+                self._typed_over(press, sel, "")
             elif command == rules.PASTE and text and sel is not None:
-                press.deleted = sel
-                self.session.replaced_selection(sel.before, text, foreground(), sel.before + sel.text)
+                self._typed_over(press, sel, text)
             elif command == rules.PASTE and text:
                 self.session.dictated(text, None, foreground())
             elif command != rules.COPY:
