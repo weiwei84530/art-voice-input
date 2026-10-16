@@ -525,6 +525,10 @@ user). Press-and-talk recordings are left out: their files keep the start sound 
   paste only for one line of at most 300 characters, `_plain`: Claude Code turns a block into [Pasted text]) and a
   Backspace after the caret moved (the line before the caret read when it was said, `Session.known`); after a move
   the history starts from there. `dev/headless.py` has op:PHRASE and clip:TEXT for testing these.
+- 貼上 in a terminal over a selection: Claude Code copies a mouse selection as it is made, so selecting 世界 to paste
+  over replaced the 好 that 複製 had copied, and 世界 was pasted back (the user's report; the clipboard held the last
+  selection). `output.watch_clipboard` keeps the clipboard's last texts (not a paste's borrowing); when the clipboard
+  equals the selection, the text before it is pasted (`output.text_before`).
 
 ## Spoken edit commands (2026-10-16)
 

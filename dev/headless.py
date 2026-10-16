@@ -117,6 +117,7 @@ def _press_key(vk, n=1):
 
 appmod.press_key = _press_key
 appmod._clipboard_text = lambda: box.clip   # never the user's real clipboard
+appmod.watch_clipboard = lambda: None
 appmod.foreground = session.foreground = lambda: HWND
 appmod.Hotkeys.start = lambda self: None           # no real hotkey / keyboard hook
 replayed = []                                      # gestures given back to the key (key name per press)

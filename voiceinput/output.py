@@ -38,6 +38,9 @@ _k32.GlobalLock.restype = wt.LPVOID
 _k32.GlobalUnlock.argtypes = [wt.HGLOBAL]
 _k32.GlobalFree.argtypes = [wt.HGLOBAL]
 _owner = None             # a hidden window owning what we put on the clipboard (SetClipboardData needs one)
+# the clipboard's last texts, oldest first, without what a paste borrowed it for (watch_clipboard): Claude Code copies
+# a mouse selection as it is made, so selecting the text to paste over replaced what 複製 had copied (2026-10-17)
+_seen: list[str] = []
 
 
 def _settle() -> None:
@@ -126,6 +129,29 @@ def paste_text(text: str) -> None:
         pass
     _restore_timer.timeout.connect(restore)
     _restore_timer.start()
+
+
+def watch_clipboard() -> None:
+    """Main thread: keep the clipboard's last texts (text_before)."""
+    cb = QGuiApplication.clipboard()
+
+    def changed():
+        if _restore_timer is not None and _restore_timer.isActive():
+            return   # a paste's text, put back soon
+        note_clipboard(cb.text())
+    cb.dataChanged.connect(changed)
+    changed()
+
+
+def note_clipboard(text: str) -> None:
+    if text and (not _seen or _seen[-1] != text):
+        _seen.append(text)
+        del _seen[:-5]
+
+
+def text_before(current: str) -> str:
+    """The clipboard's last text other than current, "" if none."""
+    return next((t for t in reversed(_seen) if t != current), "")
 
 
 def restore_now() -> None:

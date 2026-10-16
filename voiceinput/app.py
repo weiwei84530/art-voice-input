@@ -56,7 +56,8 @@ from .keys import MOUSE_TRIGGERS, combo_vks
 from .listen import LEAD, Listener
 from .memory import Memory, is_latin, situation
 from .mute import Muter, recover as recover_mute
-from .output import backspace, copy_text, paste_text, press_chord, press_delete, press_key, restore_now
+from .output import (backspace, copy_text, paste_text, press_chord, press_delete, press_key, restore_now,
+                     text_before, watch_clipboard)
 from . import picker as picker_mod
 from .picker import Picker
 from .reading import reading_key
@@ -184,6 +185,7 @@ class App(QObject):
         # self.bg = ThreadPoolExecutor(max_workers=1)     # second opinion, second model load
         self._status_text = ""
         self.session = Session()
+        watch_clipboard()   # its last texts: 貼上 in a terminal that copied the selection as it was made
         self.muter = Muter()
         self._press: _Press | None = None        # the key or button held now
         self._pending: _Press | None = None      # a tap waiting to see whether a second press follows
@@ -1587,6 +1589,10 @@ class App(QObject):
             self._delete_selection(press, press.probe.result())
         elif command == rules.PASTE:
             text = _clipboard_text()
+            if text == sel.text:
+                # the terminal copied the selection itself as it was made (Claude Code does): what was copied before
+                text = text_before(text) or text
+                log.info("paste: the clipboard held the selection, pasting the text before it")
             if text:
                 self._replace_selection(press, sel, text)
 
