@@ -8,6 +8,7 @@ from .paths import CONFIG_PATH
 
 
 GESTURE_TIME_RANGE = (0.15, 0.8)
+BUTTON_SCALE_RANGE = (75, 125)
 
 
 @dataclass
@@ -28,11 +29,10 @@ class Config:
     button_look: str = "mic"
     # 節流模式 (2026-10-16): the orbs as first made, 15 fps and coarser; off, 30 fps and finer (looks first)
     orb_lite: bool = False
-    orb_dark: bool = True          # 光環 / 虹膜 with their dark disc (off: an experiment, 2026-10-16)
-    # how the floating button and the bubble shrink under the pointer (floatbtn.HOVER_MOTIONS)
-    hover_motion: str = "bounce"
-    # the 自訂 glow (glow == "custom"): colors (2-4), turn, pulse, depth, bright (glow.CUSTOM_KEYS); 2026-10-16
-    glow_custom: dict = field(default_factory=dict)
+    # the floating button's and the bubble's size, percent of the usual (75-125; 2026-10-16, the user's request)
+    button_scale: int = 100
+    # each glow style's changed parameters: style id -> colors (2-4), turn, pulse, depth, bright (glow.PARAM_KEYS)
+    glow_edits: dict = field(default_factory=dict)
     # the floating microphone button's place (on_focus "float"), as fractions of the screen's free range
     float_pos: list = field(default_factory=lambda: [0.98, 0.88])
     # the floating button only while text can be typed where the focus is and listening is off; False: always, while
@@ -63,9 +63,6 @@ class Config:
     # seconds: a press this long is a hold, a press this soon after a tap's release makes a double tap (both given
     # back to the hotkey); no longer on a tab since 2026-10-16
     gesture_time: float = 0.15
-    # while listening, when the text typed so far is decoded again and fixed: "command" (a spoken command or the
-    # end of listening) or "pause" (every pause); the user's choice of default, 2026-10-14
-    commit_at: str = "command"
     save_recordings: bool = False   # development only, to be removed before release (recordings.py)
     rules: list = field(default_factory=rules.defaults)   # custom operations (rules.Rule)
     rules_version: int = RULES_VERSION
@@ -80,6 +77,10 @@ class Config:
         cfg = cls(**known)
         if data.get("float_button", False) and not data.get("on_focus"):
             cfg.on_focus = "float"   # the floating button's checkbox (2026-10-16, a few hours) became this choice
+        if data.get("glow") == "custom":   # the 自訂 style (2026-10-16, a few hours): 彩虹 changed that way
+            cfg.glow = "siri"
+            cfg.glow_edits = {"siri": data.get("glow_custom") or {}}
+        cfg.button_scale = min(max(int(cfg.button_scale), BUTTON_SCALE_RANGE[0]), BUTTON_SCALE_RANGE[1])
         cfg.gesture_time = min(max(float(cfg.gesture_time), GESTURE_TIME_RANGE[0]), GESTURE_TIME_RANGE[1])
         if "rules" in data:
             old = rules.upgrade(rules.migrate([rules.Rule.from_dict(d) for d in data["rules"]]),

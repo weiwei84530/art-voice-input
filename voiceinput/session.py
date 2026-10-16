@@ -40,6 +40,7 @@ class Step:
     after: str              # the buffer right after it
     utterances: list        # Session.utterances before the change, restored when it is deleted
     tail: int = 0           # characters it also put after the caret (左右輸入文字), deleted with it
+    restore: object = None  # a draft's update: (the draft as it was before, its open sentence's pieces), App.undo
 
 
 class Session:

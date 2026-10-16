@@ -108,7 +108,7 @@ CJK/ASCII spacing → English sentence end → 嗎 questions → trailing punctu
 
 ## Settings window (tabs since 2026-10-11)
 
-Since 2026-10-16 (the user's requests) there are five tabs: 一般 (microphone, 麥克風快捷鍵, 定稿時機, 游標進到輸入框時,
+Since 2026-10-16 (the user's requests) there are five tabs: 一般 (microphone, 麥克風快捷鍵, 游標進到輸入框時,
 自動關閉麥克風, mute, punctuation names, described characters, autostart, recordings), 外觀 (new: 螢幕邊緣光暈 with
 its edges, 草稿反白顏色, 提示音 and 結束音在), 辨識紀錄, 自訂操作 (spoken operations only) and 詞庫. Removed the same
 day with everything behind them (the user's choice, what they had unticked): 用按鍵關閉麥克風時自動送出
@@ -151,6 +151,20 @@ listening, a click jumps it and turns listening off; the user chose that over fa
 `app.quit()` closes every window, so the test measured hidden buttons after the first loop; wait with a
 `QEventLoop` in such tests. The 自訂 glow's sliders show each value while dragged (at most every 0.08s), saved when
 let go.
+Late the same night (the user's requests; sentences above that say otherwise are history): no 自訂 style: every
+style's parameters are editable under it (`config.glow_edits`, style id -> the parameters that differ;
+`glow.style_for(id, edits)`, `glow.edited`), a changed style reads 名稱（已編輯） in the drop-down and 恢復預設 (next to
+預覽, enabled only then) drops its changes; a config with glow "custom" becomes 彩虹 with those changes. Two styles
+added: 草本 (`herb`, herbal greens) and 紫金 (`violet`, purple with orange-yellow). ▶ 預覽 and ▶ 試聽 are disabled
+while the glow shows (`settings.PREVIEW_MS`) or the sounds play, also when a pick played them. 流星 ran too fast and
+leapt about while speaking: the heads' place was time × a speed that grows with the voice, so a change of voice moved
+them by all the time so far; now the laps are summed per frame (`EdgeGlow._lap`, `glow.comet_speed`, 1 + 0.6 × the
+level). 光環 / 虹膜 have no dark disc or pupil (the experiment's checkbox and `orb_dark` removed), 光環's ring is a
+little smaller and thicker (radius 0.29 of the canvas, line 0.075). The hover shrink is always the spring (the
+游標移上去時 drop-down and `hover_motion` removed). 按鈕大小 (`button_scale`, a slider 75-125%, 5% steps, shown as
+「100%（標準）」 / 「90%」) scales the floating button, the bubble and the tab's examples (`OrbButton.set_look(...,
+scale)`; the examples keep room for 125% so the row does not move). 一般's 定稿時機 (`commit_at`) was removed: a draft
+is committed on a command or the end of listening, or at a pause once longer than 60s.
 選字's 模糊音 (2026-10-16 evening, the user's requests): ㄩㄣ with ㄧㄣ, ㄈ with ㄏㄨ (飛 / 灰, 發 / 花), ㄋ with ㄌ
 (`candidates._FUZZY`); a word only fuzzy-alike is listed from dictionary frequency 3 (`app._FUZZY_MIN`: 官癮, 灌嬰
 were offered for 光陰); the user's hotwords are matched by sound too (`candidates.rank_of`), so words McBopomofo
@@ -217,6 +231,12 @@ choice over a tray notice, which the key rows' days had). The spoken rows are li
 what they do (`settings._GROUPS` / `_ORDER`, the user's choice, also for rows they add): 輸入 (換行, 空白, text,
 左右輸入文字: 括號 （ ）, 引號 「」, rules_version 14), 修改 (Backspace, Delete, 復原), 剪貼簿 (全選 / 複製 / 剪下 /
 貼上), 其他 (other keys), 結束 (Enter, 結束錄音).
+Late on 2026-10-16 (the user's requests): a row reads 說 [phrase] 就會 … (no 「」); a default row says what it does in
+words (`settings._does`: 換行（按 Shift+Enter）, 左右加上 （）…) instead of its greyed-out action; a 自訂 row is not
+offered the commands a default row already does (復原, 結束錄音, 全選 / 複製 / 剪下 / 貼上: a phrase goes in that row
+instead). The red problems under the rows are those found when the tab came into view (switching to it, or the
+window shown on it; `_warn_rules`): one fixed goes at once, a new one (a row just added) waits until the tab is
+opened again, so ＋ 新增口說操作 brings no warning.
 Since 2026-10-16 the tab is a simple editor (the user's design; the card editor with steps, situations and any
 command was removed): 按鍵, three rows of [key or 不使用] [按一下 / 連按兩下 / 按住] + what it does: 開關麥克風,
 復原, 刪除選取的文字（有選取時） (`rules.KEY_ROWS`); 口說, rows 說「…」就會 [按鍵 / 輸入文字 / 復原 / 結束錄音] [value],
@@ -284,9 +304,9 @@ times mapped back): with the user's real thinking pauses (15s) a draft passed 30
 no timestamps, so nothing settled and every pause took 1.2-2.8s (2026-10-15; on that recording now 0.2-0.8s per pause,
 the commit 2.92s -> 0.25s). 0.5s more of each pause is kept (`_GAP_KEEP`): with 0.75s the recognizer's marks
 there were a coin toss (the user's 難道這樣沒有問題嗎 [3.7s] 還是說… lost its ？ in 7 of 10 decodes with inaudible
-noise added, 0 of 10 with 0.5s more; their text came out run together). The 一般 tab's 定稿時機
-(`commit_at`) picks when a draft is committed: on a command or the end of listening (default, the user's choice) or
-at every pause; a draft longer than 60s is committed at a pause. A draft shows the recognizer's 。？！ at its end while
+noise added, 0 of 10 with 0.5s more; their text came out run together). A draft is committed on a command or the
+end of listening (the user's choice; 定稿時機 `commit_at`, which could commit at every pause, was removed 2026-10-16);
+a draft longer than 60s is committed at a pause. A draft shows the recognizer's 。？！ at its end while
 speaking, and the next pause turns it into ， when the sentence goes on (the user's request, 2026-10-15; before, drafts
 had none while speaking, as a pause is not a sentence end); a commit by an operation (換行, 送出 …) or by the end of listening
 keeps the recognizer's 。？！, or gets 。 when it gave none (？ after 嗎, . after English only; the user's choice,
@@ -324,9 +344,12 @@ mouse's edits until turned off.
 not shown (the glow, the sounds and the tray icon still are).
 游標進到輸入框時 (`on_focus`, a 一般 drop-down, 2026-10-16, the user's requests; it replaced the same evening's
 "turn listening off when another window comes to the front / a click leaves the text box" checkbox): 不做事,
-游標旁顯示語音氣泡 (`floatbtn.Bubble`: a small microphone just right of the caret (`selection._caret_rect`: the right
-edge of the character before it) or a terminal's cursor; a click listens; it follows the caret and stays while
-nothing happens, and goes when the user types, the focus leaves or listening starts), 顯示可拖動的浮動按鈕
+點進輸入框時顯示語音氣泡 (`floatbtn.Bubble`; a click on it listens. Since late 2026-10-16, the user's design: it
+shows just right of a left click (not a drag) that put the focus in a text box (`App._clicked`: the focus is read
+120ms later; a read begun before the click says nothing of it), goes when the user types, turns the wheel, the
+focus leaves or listening starts, and comes back in its place when listening it was shown for ends. Keyboard focus
+(Tab) shows nothing. Until then it sat by the caret (UIA: the right edge of the character before it, else the text
+box's corner) and followed it: Notion, LINE and web pages reported the caret's place wrong), 顯示可拖動的浮動按鈕
 (`floatbtn.FloatButton`, the floating button's checkbox of a few hours before, migrated: a round button on top,
 fading in only while the focus is where text can be typed and listening is off, hidden elsewhere (the user's
 request: listening is for editing text; both can be changed on the 外觀 tab since the same evening, see 按鈕樣式); a
@@ -413,6 +436,15 @@ its 。; the draft used to be dropped). The last commit's draft comes back only 
 (compared as history steps: comparing texts matched by chance, and undoing a mark typed over a selection elsewhere
 brought an old sentence back). Until something is said after it, the next piece counts as said alone and
 the silence since 復原 is not decoded (it came out as "So," before a 換行).
+Since late 2026-10-16 (the user's choice: a real step back, so the marked text shows what may still change) the draft
+comes back as it was, not fixed: each pause's update keeps on its history step the draft before it and its open
+sentence's pieces (`Step.restore`, from `_refine` / `_refine_job`'s `prior`), and a commit keeps the draft as it was
+committed (`_committed[3:5]`, for 復原 of the change after it, a 換行). 復原 puts that state back (`_Draft.restored`;
+the pieces reach the worker through `_restored_spans` / `_take_restored`): its open sentence is marked again and is
+decoded again with what is said next (TTS: 今天天氣很好，我們去公園散步。| 明天要記得帶雨傘。 撤銷 然後再去吃晚餐 ->
+今天天氣很好，我們去公園散步，然後再去吃晚餐。); the speech taken back is not among the pieces. Its audio is held for
+this (`Listener.hold`, at most 180s back, released at a new session or when the caret moves); when it is gone the
+fixed-text draft above is the fallback.
 While listening, the indicator's red dot gets a spinning arc while speech is being decoded (`App._decoding` counts
 the worker's jobs; `spin_while_decoding`, a 一般 checkbox, on by default; the user's request, 2026-10-15). Typing or clicking ends the
 history: what the user changed is unknown. When nothing can be taken back, a tray notice says so, and why: the caret moved, or nothing
@@ -482,7 +514,11 @@ lived a few hours: the user wants hotwords added quietly (they come from deliber
   VoiceInput / Voice Input / voice input / VOICE INPUT / voice_input / voice-input / voiceinput, the styles picked
   most first, counted apart for one word and for several), hotwords among them first by weight. 8 rows.
 - **Smart picks** (`memory.py`, DATA_DIR/smart-picks.json, one example per line, listed on the 詞庫 tab): single
-  Chinese characters only (the user's choice). Modelled on art-shuangpin's core/user_preferences (spec §7): key
+  Chinese characters only (the user's choice). Since late 2026-10-16 (the user's rule) the characters right before
+  and right after must both agree (the start or end of the text counts), the ones further out only choose among
+  examples that do, and no change breaks a dictionary word around the character into no word (`_breaks_word`):
+  one agreeing character on either side was enough before, and 這個景片是 -> 影 (learned under 景's reading jing3)
+  turned 那個警告 into 那個影告. Modelled on art-shuangpin's core/user_preferences (spec §7): key
   (toned pinyin) + left (two characters, `^` boundary) + right (two characters; toneless readings until 2026-10-14, when the user chose
   characters on both sides: both are recognized text here, unlike an input method's unconverted pinyin, and the
   examples learned before were dropped) + value; applied after

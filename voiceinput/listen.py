@@ -31,6 +31,7 @@ LEAD = 0.5           # seconds of audio decoded before a piece
 TAIL = 0.25          # and after it
 MAX_PIECE = 30       # seconds; X-ASR fails beyond 40s
 _KEEP_IDLE = 1.0     # seconds of audio kept before the commit point while nobody speaks
+_MAX_HOLD = 180      # seconds: audio held for 復原 (hold) reaches back at most this far
 
 
 @dataclass
@@ -62,6 +63,7 @@ class Listener:
         self._starts: list[int] = []   # sample number of each chunk's first sample
         self._end = 0           # sample number after the last chunk
         self._keep = 0          # audio from here on is kept (the app's draft)
+        self._hold = None       # and from here, within _MAX_HOLD: drafts 復原 may bring back as they were
         self.level = 0.0
 
     @property
@@ -135,6 +137,17 @@ class Listener:
         with self._lock:
             self._keep = at
 
+    def hold(self, at: int | None):
+        """Keep the audio from sample `at` too (the earliest asked for since the last hold(None)), as far back as
+        _MAX_HOLD: a draft 復原 brings back is decoded again from its audio. None: no longer needed."""
+        with self._lock:
+            self._hold = at if at is None or self._hold is None else min(self._hold, at)
+
+    def kept_from(self) -> int:
+        """The first sample still kept."""
+        with self._lock:
+            return self._starts[0] if self._starts else self._end
+
     def _callback(self, indata, frames, time_info, status):
         mono = indata[:, 0].copy()
         if time.monotonic() < self._still_until:
@@ -194,6 +207,9 @@ class Listener:
                         cut = total - int((LEAD + _KEEP_IDLE) * SAMPLE_RATE)
                     else:   # the draft's audio
                         cut = min(self._keep, total) - int(_KEEP_IDLE * SAMPLE_RATE)
+                    if self._hold is not None:
+                        cut = min(cut, max(self._hold - int(_KEEP_IDLE * SAMPLE_RATE),
+                                           total - _MAX_HOLD * SAMPLE_RATE))
                     n = bisect.bisect_right(self._starts, cut) - 1   # chunks wholly before the cut
                     if n > 0:
                         del self._chunks[:n], self._starts[:n]

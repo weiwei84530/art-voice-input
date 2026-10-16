@@ -166,10 +166,11 @@ appmod.FloatButton.vanish = lambda self: print("      [浮動按鈕 隱藏]")
 appmod.FloatButton.burst = lambda self: print("      [浮動按鈕 放大淡出]")
 appmod.FloatButton.come_back = lambda self: print("      [浮動按鈕 縮回淡入]")
 appmod.FloatButton.jump = lambda self: print("      [浮動按鈕 彈一下]")
-appmod.Bubble.burst = lambda self: None
-appmod.focus_info = lambda: (None, None, None)   # the real focus is the user's: focus: steps say what it is
-appmod.Bubble.show_by = lambda self, rect, grow=False: (print(f"      [語音氣泡 {rect}{' 縮回淡入' if grow else ''}]"),
-                                                       appmod.Bubble.setVisible(self, False))
+appmod.Bubble.burst = lambda self: (print("      [語音氣泡 放大淡出]"), self.hide())
+appmod.focus_info = lambda: (None, None)   # the real focus is the user's: focus: steps say what it is
+_show_at, _come_back = appmod.Bubble.show_at, appmod.Bubble.come_back_here
+appmod.Bubble.show_at = lambda self, pt: (print(f"      [語音氣泡 在 {pt}]"), _show_at(self, pt))
+appmod.Bubble.come_back_here = lambda self: (print("      [語音氣泡 縮回淡入]"), _come_back(self))
 A = appmod.App(qapp)
 A.tray.hide()
 A.tray.showMessage = lambda title, text, *a: print(f"      [通知] {title}: {text}")
@@ -270,12 +271,16 @@ while time.monotonic() - t0 < 120 and not A.recognizer:
 pump(2)
 try:
     for step in _steps(sys.argv[2]):
-        if step.startswith("focus:"):   # focus:box:N (the focus in text box N), focus:none (where nothing is typed)
+        if step.startswith("focus:") or step.startswith("click:"):
+            # focus:box:N (the focus in text box N), focus:none (where nothing is typed); click:box:N / click:none
+            # the same after a left click there (the bubble shows by it)
             what = step[6:]
+            if step.startswith("click:"):
+                A._clicked((150, 110))
             if what == "none":
-                A._focus_seen(False, (1, ()), None)
+                A._focus_seen(False, (1, ()), time.monotonic())
             else:
-                A._focus_seen(True, (HWND, (int(what.split(":")[1]),)), (100, 100, 200, 30))
+                A._focus_seen(True, (HWND, (int(what.split(":")[1]),)), time.monotonic())
             pump(1.0)
             print(f"[焦點 {what}] 聽寫中：{A._listening}  氣泡：{A.bubble.isVisible()}")
             continue

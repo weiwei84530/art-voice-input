@@ -41,26 +41,41 @@ STYLES = [
     Style("sunset", "暖陽", ("#ff7a3d", "#ff3d6e", "#ffc23d", "#ff7a3d", "#ff5c8a", "#ff7a3d"), 0.1, 0.3),
     Style("ocean", "冰藍", ("#7fd6ff", "#3a8dff", "#c8f0ff", "#7fd6ff", "#4fa8ff", "#7fd6ff"), 0.06, 0.4),
     Style("red", "錄音紅", ("#ff453a", "#ff6b5e", "#ff2d20", "#ff453a"), 0.0, 1.0),
+    # added 2026-10-16 (the user's request): herbal greens, and purple with orange-yellow
+    Style("herb", "草本", ("#5fbf6b", "#2f8f5b", "#b8d96b", "#7fe0b0", "#4aa86a", "#5fbf6b"), 0.08, 0.3),
+    Style("violet", "紫金", ("#8a4dff", "#ffb23a", "#c070ff", "#ff8c2e", "#6a3df0", "#8a4dff"), 0.1, 0.3),
 ]
 BY_ID = {s.id: s for s in STYLES}
-CUSTOM = "custom"   # 自訂 (2026-10-16, the user's request): config.glow_custom, started from the style shown before
-CUSTOM_KEYS = ("colors", "turn", "pulse", "depth", "bright")
+# every style's parameters can be changed on the 外觀 tab (2026-10-16, the user's design, replacing a separate 自訂
+# style): config.glow_edits holds the changed ones per style id, 恢復預設 drops them
+PARAM_KEYS = ("colors", "turn", "pulse", "depth", "bright")
 
 
-def custom_from(style: Style) -> dict:
-    """A style's parameters as config.glow_custom holds them: its colors without the repeated last one."""
+def params(style: Style) -> dict:
+    """A style's parameters as config.glow_edits holds them: its colors (2-4) without the repeated last one."""
     colors = list(style.colors[:-1]) if style.colors[0] == style.colors[-1] else list(style.colors)
     return {"colors": colors[:4], "turn": style.turn, "pulse": style.pulse, "depth": style.depth,
             "bright": style.bright}
 
 
-def style_for(style_id: str, custom: dict | None) -> Style | None:
-    """The style picked: a preset, or 自訂 from its parameters (missing ones from 彩虹)."""
-    if style_id != CUSTOM:
-        return BY_ID.get(style_id)
-    c = {**custom_from(STYLES[0]), **(custom or {})}
-    colors = [x for x in c["colors"] if QColor(x).isValid()] or ["#3d7bff"]
-    return Style(CUSTOM, "自訂", tuple(colors + [colors[0]]), float(c["turn"]), float(c["pulse"]),
+def edited(style_id: str, edits: dict | None) -> bool:
+    """The style's parameters differ from its defaults."""
+    preset = BY_ID.get(style_id)
+    e = (edits or {}).get(style_id)
+    return bool(preset and e) and {**params(preset), **e} != params(preset)
+
+
+def style_for(style_id: str, edits: dict | None) -> Style | None:
+    """The style picked, with the user's changes to it (config.glow_edits); None for no glow."""
+    preset = BY_ID.get(style_id)
+    if preset is None:
+        return None
+    e = (edits or {}).get(style_id)
+    if not e:
+        return preset
+    c = {**params(preset), **{k: v for k, v in e.items() if k in PARAM_KEYS}}
+    colors = [x for x in c["colors"] if QColor(x).isValid()] or list(params(preset)["colors"])
+    return Style(preset.id, preset.name, tuple(colors + [colors[0]]), float(c["turn"]), float(c["pulse"]),
                  min(max(float(c["depth"]), 0.4), 2.0), min(max(float(c["bright"]), 0.3), 1.6))
 # how it moves (the 外觀 tab, 2026-10-16, the user's request for three, one of them waves): 柔光 is the glow as it
 # was (falloff masks made once per level); the others compute their mask every frame (motion_mask)
@@ -144,10 +159,16 @@ def geometry(screen: QRect, rect: QRect, edges) -> dict:
             "L": 2 * (W + H)}
 
 
-def motion_mask(geo: dict, motion: str, st: Style, t: float, level: float) -> QImage:
+def comet_speed(st: Style, level: float) -> float:
+    """流星's heads, in laps of the screen per second: faster with the voice."""
+    return (0.08 + st.turn * 0.4) * (1 + 0.6 * level)
+
+
+def motion_mask(geo: dict, motion: str, st: Style, t: float, level: float, lap: float = 0.0) -> QImage:
     """A strip's falloff for a moving glow at t seconds, level 0..1 (the voice): 波浪 rolls the glow's inner edge
     along the screen's edges in waves that grow with the voice; 流星 sends two bright heads with tails around the
-    screen over a faint glow; 漣漪 sends rings inward from the edges, brighter with the voice."""
+    screen over a faint glow, `lap` the laps they have run (comet_speed summed over the frames: computed from t
+    times the speed, a change of voice moved them t times as far at once, so they leapt about while speaking)."""
     strength = 0.45 + 0.55 * min(1.0, level)
     reach = DEPTH * st.depth
     if motion == "wave":
@@ -161,10 +182,9 @@ def motion_mask(geo: dict, motion: str, st: Style, t: float, level: float) -> QI
     elif motion == "comet":
         L = geo["L"]
         P = np.arange(L // _SCALE + 2) * _SCALE   # the band along the perimeter, then looked up per pixel
-        speed = L * (0.08 + st.turn * 0.4) * (1 + level)
         band = np.zeros(len(P))
         for k in range(2):
-            behind = (t * speed + k * L / 2 - P) % L   # px behind the head
+            behind = ((lap % 1.0) * L + k * L / 2 - P) % L   # px behind the head
             tail = np.exp(-np.minimum(behind, L * 0.3) / (L * 0.05)) * (behind < L * 0.3)
             front = np.exp(-np.minimum((L - behind) / 70.0, 6.0) ** 2)   # the head fades in ahead of it
             band = np.maximum(band, tail + front)
@@ -247,6 +267,7 @@ class EdgeGlow:
         self._screen = QRect()
         self._level = 0.0
         self._t0 = time.monotonic()
+        self._lap, self._lap_t = 0.0, 0.0   # 流星: laps run, and when they were counted (seconds since _t0)
         self._timer = QTimer(interval=1000 // _FPS, timeout=self._tick)
         self._fades = []
         for s in self._strips:
@@ -307,6 +328,7 @@ class EdgeGlow:
         self._on = True
         self._place(screen)
         self._t0 = time.monotonic()
+        self._lap, self._lap_t = 0.0, 0.0
         self._level = 0.0
         self._shown = None
         self._render()
@@ -401,6 +423,8 @@ class EdgeGlow:
         """False when the frame would look as the last one did (a still style, the same level)."""
         t = time.monotonic() - self._t0
         k, angle = frame(self._style, t, self._level)
+        self._lap += max(0.0, t - self._lap_t) * comet_speed(self._style, self._level)
+        self._lap_t = t
         if self.motion == "soft":
             if (k, angle) == self._shown:
                 return False
@@ -409,6 +433,6 @@ class EdgeGlow:
             if not s.on:
                 continue
             m = s.masks[k] if self.motion == "soft" else motion_mask(s.geo, self.motion, self._style, t,
-                                                                      self._level)
+                                                                      self._level, self._lap)
             s.image = render(self._style, self._screen, s.geometry(), m, angle)
         return True

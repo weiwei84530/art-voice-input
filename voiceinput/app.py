@@ -19,8 +19,8 @@ user's choice: no cutting the recording to say a command). Every pause ends a pi
 phrase or a punctuation name commits the draft and runs or types it; otherwise the piece joins the draft, which is
 decoded again and typed in place (in place of the text selected when its speech began, if any: the user may select
 with the mouse while listening), punctuation included; only its open sentence is decoded again (text up to a mark
-the recognizer put in a pause is settled). A commit (by a command, the end of listening, or every pause when
-commit_at says so) decodes the open sentence once more; by an operation or the end of listening it keeps the
+the recognizer put in a pause is settled). A commit (by a command, the end of listening, or a pause once the
+draft is long) decodes the open sentence once more; by an operation or the end of listening it keeps the
 recognizer's 。？！ or gets 。 (a spoken mark is typed instead). Moving the caret leaves a draft as typed, and speech
 not typed yet is decoded again at the new caret. Other gestures work while listening.
 
@@ -35,7 +35,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from PySide6.QtCore import QLockFile, QObject, QPointF, QRectF, Qt, QTimer, Signal
@@ -193,6 +193,8 @@ class App(QObject):
         self._marked = None                      # the buffer when the last commit added its sentence-final mark
         self._committed = None                   # (text before it, _Draft, its history step): 復原 may revive it
         self._spans: list = []                   # worker thread: the pieces of the draft's open sentence
+        # the pieces of a draft 復原 brought back as it was, for the worker to take up (_take_restored)
+        self._restored_spans, self._restore_lock = None, threading.Lock()
         self._ignored: set[str] = set()          # keys pressed while another was held
         self.hotwords = Hotwords()
         self._pack_stamp = None
@@ -206,7 +208,7 @@ class App(QObject):
 
         self._busy, self._busy_lock = 0, threading.Lock()   # decoding jobs queued or running
         self.glow = EdgeGlow(lambda: self.listener.level if self._listening else 0.0)
-        self.glow.set_style(style_for(self.cfg.glow, self.cfg.glow_custom))
+        self.glow.set_style(style_for(self.cfg.glow, self.cfg.glow_edits))
         self.glow.set_edges(self.cfg.glow_edges)
         self.glow.set_motion(self.cfg.glow_motion)
         self._preview_end = QTimer(self, singleShot=True,
@@ -219,7 +221,8 @@ class App(QObject):
         self._own_hwnds = {self.float_btn.hwnd(), self.bubble.hwnd()}
         self._apply_look()   # clicks on these are not caret moves
         self._box = None                         # the text box the focus is in (on_focus), its identity
-        self._caret_rect = None                  # where its caret was last seen (the bubble comes back there)
+        self._click = None                       # (point, time) of a click the bubble may show by (on_focus "bubble")
+        self._bubble_back = False                # the bubble showed when listening started: it comes back after
         self._box_quiet = False                  # listening was turned off by hand in it: not on again by itself
         self._box_auto = False                   # listening was turned on by the focus
         self._focus_busy = False
@@ -334,9 +337,14 @@ class App(QObject):
             elif msg in (0x20A, 0x20E):   # the wheel: the view scrolls, the marks would trail behind it
                 if self.marks.visible():
                     self.main.emit(self._scrolling)
+                if self.cfg.on_focus == "bubble":
+                    self.main.emit(self.bubble.hide)   # the user's request, 2026-10-16
             elif msg == 0x202:
                 term_watcher.mouse_up(data.pt.x, data.pt.y)
                 down, clicks["down"] = clicks["down"], None
+                if down is not None and abs(down[0] - data.pt.x) + abs(down[1] - data.pt.y) <= 4:
+                    pt = (data.pt.x, data.pt.y)
+                    self.main.emit(lambda: self._clicked(pt))
                 if down is not None and self._listening:
                     x, y = data.pt.x, data.pt.y
                     if abs(down[0] - x) + abs(down[1] - y) > 4:
@@ -570,6 +578,7 @@ class App(QObject):
                 self._draft, self._draft_start = None, begin
                 self._committed = None
                 self.listener.keep(begin)
+                self.listener.hold(None)
             self._on_main(reset)
         self.worker.submit(fresh)
         with self._early_lock:
@@ -593,6 +602,7 @@ class App(QObject):
             self.listener.still(wait)   # the start sound is not speech; muting waits for its end
         self._heard_at = time.monotonic()
         self._update_float("start")
+        self._bubble_back = self.bubble.isVisible() and not self.bubble.leaving
         self.bubble.burst()   # grows and fades out with the glow fading in
         self._marks_timer.start()
         if self.cfg.mute_while_recording:
@@ -664,9 +674,9 @@ class App(QObject):
 
     def _apply_look(self):
         """The floating button's and the bubble's look, in the glow's colors (彩虹 when there is no glow)."""
-        colors = palette(style_for(self.cfg.glow, self.cfg.glow_custom))
+        colors = palette(style_for(self.cfg.glow, self.cfg.glow_edits))
         for w in (self.float_btn, self.bubble):
-            w.set_look(self.cfg.button_look, colors, self.cfg.orb_lite, self.cfg.orb_dark, self.cfg.hover_motion)
+            w.set_look(self.cfg.button_look, colors, self.cfg.orb_lite, self.cfg.button_scale)
 
     def _float_moved(self, fx: float, fy: float):
         self.cfg.float_pos = [round(fx, 4), round(fy, 4)]
@@ -717,13 +727,22 @@ class App(QObject):
         self._focus_busy = True
 
         def read():
+            started = time.monotonic()   # a click before this is where the focus read is
             info = focus_info()
-            self.main.emit(lambda: self._focus_seen(*info))
+            self.main.emit(lambda: self._focus_seen(*info, started))
         self._focus_pool.submit(read)
 
-    def _focus_seen(self, editable, key, rect):
-        """Main thread (the user's requests, 2026-10-16). The focus came into a text box (a new one: another control
-        or window): "bubble" shows the bubble next to it; "listen" turns listening on, unless it was turned off by
+    def _clicked(self, pt):
+        """Main thread: a left click (not a drag) outside our windows. With the bubble, the focus is read soon after
+        (where the click put it): in a text box the bubble shows by the click (2026-10-16, the user's design)."""
+        if self.cfg.on_focus != "bubble" or self._listening:
+            return
+        self._click = (pt, time.monotonic())
+        QTimer.singleShot(120, self._watch_focus)
+
+    def _focus_seen(self, editable, key, started: float = 0.0):
+        """Main thread (the user's requests, 2026-10-16). The focus is in a text box: "bubble" shows the bubble by a
+        click that has just been made (in it); a new one (another control or window) with "listen" turns listening on, unless it was turned off by
         hand in this box. The focus went where nothing can be typed (a web page's blank part, a button, the
         desktop): the bubble goes, and listening is turned off (when it was in a text box before: listening may be
         turned on by hand anywhere). Unknown places and VoiceInput's own windows change nothing."""
@@ -731,9 +750,10 @@ class App(QObject):
         mode = self.cfg.on_focus
         if not mode or editable is None:
             return
+        click = None
+        if self._click is not None and self._click[1] <= started:   # a read begun before it says nothing of it
+            click, self._click = self._click, None
         if editable:
-            if rect:
-                self._caret_rect = rect
             new = key != self._box
             if new:
                 self._box, self._box_quiet = key, False
@@ -741,8 +761,8 @@ class App(QObject):
                 log.info("listen: on, the focus is in a text box")
                 if self._listen_now("focus", quiet=True):
                     self._box_auto = True
-            elif mode == "bubble" and not self._listening and rect and (new or self.bubble.isVisible()):
-                self.bubble.show_by(rect)   # a new box, or following the caret
+            elif mode == "bubble" and not self._listening and click and time.monotonic() - click[1] < 1.5:
+                self.bubble.show_at(click[0])
             elif mode == "float":
                 self._update_float()
             return
@@ -756,7 +776,7 @@ class App(QObject):
     def _preview_glow(self, style_id: str):
         """A glow style picked, changed or previewed in the settings: shown for a moment (unless listening shows it
         already); a change while it shows restarts the moment."""
-        self.glow.set_style(style_for(style_id, self.cfg.glow_custom))
+        self.glow.set_style(style_for(style_id, self.cfg.glow_edits))
         self.glow.set_edges(self.cfg.glow_edges)
         self.glow.set_motion(self.cfg.glow_motion)
         if not self._listening:
@@ -784,8 +804,8 @@ class App(QObject):
         self._marks_timer.stop()
         self.marks.hide()
         self._update_float("stop")
-        if self.cfg.on_focus == "bubble" and self._box is not None and self._caret_rect:
-            self.bubble.show_by(self._caret_rect, grow=True)   # back by the caret as the glow fades out
+        if self.cfg.on_focus == "bubble" and self._box is not None and self._bubble_back:
+            self.bubble.come_back_here()   # back in its place as the glow fades out
         # the end sound marks the microphone going off, nothing about the text (the user's choice, 2026-10-16: the
         # 文字輸入完成時 option was removed)
         self.muter.restore()
@@ -796,12 +816,14 @@ class App(QObject):
 
         def finished():   # worker thread, after the last piece: the rest of the draft is committed, then the steps
             self._on_main(lambda: None)
+            self._take_restored()
             d = self._draft
             spans, self._spans = self._spans, []
             if d is not None:
                 spans = [p for p in spans if p.start >= d.anchor]
                 # a draft 復原 brought back with nothing said since: the silence after it is not decoded ("So")
-                self._commit_job(self._draft_start, d.anchor, d.anchor if d.revived else end, end, d.ctx,
+                quiet = d.revived or (d.restored and not spans)
+                self._commit_job(self._draft_start, d.anchor, d.anchor if quiet else end, end, d.ctx,
                                  final=True, spans=spans)
 
             def run():
@@ -908,6 +930,7 @@ class App(QObject):
         speech under way) starts a new draft."""
         d = self._draft
         self.marks.hide()
+        self.listener.hold(None)   # the caret moved: 復原 can no longer bring a draft back
         log.info("draft left as typed: %s", d.typed if d else "")
         if d is not None and d.placed and d.typed:   # never committed: logged as it stands
             self.book.frozen(d.typed)
@@ -918,7 +941,7 @@ class App(QObject):
         self.listener.keep(at)
 
     def _refine(self, start: int, anchor: int, settled: str, live: str, after: int, upto: int, ctx,
-                info: dict | None = None):
+                info: dict | None = None, prior: list | None = None):
         """Main thread: a pause. The draft's open sentence (its audio from `anchor` to `upto`) was decoded again:
         `settled` is the part up to a ， or 。 that fell in a pause, fixed from now on (the open sentence starts at
         `after`), `live` the rest. Typed in place of what was there."""
@@ -934,6 +957,9 @@ class App(QObject):
             self._freeze(at)
             self._decoding(self._redo_job, at)
             return
+        # the draft as it was, for 復原 to bring back with its open sentence still open (the user's request,
+        # 2026-10-16): prior holds that sentence's pieces before this update's
+        snap = replace(d) if d is not None and d.placed and prior is not None else None
         if d is None:
             d = self._new_draft(ctx)
         elif not d.placed:   # nothing typed yet: the latest speech's caret and selection
@@ -949,12 +975,17 @@ class App(QObject):
         if end and d.final and not _inside(d.ctx):
             d.final += end.group()
         self.listener.keep(after)
+        last = self.session.history[-1] if self.session.history else None
         self._show_draft(step=True)
+        if snap is not None and self.session.history and self.session.history[-1] is not last:
+            self.session.history[-1].restore = (snap, list(prior))
+            self.listener.hold(snap.anchor)
         if d.placed and d.typed == d.final:
             d.shown = upto
             self.book.heard(info, before, d.typed, settled)
 
-    def _commit(self, text: str, start: int, anchor: int, at: int, ctx, command=None, final: bool = False):
+    def _commit(self, text: str, start: int, anchor: int, at: int, ctx, command=None, final: bool = False,
+                spans: list = ()):
         """Main thread: the draft's open sentence decoded again joins its settled text and the draft is done; then
         the command it ended with runs. Listening goes on from `at`. final (an operation or the end of listening):
         the recognizer's 。？！ at the end is kept, or 。 added when it gave none (the user's choice, 2026-10-14/15:
@@ -969,6 +1000,7 @@ class App(QObject):
             elif d is not None and not d.placed:
                 d.ctx, d.sel = ctx, ctx.selection
             if d is not None:
+                pre = replace(d)   # as it was: 復原 of the change after the commit brings it back so
                 before = d.typed if d.placed else ""
                 if text:
                     _go_on(d)
@@ -992,9 +1024,11 @@ class App(QObject):
             if d is not None:
                 self._marked = self.session.buffer if marked else None
                 b = self.session.buffer
-                self._committed = (b[:len(b) - len(d.typed)], d, self.session.history[-1]) \
+                self._committed = (b[:len(b) - len(d.typed)], d, self.session.history[-1], pre, list(spans)) \
                     if d.placed and d.typed and self.session.clean() and b.endswith(d.typed) \
                     and self.session.history else None
+                if self._committed is not None and pre.placed:
+                    self.listener.hold(pre.anchor)
         if command is not None:
             # the selection made before the command was said, unless the text before it went there
             sel = ctx.selection
@@ -1141,6 +1175,7 @@ class App(QObject):
                 return
             ctx = probe.result() if probe is not None else Context()
             start, anchor = state["start"], state["anchor"]
+            self._take_restored()
             self._spans = [p for p in self._spans if p.start >= anchor] + [piece]
             audio = self.listener.audio(piece.lo, piece.hi)
             t0 = time.monotonic()
@@ -1174,7 +1209,7 @@ class App(QObject):
                 end = piece.start if state["drafted"] else anchor
                 self._commit_job(start, anchor, end, piece.hi, ctx, (op, typed, entry), final=not typed,
                                  spans=spans)
-            elif self.cfg.commit_at == "pause" or piece.hi - anchor > _DRAFT_MAX * SAMPLE_RATE:
+            elif piece.hi - anchor > _DRAFT_MAX * SAMPLE_RATE:
                 spans, self._spans = self._spans, []
                 self._commit_job(start, anchor, piece.hi, piece.hi, ctx, spans=spans)
             else:
@@ -1189,6 +1224,7 @@ class App(QObject):
         sentence, not the whole draft (the user's request, 2026-10-14: a commit of a long draft took 3.25s).
         short: the piece is short enough to be a command."""
         t0 = time.monotonic()
+        prior = [p for p in self._spans if p is not piece]   # the open sentence before this piece (復原)
         audio, index = self._speech(anchor, piece.hi, self._spans)
         words = self._bias_words(ctx)
         names = self._command_words() if short else []
@@ -1216,7 +1252,7 @@ class App(QObject):
         live = self._text_of(live, ctx, [], keep_end=True)
         log.info("draft %.2fs: %s | %s", time.monotonic() - t0, settled, live)
         info = dict(info or {}, redo_s=time.monotonic() - t0)
-        self.main.emit(lambda: self._refine(start, anchor, settled, live, after, piece.hi, ctx, info))
+        self.main.emit(lambda: self._refine(start, anchor, settled, live, after, piece.hi, ctx, info, prior))
 
     def _ran_tail(self, text, tokens, times, index, piece, ctx, start, anchor, t0, info=None) -> bool:
         """The last piece, decoded after the speech before it, may be a command it was not alone: the user's 換行
@@ -1245,11 +1281,19 @@ class App(QObject):
         decoded again as a new draft at the caret and selection now."""
         state = {}
         self._on_main(lambda: state.update(go=self._draft is None and self._draft_start == at))
+        self._take_restored()
         spans = [p for p in self._spans if p.hi > at]
         if not state.get("go") or not spans:   # a later piece got there first
             return
         self._spans = spans
         self._refine_job(at, at, spans[-1], ContextProbe().result(), info={"redo": True})
+
+    def _take_restored(self):
+        """Worker thread: a draft 復原 brought back as it was: its open sentence's pieces are the draft's again."""
+        with self._restore_lock:
+            spans, self._restored_spans = self._restored_spans, None
+        if spans is not None:
+            self._spans = spans
 
     def _speech(self, anchor: int, end: int, spans: list):
         """The open sentence's audio [anchor, end) with the silence between its pieces (spans) cut down to their own
@@ -1300,7 +1344,7 @@ class App(QObject):
         if text:
             log.info("commit %.2fs: %s", time.monotonic() - t0, text)
             self._keep(audio, asr=raw, fmt=text, result=text, op=None)
-        self.main.emit(lambda: self._commit(text, start, anchor, at, ctx, command, final))
+        self.main.emit(lambda: self._commit(text, start, anchor, at, ctx, command, final, spans))
 
     # --- steps ---
     def _run_steps(self, press: _Press, steps: list, done=None):
@@ -1481,6 +1525,7 @@ class App(QObject):
                          "沒有可以復原的了")
             return
         d = self._draft
+        restore = step.restore   # the draft as it was before this update, its open sentence still open
         if d is not None and d.placed and step.after.endswith(d.typed):
             source = (step.after[:len(step.after) - len(d.typed)], d)
         elif self._committed is not None and (step is self._committed[2] or len(s.history) > 1
@@ -1488,6 +1533,8 @@ class App(QObject):
             # the commit's own change, or the one right after it (its 換行): not a later, unrelated one (a selection
             # replaced elsewhere brought an old sentence back as a draft; comparing texts matched by chance)
             source = self._committed[:2]
+            if step is not self._committed[2]:   # the change after the commit: the draft as it was committed
+                restore = self._committed[3:5]
         else:
             source = None
         n, tail = s.plan_to(step.before)
@@ -1510,7 +1557,18 @@ class App(QObject):
         if source is not None and self._listening and self._draft is None:
             before, old = source
             rest = step.before[len(before):] if step.before.startswith(before) else ""
-            if rest:
+            if rest and restore is not None and restore[0].anchor >= self.listener.kept_from():
+                # as it was (the user's request, 2026-10-16): its open sentence is marked and decoded again with
+                # what is said next; the speech taken back is not among its pieces
+                snap, spans = restore
+                self._draft = replace(snap, typed=rest, final=rest, placed=True, revived=False, restored=True)
+                self._draft_start = snap.start
+                self.listener.keep(snap.anchor)
+                with self._restore_lock:
+                    self._restored_spans = list(spans)
+                self._marked = None
+                log.info("undo: the draft as it was: %s | %s", snap.settled, rest[len(snap.settled):])
+            elif rest:   # its audio is gone (or nothing was kept): a draft with its text fixed
                 now = self.listener.now
                 self._draft = _Draft(now, old.ctx, anchor=now, settled=rest, final=rest, typed=rest, placed=True,
                                      shown=now, revived=True)
@@ -1760,7 +1818,7 @@ class App(QObject):
 
     def apply_settings(self):
         self.hotkeys.set_keys(self._hotkeys())
-        style = style_for(self.cfg.glow, self.cfg.glow_custom)
+        style = style_for(self.cfg.glow, self.cfg.glow_edits)
         if self.glow.style != style or self.glow.edges != self.cfg.glow_edges                 or self.glow.motion != self.cfg.glow_motion:
             self.glow.set_style(style)
             self.glow.set_edges(self.cfg.glow_edges)
@@ -1870,7 +1928,8 @@ class _Draft:
     lead: str = ""             # a space typed before it
     placed: bool = False
     shown: int = 0             # the sample its typed text was decoded up to
-    revived: bool = False      # brought back by 復原: what is said next goes on after a mark
+    revived: bool = False      # brought back by 復原 with its text fixed: what is said next goes on after a mark
+    restored: bool = False     # brought back by 復原 as it was: its open sentence's pieces were handed back
 
 
 class _Known:

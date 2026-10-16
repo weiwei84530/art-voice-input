@@ -14,8 +14,11 @@ written for phrases too; with single characters only, the phrase cases no longer
 
 After formatting, every span whose reading has examples is matched: walking outward from the span on each side,
 agreeing tokens count until the first disagreement. Most agreement wins, then more on the right, then the boundary,
-then the newest. A single Chinese character needs at least one agreeing token and is left alone when the best
-examples disagree (so 在 / 再 do not flip each other); a phrase applies anywhere, even with nothing agreeing (the
+then the newest. A single Chinese character needs the nearest token on both sides to agree (the start or end of
+the text counts as a token there) and is left alone when the best examples disagree (so 在 / 再 do not flip each
+other); the tokens further out only choose among examples that qualify. It is not changed either when that breaks a
+dictionary word around it into no word (`_breaks_word`). Until 2026-10-16 one agreeing token on either side was
+enough: the user's 這個景片是 -> 影 (learned under 景's reading jing3) turned every 個警告 into 個影告; a phrase applies anywhere, even with nothing agreeing (the
 user's choice: picked once, used everywhere until picked back in another context). A pick deletes older examples
 with another value whose context does not conflict with it; examples in conflicting contexts stay, which is how one
 reading learns two answers.
@@ -31,6 +34,7 @@ import re
 import threading
 import time
 
+from . import candidates
 from .paths import DATA_DIR
 from .reading import Token, reading_key, tokens
 
@@ -83,6 +87,26 @@ def _agreement(ex_left, ex_right, left, right) -> tuple[int, int, bool]:
             break
         rm += 1
     return lm, rm, boundary
+
+
+def _neighbours_agree(ex_left, ex_right, left, right) -> bool:
+    """The token right before and right after the span are the example's (`^` before, nothing after, alike)."""
+    return (ex_left[-1:] == left[-1:]) and (ex_right[:1] == right[:1])
+
+
+def _breaks_word(text: str, a: int, value: str) -> bool:
+    """Putting value at text[a] breaks a dictionary word of 2-4 characters around it into no word (警告 -> 影告)."""
+    words = []
+    for n in range(2, 5):
+        for lo in range(max(0, a - n + 1), a + 1):
+            span = text[lo:lo + n]
+            if len(span) == n and all(_CJK.match(ch) for ch in span):
+                words.append((span, span[:a - lo] + value + span[a - lo + 1:]))
+    old = [w for w, _ in words if candidates.is_word(w)]
+    return bool(old) and not any(candidates.is_word(new) for _, new in words)
+
+
+_CJK = re.compile(r"[\u3400-\u9fff\uf900-\ufaff]")
 
 
 def _conflict(a: dict, b: dict) -> bool:
@@ -183,8 +207,12 @@ class Memory:
                 return None
             scored = []
             for e in exs:
+                if single and not _neighbours_agree(e["left"], e["right"], left, right):
+                    continue
                 lm, rm, b = _agreement(e["left"], e["right"], left, right)
                 scored.append(((lm + rm, rm, b), e))
+            if not scored:
+                return None
             best = max(rank for rank, _ in scored)
             top = [e for rank, e in scored if rank == best]
             if single:
@@ -262,6 +290,8 @@ class Memory:
                 if value is None:
                     continue
                 why = _blocked(full, a, b, value, levels) if levels and value != full[a:b] else ""
+                if not why and n == 1 and value != full[a:b] and len(value) == 1 and _breaks_word(full, a, value):
+                    why = f"breaks the word around {full[a:b]}"
                 if why:
                     log.info("smart pick skipped: %s -> %s (%s)", full[a:b], value, why)
                     continue

@@ -12,8 +12,8 @@ microphone's disc and its light has room around it (the user found every look sm
 2026-10-16). 節流模式 (`lite`, the 外觀 tab, off by default: looks first, the user's choice) keeps the first
 version: 15 frames a second, glows blurred from a quarter of the size, fewer specks and filaments; without it 30
 frames a second, glows made of smooth gradients (流光's outer light looked coarse), the full counts.
-光環 and 虹膜 can be drawn without their dark disc and pupil (`dark` False; an experiment the user asked for,
-2026-10-16).
+光環 and 虹膜 have no dark disc or pupil (an experiment behind a checkbox for a few hours on 2026-10-16, then the
+user's choice); 光環's ring was made a little smaller and thicker the same evening.
 """
 import math
 import time
@@ -150,12 +150,12 @@ def _breath(p, s, ph, h, colors, px, fine):
     _disc(p, c, c, R)
 
 
-def _halo(p, s, ph, h, colors, px, fine, dark=True):
-    """光環: a dark glass disc in a turning ring of the colors."""
-    c, r = s / 2, s * 0.32
+def _halo(p, s, ph, h, colors, px, fine):
+    """光環: a turning ring of the colors with a soft core."""
+    c, r = s / 2, s * 0.29
 
     def glow(q):
-        q.setPen(QPen(_conic(c, c, ph, colors), s * 0.12))
+        q.setPen(QPen(_conic(c, c, ph, colors), s * 0.15))
         q.setBrush(Qt.NoBrush)
         _disc(q, c, c, r)
     p.save()
@@ -167,11 +167,7 @@ def _halo(p, s, ph, h, colors, px, fine, dark=True):
     else:
         p.drawImage(QRectF(0, 0, s, s), _blurred(px, s, glow))
     p.restore()
-    p.setPen(Qt.NoPen)
-    if dark:
-        p.setBrush(_radial(c - r * 0.3, c - r * 0.3, r * 1.3, [(0, QColor("#3a3f4c")), (1, QColor("#16181e"))]))
-        _disc(p, c, c, r * 0.97)
-    p.setPen(QPen(_conic(c, c, ph, colors), s * (0.045 + 0.02 * h)))
+    p.setPen(QPen(_conic(c, c, ph, colors), s * (0.075 + 0.02 * h)))
     p.setBrush(Qt.NoBrush)
     _disc(p, c, c, r)
     core = _drift(colors, ph * len(colors))
@@ -270,8 +266,8 @@ def _corona(p, s, ph, h, colors, px, fine):
     p.restore()
 
 
-def _iris(p, s, ph, h, colors, px, fine, dark=True):
-    """虹膜: thin rings of the colors around a dark pupil, focusing in and out."""
+def _iris(p, s, ph, h, colors, px, fine):
+    """虹膜: thin rings of the colors around an open middle, focusing in and out."""
     c, R, u = s / 2, s * 0.36, ph * TAU
     focus = 0.5 + 0.5 * math.sin(2 * u)
     pupil = R * (0.26 + 0.06 * focus + 0.08 * h)
@@ -280,9 +276,6 @@ def _iris(p, s, ph, h, colors, px, fine, dark=True):
     p.setPen(Qt.NoPen)
     p.fillRect(QRectF(0, 0, s, s), _radial(c, c, R * 1.2, [(0, _c(hc, 0)), (0.5, _c(hc, 0.3 + 0.25 * h)),
                                                             (1, _c(hc, 0))]))
-    if dark:
-        p.setBrush(QColor("#14161c"))
-        _disc(p, c, c, R)
     p.setBrush(Qt.NoBrush)
     for i in range(n):
         f = i / (n - 1)
@@ -291,13 +284,6 @@ def _iris(p, s, ph, h, colors, px, fine, dark=True):
         p.setPen(QPen(_conic(c, c, ph * (1 if i % 2 else -1) + i / 7, colors), max(0.7, s * 0.016)))
         _disc(p, c, c, r)
     p.setOpacity(1)
-    p.setPen(Qt.NoPen)
-    if not dark:
-        return
-    p.setBrush(_radial(c, c, pupil, [(0, QColor("#05060a")), (0.8, QColor("#0b0d12")), (1, _c(hc, 0.6))]))
-    _disc(p, c, c, pupil)
-    p.setBrush(_c("#ffffff", 0.75))
-    _disc(p, c - pupil * 0.35, c - pupil * 0.4, max(1.0, pupil * 0.18))
 
 
 def _liquid(p, s, ph, h, colors, px, fine):
@@ -375,7 +361,7 @@ def canvas(size: int) -> int:
 
 
 def draw(look: str, size: float, ratio: float, phase: float, hover: float, colors: list,
-         fine: bool = True, dark: bool = True) -> QPixmap:
+         fine: bool = True) -> QPixmap:
     """One frame of a look: size logical px (the canvas), device pixel ratio, phase 0..1 of its loop."""
     px = max(1, round(size * ratio))
     img = QImage(px, px, QImage.Format_ARGB32_Premultiplied)
@@ -383,8 +369,7 @@ def draw(look: str, size: float, ratio: float, phase: float, hover: float, color
     p = QPainter(img)
     p.setRenderHint(QPainter.Antialiasing)
     p.scale(px / size, px / size)
-    kw = {"dark": dark} if look in ("halo", "iris") else {}
-    _DRAW[look](p, size, phase, hover, colors, px, fine, **kw)
+    _DRAW[look](p, size, phase, hover, colors, px, fine)
     p.end()
     pm = QPixmap.fromImage(img)
     pm.setDevicePixelRatio(px / size)
@@ -401,22 +386,26 @@ class OrbPlayer:
         self.look = "mic"
         self.colors = ["#3d7bff", "#a259ff", "#ff4fa3", "#ff9f43", "#29d3ff"]
         self.lite = False
-        self.dark = True
         self.hover = False
         self._frames: list = []
         self._key = None
         self._t0 = time.monotonic()
         self._timer = QTimer(widget, interval=1000 // FINE_FPS, timeout=widget.update)
 
-    def set_look(self, look: str, colors: list, lite: bool = False, dark: bool = True):
+    def set_look(self, look: str, colors: list, lite: bool = False):
         self.look = look if look in LOOKS else "mic"
         self.colors = list(colors) or self.colors
         self.lite = lite
-        self.dark = dark
         self._frames = []
         self._timer.setInterval(1000 // (FPS if lite else FINE_FPS))
         if self.look == "mic":
             self._timer.stop()
+        self.widget.update()
+
+    def resize(self, size: int):
+        """For a button of another size (the 外觀 tab's 按鈕大小): its frames are drawn again."""
+        self.size = canvas(size)
+        self._frames = []
         self.widget.update()
 
     def start(self):
@@ -435,16 +424,15 @@ class OrbPlayer:
             return False
         ratio = self.widget.devicePixelRatioF()
         fine = not self.lite
-        key = (self.look, tuple(self.colors), ratio, fine, self.dark)
+        key = (self.look, tuple(self.colors), ratio, fine, self.size)
         if self.hover:   # drawn live while the pointer is on it
-            p.drawPixmap(0, 0, draw(self.look, self.size, ratio, self._phase(), 1.0, self.colors, fine, self.dark))
+            p.drawPixmap(0, 0, draw(self.look, self.size, ratio, self._phase(), 1.0, self.colors, fine))
             return True
         if key != self._key or not self._frames:   # drawn as they first play: no pause to draw a whole loop
             self._frames = [None] * round(_LOOPS[self.look] * (FINE_FPS if fine else FPS))
             self._key = key
         i = int(self._phase() * len(self._frames)) % len(self._frames)
         if self._frames[i] is None:
-            self._frames[i] = draw(self.look, self.size, ratio, i / len(self._frames), 0.0, self.colors, fine,
-                                   self.dark)
+            self._frames[i] = draw(self.look, self.size, ratio, i / len(self._frames), 0.0, self.colors, fine)
         p.drawPixmap(0, 0, self._frames[i])
         return True

@@ -75,59 +75,19 @@ _DESKTOP = {"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"}
 
 
 def focus_info():
-    """(editable, key, rect) of the focused control: focus_editable's answer, an identity of the control (its
-    window and UI Automation runtime id) and where a bubble may go next to it (physical pixels: the terminal cursor's
-    cell, else the control's rectangle), or (None, None, None)."""
+    """(editable, key) of the focused control: focus_editable's answer and an identity of the control (its window and
+    UI Automation runtime id), or (None, None). (Until 2026-10-16 it also read the caret's place for the bubble,
+    which Notion, LINE and web pages often reported wrong; the bubble goes by the click now.)"""
     import os
     try:
         uia, U = _uia()
         el = uia.GetFocusedElement()
         if el.CurrentProcessId == os.getpid():
-            return None, None, None
-        editable = _editable(el, U)
+            return None, None
         key = (ctypes.windll.user32.GetForegroundWindow(), tuple(el.GetRuntimeId() or ()))
-        rect = None
-        if editable:
-            pattern = el.GetCurrentPattern(U.UIA_TextPatternId)
-            pattern = pattern.QueryInterface(U.IUIAutomationTextPattern) if pattern else None
-            if _proc_name(el.CurrentProcessId) in _TERMINALS or el.CurrentClassName == "TermControl":
-                cursor = _term_cursor(pattern) if pattern else None
-                if cursor is not None:
-                    x, y, w, h = _char_rect(*cursor)
-                    rect = (x, y, 0, h)
-            elif pattern:
-                rect = _caret_rect(pattern, U)
-            if rect is None:
-                r = el.CurrentBoundingRectangle
-                rect = (r.left, r.top, r.right - r.left, r.bottom - r.top)
-        return editable, key, rect
+        return _editable(el, U), key
     except Exception:
-        return None, None, None
-
-
-def _caret_rect(pattern, U):
-    """(x, y, 0, h) of the caret, physical pixels: the right edge of the character before it, else the left edge of
-    the one after it (an empty degenerate range has no rectangle)."""
-    try:
-        ranges = pattern.GetSelection()
-        if ranges.Length < 1:
-            return None
-        r = ranges.GetElement(0).Clone()
-        r.MoveEndpointByRange(U.TextPatternRangeEndpoint_Start, r, U.TextPatternRangeEndpoint_End)
-        before = r.Clone()
-        if before.MoveEndpointByUnit(U.TextPatternRangeEndpoint_Start, U.TextUnit_Character, -1):
-            flat = list(before.GetBoundingRectangles() or [])
-            if len(flat) >= 4 and before.GetText(-1) not in ("\r", "\n", "\r\n"):
-                x, y, w, h = flat[-4:]
-                return (x + w, y, 0, h)
-        after = r.Clone()
-        if after.MoveEndpointByUnit(U.TextPatternRangeEndpoint_End, U.TextUnit_Character, 1):
-            flat = list(after.GetBoundingRectangles() or [])
-            if len(flat) >= 4:
-                return (flat[0], flat[1], 0, flat[3])
-    except Exception:
-        pass
-    return None
+        return None, None
 
 
 def focus_editable() -> bool | None:

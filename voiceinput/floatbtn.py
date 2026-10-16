@@ -6,14 +6,14 @@ Both draw the look picked on the 外觀 tab (orbs.py: the microphone, or one of 
 colors), animated only while shown.
 
 Motions (`OrbButton`, 2026-10-16, the user's design): one look at rest, no hover color. The pointer over it shrinks it
-a little (`HOVER_MOTIONS`, picked on the 外觀 tab: smooth, bouncing or springy). When listening starts it grows quickly
+a little, springing (the user's pick of smooth, bouncing and springy, compared on the 外觀 tab for a few hours). When listening starts it grows quickly
 and fades out as the glow fades in (`glow.FADE_MS`); when listening ends it shrinks back from that size and fades in
 as the glow fades out. With 按下後不隱藏 (`float_keep`) the floating button stays: a click makes it jump a little and
 come back, and while listening a click turns listening off. Its window has room around the button (`_ROOM`) for the
 orb's light and for growing; the room is transparent, so clicks there go through. The button's place is the middle
 of it.
 With 只在可以打字的地方顯示 unticked (`float_text_only`, the 外觀 tab, 2026-10-16, the user's request) the floating
-button shows wherever the focus is.
+button shows wherever the focus is. 按鈕大小 (`button_scale`, 75-125%) scales both buttons.
 """
 import ctypes
 
@@ -24,27 +24,20 @@ from PySide6.QtWidgets import QWidget
 from .glow import FADE_MS
 from .orbs import OrbPlayer
 
-_SIZE = 44
+_SIZE = 44      # the floating button at 100%
 _ROOM = 2.2      # the window, times the button: the orb's light grown on a click still fits
 _HOVER = 0.88    # the size under the pointer
 _BURST = 1.5     # the size it grows to as it fades out
 _GWL_EXSTYLE, _WS_EX_NOACTIVATE, _WS_EX_TOPMOST = -20, 0x08000000, 0x8
 
-# how it shrinks under the pointer and comes back (the user's request: a choice to compare): name, easing, ms
-HOVER_MOTIONS = {"smooth": "平滑", "bounce": "彈跳", "spring": "彈簧"}
 
 
-def _hover_curve(motion: str):
-    if motion == "bounce":
-        c = QEasingCurve(QEasingCurve.OutBack)
-        c.setOvershoot(2.4)   # past the size and back once
-        return c, 320
-    if motion == "spring":
-        c = QEasingCurve(QEasingCurve.OutElastic)
-        c.setAmplitude(1.0)
-        c.setPeriod(0.42)     # a few small swings
-        return c, 520
-    return QEasingCurve(QEasingCurve.OutCubic), 200
+def _hover_curve():
+    """How it shrinks under the pointer and comes back: a spring, a few small swings."""
+    c = QEasingCurve(QEasingCurve.OutElastic)
+    c.setAmplitude(1.0)
+    c.setPeriod(0.42)
+    return c, 520
 
 
 def _paint_mic(p: QPainter):
@@ -70,12 +63,10 @@ class OrbButton(QWidget):
 
     def __init__(self, size: int, room: float = _ROOM, parent=None, flags=Qt.WindowType.Widget):
         super().__init__(parent, flags)
+        self.base, self.room = size, room   # the size at 100%
         self.bsize = size
-        side = round(size * room)
-        self.margin = (side - size) // 2
-        self.setFixedSize(side, side)
         self.orb = OrbPlayer(self, size)
-        self.hover_motion = "bounce"
+        self._fit()
         self.k = 1.0
         self.alpha = 1.0
         self.leaving = False   # growing and fading out: hidden at the end
@@ -87,12 +78,27 @@ class OrbButton(QWidget):
         self._fade.valueChanged.connect(self._set_alpha)
         self._fade.finished.connect(self._faded)
 
-    def set_look(self, look: str, colors: list, lite: bool = False, dark: bool = True, hover: str = "bounce"):
-        self.hover_motion = hover if hover in HOVER_MOTIONS else "bounce"
-        if (self.orb.look, self.orb.colors, self.orb.lite, self.orb.dark) != (look, list(colors), lite, dark):
-            self.orb.set_look(look, colors, lite, dark)
+    def _fit(self):
+        side = round(self.bsize * self.room)
+        self.margin = (side - self.bsize) // 2
+        self.setFixedSize(side, side)
+
+    def set_look(self, look: str, colors: list, lite: bool = False, scale: int = 100):
+        size = round(self.base * scale / 100)
+        if size != self.bsize:
+            center = self.geometry().center()
+            self.bsize = size
+            self._fit()
+            self.orb.resize(size)
+            self.move(center.x() - self.width() // 2, center.y() - self.height() // 2)
+            self._resized()
+        if (self.orb.look, self.orb.colors, self.orb.lite) != (look, list(colors), lite):
+            self.orb.set_look(look, colors, lite)
             if self.isVisible():
                 self.orb.start()
+
+    def _resized(self):
+        """The button's size changed (its window was kept centered where it was)."""
 
     # --- animation
     def _set_k(self, v):
@@ -182,12 +188,12 @@ class OrbButton(QWidget):
 
     def enterEvent(self, e):
         if not self.leaving:
-            curve, ms = _hover_curve(self.hover_motion)
+            curve, ms = _hover_curve()
             self._scale_to(_HOVER, ms, curve)
 
     def leaveEvent(self, e):
         if not self.leaving:
-            curve, ms = _hover_curve(self.hover_motion)
+            curve, ms = _hover_curve()
             self._scale_to(1.0, ms, curve)
 
     def paintEvent(self, e):
@@ -232,31 +238,41 @@ class _OnTop(OrbButton):
 
 
 class Bubble(_OnTop):
-    """The small microphone bubble right of the caret of a text box the focus just came into (on_focus "bubble",
-    2026-10-16, the user's requests): a click turns listening on; it follows the caret, and goes when the user types
-    or the focus leaves (it stays while nothing happens); it grows and fades out when listening starts and comes back
-    by the caret when listening ends. Never takes focus."""
+    """The small microphone bubble by the point a click put the caret in a text box (on_focus "bubble"; 2026-10-16,
+    the user's requests: by the caret at first, but Notion, LINE and web pages reported the caret's place wrong, so
+    by the click, which is where the user looks): a click on it turns listening on; it goes when the user types,
+    scrolls or the focus leaves; it grows and fades out when listening starts and comes back in its place when
+    listening ends. Never takes focus."""
     SIZE = 28
 
     def __init__(self):
         super().__init__(self.SIZE)
+        self._at = None   # the click it shows by (physical pixels)
 
-    def show_by(self, rect, grow: bool = False):
-        """rect: (x, y, w, h) in physical pixels of the caret (w 0) or, unknown, the text box; the bubble goes just
-        right of it, centered on a caret's line, kept on screen. grow: back after listening (come_back)."""
-        x, y, w, h = (int(v) for v in rect)
-        p, ratio = _logical(x + w, y + h)
+    def show_at(self, pt):
+        """By the click at pt (x, y) in physical pixels: just right of it, centered on it, kept on screen."""
+        self._at = tuple(pt)
+        self._place()
+        self.fade_in(140)   # nothing when it shows already (moved to the new click)
+
+    def _place(self):
+        if self._at is None:
+            return
+        p, _ratio = _logical(*self._at)
         screen = QGuiApplication.screenAt(p) or QGuiApplication.primaryScreen()
         a = screen.availableGeometry()
-        top = p.y() - self.SIZE if h / ratio > self.SIZE else p.y() - round(h / ratio / 2) - self.SIZE // 2
-        m = self.margin
-        self.move(min(max(p.x() + 6, a.left()), a.right() - self.SIZE) - m,
-                  min(max(top, a.top()), a.bottom() - self.SIZE) - m)
-        if grow:
+        size, m = self.bsize, self.margin
+        self.move(min(max(p.x() + 10, a.left()), a.right() - size) - m,
+                  min(max(p.y() - size // 2, a.top()), a.bottom() - size) - m)
+
+    def _resized(self):
+        self._place()
+
+    def come_back_here(self):
+        """Listening ended: back in its place, shrinking from the grown size as the glow fades out."""
+        if self._at is not None:
+            self._place()
             self.come_back()
-        elif not self.isVisible():
-            self.k, self.alpha, self.leaving = 1.0, 1.0, False
-            self._appear()
 
 
 def _logical(x: int, y: int):
@@ -306,8 +322,12 @@ class FloatButton(_OnTop):
             self._screen = screen
             a = screen.availableGeometry()
             fx, fy = self.place
-            self.move(a.left() + round(fx * (a.width() - _SIZE)) - self.margin,
-                      a.top() + round(fy * (a.height() - _SIZE)) - self.margin)
+            self.move(a.left() + round(fx * (a.width() - self.bsize)) - self.margin,
+                      a.top() + round(fy * (a.height() - self.bsize)) - self.margin)
+
+    def _resized(self):
+        self._screen = None
+        self._follow_pointer()
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
@@ -333,9 +353,10 @@ class FloatButton(_OnTop):
         screen = QGuiApplication.screenAt(self.geometry().center()) or QGuiApplication.primaryScreen()
         a = screen.availableGeometry()
         m = self.margin   # the button kept on screen, not the room around it
-        x = min(max(self.x() + m, a.left()), a.right() - _SIZE)
-        y = min(max(self.y() + m, a.top()), a.bottom() - _SIZE)
+        size = self.bsize
+        x = min(max(self.x() + m, a.left()), a.right() - size)
+        y = min(max(self.y() + m, a.top()), a.bottom() - size)
         self.move(QPoint(x - m, y - m))
         self._screen = screen
-        self.place = ((x - a.left()) / max(1, a.width() - _SIZE), (y - a.top()) / max(1, a.height() - _SIZE))
+        self.place = ((x - a.left()) / max(1, a.width() - size), (y - a.top()) / max(1, a.height() - size))
         self.moved.emit(*self.place)

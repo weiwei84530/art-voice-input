@@ -17,7 +17,8 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QColorDial
 
 from . import audio, cues, hotwords, packs, recordings, rules
 from . import glow as glowmod
-from .floatbtn import HOVER_MOTIONS, OrbButton
+from .config import BUTTON_SCALE_RANGE
+from .floatbtn import OrbButton
 from .highlight import COLORS as MARK_COLORS
 from .orbs import LOOKS, palette
 from .memory import BOUNDARY
@@ -47,8 +48,27 @@ for _r in rules.defaults():
         _BUILT_IN.append((_r.steps[0].type, _r.steps[0].value))
 
 
+_BUILT_IN_COMMANDS = {v for k, v in _BUILT_IN if k == rules.COMMAND}
+
+
 def _built_in(row) -> bool:
     return (row[1], row[2]) in _BUILT_IN
+
+
+def _does(kind: str, value) -> str:
+    """What a default operation does, in words (2026-10-16, the user's request: instead of its greyed-out action)."""
+    if kind == rules.KEYS:
+        return {"Shift+Enter": "換行（按 Shift+Enter）", "Space": "輸入一個空白", "Tab": "按 Tab",
+                "Backspace": "刪除游標前的一個字（有選取時刪除選取的文字）",
+                "Delete": "刪除游標後的一個字（有選取時刪除選取的文字）",
+                "Enter": "按 Enter 送出，麥克風繼續開著"}.get(value, f"按 {value}")
+    if kind == rules.TEXT:
+        return f"輸入「{value}」"
+    if kind == rules.WRAP and isinstance(value, (list, tuple)) and len(value) == 2:
+        return f"左右加上 {value[0]}{value[1]}，游標留在中間"   # with a selection: around it (the note's ⓘ)
+    return {rules.UNDO: "收回 VoiceInput 剛做的修改（一次一步）", rules.STOP: "關閉麥克風（不按 Enter）",
+            rules.SELECT_ALL: "全選（終端機裡無法全選）", rules.COPY: "複製選取的文字",
+            rules.CUT: "剪下選取的文字", rules.PASTE: "貼上剪貼簿的內容（有選取時取代它）"}.get(value, "")
 
 
 def _place(row) -> tuple[int, int]:
@@ -90,6 +110,7 @@ def _show_pct(label, pct: int):
 
 
 _SET_PAUSE = 0.8   # seconds between the start and end sound when a set is previewed
+PREVIEW_MS = 3300  # a glow previewed shows this long, its fade-out included (App._preview_glow)
 _CARD_STYLE = "QFrame#card { border: 1px solid palette(mid); border-radius: 6px; }"
 _KIND_COLORS = {"輸入": "#1F5FAF", "操作": "#B35A00", "取代": "#0E7A6E", "選字": "#6B3FA0", "刪除": "#B42318", "復原": "#5B6573"}
 
@@ -292,6 +313,12 @@ class _OrbSample(OrbButton):
         self.setToolTip("點一下看開關麥克風時的動畫")
         self._back = QTimer(self, singleShot=True, interval=900, timeout=self.come_back)
 
+    def _fit(self):
+        """Room for the largest 按鈕大小, so the row does not move when the size changes."""
+        side = round(self.base * BUTTON_SCALE_RANGE[1] / 100 * self.room)
+        self.margin = (side - self.bsize) // 2
+        self.setFixedSize(side, side)
+
     def _gone(self):
         pass   # stays (transparent) until it comes back
 
@@ -344,7 +371,8 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(self._general_page(), "一般")
         self.tabs.addTab(self._look_page(), "外觀")
         self.tabs.addTab(self._log_page(), "辨識紀錄")
-        self.tabs.addTab(self._rules_page(), "自訂操作")
+        self.rules_tab = self.tabs.addTab(self._rules_page(), "自訂操作")
+        self.tabs.currentChanged.connect(lambda i: self._warn_rules() if i == self.rules_tab else None)
         self.tabs.addTab(self._hotwords_page(), "詞庫")
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
@@ -363,9 +391,6 @@ class SettingsDialog(QDialog):
         self.period_comma = QCheckBox("選取句號後講話，句號改成逗號並接上講的內容")
         self.period_comma.setToolTip("今天很好。明天見 → 選取「。」講「我們去公園」→ 今天很好，我們去公園。明天見")
         self.autostart = QCheckBox("開機時自動啟動")
-        self.commit_at = QComboBox()
-        self.commit_at.addItem("講指令或關錄音時", "command")
-        self.commit_at.addItem("每次停頓時", "pause")
         self.mute = QCheckBox("錄音時暫時靜音電腦音效")
         self.describe = QCheckBox("說「詞＋的＋字」時只輸入那個字，例如「節日的節」")
         self.hotkey = QComboBox()
@@ -376,7 +401,7 @@ class SettingsDialog(QDialog):
             self.hotkey.addItem(f"鍵盤 {label}", k)
         self.on_focus = QComboBox()
         self.on_focus.addItem("不做事", "")
-        self.on_focus.addItem("游標旁顯示語音氣泡", "bubble")
+        self.on_focus.addItem("點進輸入框時顯示語音氣泡", "bubble")
         self.on_focus.addItem("顯示可拖動的浮動按鈕", "float")
         self.on_focus.addItem("自動開麥克風（離開時關閉）", "listen")
         self.auto_off = QComboBox()
@@ -399,9 +424,9 @@ class SettingsDialog(QDialog):
         form.addRow("麥克風", self.mic)
         form.addRow(_titled("麥克風快捷鍵", "按一下開麥克風，再按一下關。按住或連按兩下會照常交給原本的程式"
                                       "（例如滑鼠中鍵照樣能用）"), self.hotkey)
-        form.addRow(_titled("定稿時機", "講話時，每次停頓字會先打出來並修正；定稿後就固定下來不再改"), self.commit_at)
         form.addRow(_titled("游標進到輸入框時", "游標放進輸入框（含終端機）時：\n"
-                                          "・語音氣泡：游標旁出現小麥克風，點了開始錄音，一打字就收起來\n"
+                                          "・語音氣泡：用滑鼠點進可以打字的地方時，點擊處旁出現小麥克風，點了開始錄音；"
+                                          "打字或捲動滾輪就收起來\n"
                                           "・浮動按鈕：可拖動的按鈕，只在能打字的地方出現，拖到哪就留在哪\n"
                                           "・自動開麥克風：離開到網頁空白處、按鈕、桌面時關掉；用快捷鍵或說「結束」關掉後，"
                                           "要換個輸入框才會再自動開"), self.on_focus)
@@ -428,7 +453,6 @@ class SettingsDialog(QDialog):
 
         self.mic.currentIndexChanged.connect(self._apply)
         self.hotkey.currentIndexChanged.connect(self._apply)
-        self.commit_at.currentIndexChanged.connect(self._apply)
         self.on_focus.currentIndexChanged.connect(self._apply)
         self.auto_off.currentIndexChanged.connect(self._apply)
         for box in (self.punct, self.period_comma, self.describe, self.autostart, self.mute, self.keep_audio):
@@ -450,8 +474,8 @@ class SettingsDialog(QDialog):
         self.sound_set.addItem("自定義", None)
         self._set_timer = QTimer(self, singleShot=True,
                                  timeout=lambda: cues.play(self._set_timer.property("cue"), "stop"))
-        self.sound_listen = QPushButton("試聽", clicked=self._play_sounds)
-        self.sound_listen.setFixedWidth(44)
+        self.sound_listen = QPushButton("▶ 試聽", clicked=self._play_sounds)
+        self._sound_done = QTimer(self, singleShot=True, timeout=self._show_sounds)   # 試聽 enabled again
         self.custom_sounds = QWidget()
         custom = QHBoxLayout(self.custom_sounds)
         custom.setContentsMargins(8, 0, 0, 0)
@@ -469,25 +493,32 @@ class SettingsDialog(QDialog):
         self.glow.addItem("關閉", "")
         for st in glowmod.STYLES:
             self.glow.addItem(st.name, st.id)
-        self.glow.addItem("自訂", glowmod.CUSTOM)
+        self.glow.setMinimumContentsLength(8)   # room for （已編輯）
+        self.glow.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.glow_edges = QComboBox()
         for k, (label, *_edges) in glowmod.EDGES.items():
             self.glow_edges.addItem(label, k)
         self.glow_motion = QComboBox()
         for k, label in glowmod.MOTIONS.items():
             self.glow_motion.addItem(label, k)
-        self.glow_preview_button = QPushButton("預覽", clicked=self._preview)
+        # ▶ 預覽 is disabled while the glow shows for a moment (picked, changed or previewed), like 試聽 while it
+        # plays (the user's design, 2026-10-16)
+        self.glow_preview_button = QPushButton("▶ 預覽", clicked=self._preview)
+        self._preview_done = QTimer(self, singleShot=True, interval=PREVIEW_MS, timeout=self._show_glow)
+        self.glow_reset = QPushButton("恢復預設", clicked=self._reset_glow)
         glow_row = QHBoxLayout()
         glow_row.addWidget(self.glow)
         glow_row.addWidget(self.glow_motion)
         glow_row.addWidget(self.glow_edges)
         glow_row.addWidget(self.glow_preview_button)
+        glow_row.addWidget(self.glow_reset)
         glow_row.addStretch()
 
-        # always shown (the user's request, 2026-10-16): a preset's parameters, greyed out; 自訂's, to change: 2-4
-        # colors and four sliders, applied when a slider is let go
-        self.glow_custom = QWidget()
-        g = QGridLayout(self.glow_custom)
+        # always shown and editable (the user's design, 2026-10-16; a separate 自訂 style before): the parameters
+        # of the style picked, 2-4 colors and four sliders, saved when a slider is let go; a style changed shows
+        # （已編輯） in the drop-down and 恢復預設 puts it back
+        self.glow_params_box = QWidget()
+        g = QGridLayout(self.glow_params_box)
         g.setContentsMargins(0, 0, 0, 0)
         g.setHorizontalSpacing(8)
         self.glow_colors = QHBoxLayout()
@@ -502,8 +533,8 @@ class SettingsDialog(QDialog):
             slider.setProperty("scale", scale)
             # live while dragged (the user's request, 2026-10-16): the glow shows each value, saved when let go
             slider.valueChanged.connect(lambda v, k=key, w=slider, sc=scale:
-                                        self._custom_changed(k, v / sc, save=not w.isSliderDown()))
-            slider.sliderReleased.connect(lambda: self._custom_changed(None, None))
+                                        self._glow_edited(k, v / sc, save=not w.isSliderDown()))
+            slider.sliderReleased.connect(lambda: self._glow_edited(None, None))
             slider.wheelEvent = lambda e, w=slider: _scroll_instead(w, e)
             self.glow_sliders[key] = slider
             g.addWidget(QLabel(label), row, 0)
@@ -541,18 +572,20 @@ class SettingsDialog(QDialog):
         self.button_look.currentIndexChanged.connect(self._look_changed)
         self.orb_lite = QCheckBox("節流模式")
         self.orb_lite.toggled.connect(self._look_changed)
-        self.orb_plain = QCheckBox("光環、虹膜拿掉黑色（實驗）")
-        self.orb_plain.toggled.connect(self._look_changed)
-        lite_row = QHBoxLayout()
-        lite_row.addWidget(_with_info(self.orb_lite, "能量球用較省 CPU 的畫法：每秒 15 張、光暈較粗略、光點和細絲較少。"
-                                                     "不勾時每秒 30 張、細節完整，比較好看", stretch=False))
-        lite_row.addSpacing(16)
-        lite_row.addWidget(self.orb_plain)
-        lite_row.addStretch()
-        self.hover_motion = QComboBox()
-        for k, label in HOVER_MOTIONS.items():
-            self.hover_motion.addItem(label, k)
-        self.hover_motion.currentIndexChanged.connect(self._look_changed)
+        # 按鈕大小 (2026-10-16, the user's request): 75-125% of the usual, shown as a percent with 標準 at 100%
+        self.button_scale = QSlider(Qt.Horizontal, minimum=BUTTON_SCALE_RANGE[0], maximum=BUTTON_SCALE_RANGE[1],
+                                    singleStep=5, pageStep=5, tickInterval=25)
+        self.button_scale.setTickPosition(QSlider.TicksBelow)
+        self.button_scale.setFixedWidth(180)
+        self.button_scale.wheelEvent = lambda e, w=self.button_scale: _scroll_instead(w, e)
+        self.button_scale_text = QLabel()
+        self.button_scale_text.setMinimumWidth(90)
+        self.button_scale.valueChanged.connect(self._button_scale_moved)
+        self.button_scale.sliderReleased.connect(self._look_changed)
+        size_row = QHBoxLayout()
+        size_row.addWidget(self.button_scale)
+        size_row.addWidget(self.button_scale_text)
+        size_row.addStretch()
         self.float_text_only = QCheckBox("只在可以打字的地方顯示")
         self.float_text_only.toggled.connect(self._apply)
         self.float_keep = QCheckBox("按下後不隱藏")
@@ -567,20 +600,18 @@ class SettingsDialog(QDialog):
         float_row.addStretch()
 
         form = QFormLayout()
-        form.addRow(_titled("按鈕樣式", "浮動按鈕和游標旁語音氣泡的樣子：原本的麥克風，或跟光暈同色的能量球"
+        form.addRow(_titled("按鈕樣式", "浮動按鈕和語音氣泡的樣子：原本的麥克風，或跟光暈同色的能量球"
                                      "（沒開光暈時用彩虹的顏色）。右邊是實際大小的範例"), look_row)
-        form.addRow("", lite_row)
-        hover_row = QHBoxLayout()
-        hover_row.addWidget(self.hover_motion)
-        hover_row.addStretch()
-        form.addRow(_titled("游標移上去時", "滑鼠移到浮動按鈕或語音氣泡上時縮小一點的方式；在上面的範例上試試看"
-                                       "（點範例可以看開關麥克風時的動畫）"), hover_row)
+        form.addRow("", _with_info(self.orb_lite, "能量球用較省 CPU 的畫法：每秒 15 張、光暈較粗略、光點和細絲較少。"
+                                                  "不勾時每秒 30 張、細節完整，比較好看"))
+        form.addRow(_titled("按鈕大小", "浮動按鈕和語音氣泡的大小，100% 是標準大小；上面的範例會跟著變"), size_row)
         form.addRow(_titled("浮動按鈕", "一般頁「游標進到輸入框時」選浮動按鈕才有作用"), float_row)
         form.addRow(_titled("螢幕邊緣光暈", "麥克風開著時，螢幕邊緣亮起一圈光，講話時會變亮。依序選顏色樣式、"
                                       "動態（柔光／波浪：邊緣像浪一樣起伏／流星：兩道光繞著螢幕跑／漣漪：一圈圈往內擴散）"
-                                      "和亮哪幾邊；下面是樣式的參數，選「自訂」才能調整。選了或按「預覽」會先亮一下讓你看"),
+                                      "和亮哪幾邊；下面是樣式的參數，可以直接調整，調過的樣式會標「（已編輯）」，"
+                                      "按「恢復預設」改回來。選了、調了或按「預覽」會先亮一下讓你看"),
                     glow_row)
-        form.addRow("", self.glow_custom)
+        form.addRow("", self.glow_params_box)
         form.addRow(_titled("草稿反白顏色", "麥克風開著時，講完還可能被修正的字會疊上這個顏色，定稿後消失"), mark_row)
         form.addRow(_titled("提示音", "開始音在麥克風打開時、結束音在關掉時播放。同一組的開始音與結束音一起選；"
                                    "選「自定義」可分別挑選"), sound_row)
@@ -599,41 +630,56 @@ class SettingsDialog(QDialog):
         return page
 
     def _glow_params(self) -> dict:
-        """The 自訂 glow's parameters, complete."""
-        base = glowmod.custom_from(glowmod.STYLES[0])
-        return {**base, **{k: v for k, v in self.cfg.glow_custom.items() if k in glowmod.CUSTOM_KEYS}}
+        """The parameters of the style picked, with the user's changes (彩虹's when there is no glow)."""
+        style_id = self.glow.currentData() or glowmod.STYLES[0].id
+        base = glowmod.params(glowmod.BY_ID[style_id])
+        edits = self.cfg.glow_edits.get(style_id, {})
+        return {**base, **{k: v for k, v in edits.items() if k in glowmod.PARAM_KEYS}}
 
     def _show_glow(self):
-        """The parameters of the style picked, which only 自訂 lets change (the user's design, 2026-10-16); 預覽,
-        the motion and the edges only with a glow."""
-        on = bool(self.glow.currentData())
-        for w in (self.glow_edges, self.glow_motion, self.glow_preview_button):
+        """The parameters of the style picked, editable; （已編輯） after the styles changed, 恢復預設 for this one;
+        預覽, the motion and the edges only with a glow."""
+        style_id = self.glow.currentData()
+        on = bool(style_id)
+        for w in (self.glow_edges, self.glow_motion, self.glow_params_box):
             w.setEnabled(on)
-        custom = self.glow.currentData() == glowmod.CUSTOM
-        preset = glowmod.BY_ID.get(self.glow.currentData())
-        c = self._glow_params() if custom or preset is None else glowmod.custom_from(preset)
-        self.glow_custom.setEnabled(custom)
+        self.glow_preview_button.setEnabled(on and not self._preview_done.isActive())
+        self.glow_reset.setEnabled(on and glowmod.edited(style_id, self.cfg.glow_edits))
+        for i in range(1, self.glow.count()):
+            st = glowmod.BY_ID[self.glow.itemData(i)]
+            self.glow.setItemText(i, st.name + ("（已編輯）" if glowmod.edited(st.id, self.cfg.glow_edits) else ""))
+        c = self._glow_params()
         for key, slider in self.glow_sliders.items():
             slider.blockSignals(True)
             slider.setValue(round(float(c[key]) * slider.property("scale")))
             slider.blockSignals(False)
         _clear_layout(self.glow_colors)
         for i, color in enumerate(c["colors"]):
-            b = QToolButton(icon=_swatch(color), autoRaise=True, clicked=lambda _=False, i=i: self._custom_color(i))
+            b = QToolButton(icon=_swatch(color), autoRaise=True, clicked=lambda _=False, i=i: self._glow_color(i))
             self.glow_colors.addWidget(b)
         if len(c["colors"]) < 4:
-            self.glow_colors.addWidget(QToolButton(text="＋", autoRaise=True, clicked=lambda: self._custom_color(-1)))
+            self.glow_colors.addWidget(QToolButton(text="＋", autoRaise=True, clicked=lambda: self._glow_color(-1)))
         if len(c["colors"]) > 2:
-            self.glow_colors.addWidget(QToolButton(text="－", autoRaise=True, clicked=self._custom_fewer))
+            self.glow_colors.addWidget(QToolButton(text="－", autoRaise=True, clicked=self._glow_fewer))
         self.glow_colors.addStretch()
 
-    def _custom_changed(self, key, value, save: bool = True):
-        """A parameter of 自訂 changed (key None: a slider let go). While a slider is dragged the glow follows it
-        (at most every 0.08s) and nothing is saved yet."""
+    def _glow_edited(self, key, value, save: bool = True):
+        """A parameter of the style picked changed (key None: a slider let go). While a slider is dragged the glow
+        follows it (at most every 0.08s) and nothing is saved yet. Only what differs from the style is kept."""
+        style_id = self.glow.currentData()
+        if not style_id:
+            return
         c = self._glow_params()
         if key is not None:
             c[key] = round(value, 2) if isinstance(value, float) else value
-        self.cfg.glow_custom = c
+        base = glowmod.params(glowmod.BY_ID[style_id])
+        changed = {k: v for k, v in c.items() if v != base[k]}
+        edits = dict(self.cfg.glow_edits)
+        if changed:
+            edits[style_id] = changed
+        else:
+            edits.pop(style_id, None)
+        self.cfg.glow_edits = edits
         if save:
             self._save()
             self._show_glow()
@@ -641,19 +687,35 @@ class SettingsDialog(QDialog):
         if not self._live.isActive():
             self._live.start()
 
+    def _reset_glow(self):
+        """恢復預設: the style picked as it comes."""
+        edits = dict(self.cfg.glow_edits)
+        edits.pop(self.glow.currentData(), None)
+        self.cfg.glow_edits = edits
+        self._save()
+        self._show_glow()
+        self._show_samples()
+        self._preview()
+
     def _look_changed(self):
         self._apply()
         self._show_samples()
 
     def _show_samples(self):
         """The button look's examples, in the colors of the glow picked."""
-        colors = palette(glowmod.style_for(self.glow.currentData(), self.cfg.glow_custom))
+        colors = palette(glowmod.style_for(self.glow.currentData(), self.cfg.glow_edits))
         for w in self.look_samples:
-            w.set_look(self.button_look.currentData(), colors, self.orb_lite.isChecked(),
-                       not self.orb_plain.isChecked(), self.hover_motion.currentData())
+            w.set_look(self.button_look.currentData(), colors, self.orb_lite.isChecked(), self.button_scale.value())
 
-    def _custom_color(self, i: int):
-        """A color of the 自訂 glow changed (i), or added (-1)."""
+    def _button_scale_moved(self, value: int):
+        self.button_scale_text.setText(f"{value}%（標準）" if value == 100 else f"{value}%")
+        if not self.button_scale.isSliderDown():   # keys or a click on the groove: no release follows
+            self._look_changed()
+        else:
+            self._show_samples()
+
+    def _glow_color(self, i: int):
+        """A color of the style picked changed (i), or added (-1)."""
         colors = list(self._glow_params()["colors"])
         start = QColor(colors[i] if i >= 0 else colors[-1])
         c = QColorDialog.getColor(start, self, "光暈顏色")
@@ -663,14 +725,17 @@ class SettingsDialog(QDialog):
             colors[i] = c.name()
         else:
             colors.append(c.name())
-        self._custom_changed("colors", colors)
+        self._glow_edited("colors", colors)
 
-    def _custom_fewer(self):
-        self._custom_changed("colors", list(self._glow_params()["colors"])[:-1])
+    def _glow_fewer(self):
+        self._glow_edited("colors", list(self._glow_params()["colors"])[:-1])
 
     def _preview(self):
+        """The glow shown for a moment (App._preview_glow); ▶ 預覽 disabled meanwhile."""
         if self.glow.currentData():
             self.glow_preview.emit(self.glow.currentData())
+            self.glow_preview_button.setEnabled(False)
+            self._preview_done.start()
 
     def _show_mark_color(self):
         """The button of the current color checked; a color of one's own on the 自訂 swatch."""
@@ -712,13 +777,12 @@ class SettingsDialog(QDialog):
         self.keep_audio.setChecked(self.cfg.save_recordings)
         self.start_sound.setCurrentIndex(max(0, self.start_sound.findData(self.cfg.start_sound)))
         self.stop_sound.setCurrentIndex(max(0, self.stop_sound.findData(self.cfg.stop_sound)))
-        self.commit_at.setCurrentIndex(max(0, self.commit_at.findData(self.cfg.commit_at)))
         self.glow.setCurrentIndex(max(0, self.glow.findData(self.cfg.glow)))
         self.glow_motion.setCurrentIndex(max(0, self.glow_motion.findData(self.cfg.glow_motion)))
         self.button_look.setCurrentIndex(max(0, self.button_look.findData(self.cfg.button_look)))
         self.orb_lite.setChecked(self.cfg.orb_lite)
-        self.orb_plain.setChecked(not self.cfg.orb_dark)
-        self.hover_motion.setCurrentIndex(max(0, self.hover_motion.findData(self.cfg.hover_motion)))
+        self.button_scale.setValue(self.cfg.button_scale)
+        self._button_scale_moved(self.cfg.button_scale)
         self.float_text_only.setChecked(self.cfg.float_text_only)
         self.float_keep.setChecked(self.cfg.float_keep)
         self._show_glow()
@@ -736,6 +800,11 @@ class SettingsDialog(QDialog):
         self._loading = False
         self.refresh_rules()
         self.refresh_hotwords()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        if self.tabs.currentIndex() == self.rules_tab:
+            self._warn_rules()
 
     def set_status(self, text: str):
         self.status.setText(text)
@@ -755,14 +824,12 @@ class SettingsDialog(QDialog):
         self.cfg.glow_motion = self.glow_motion.currentData()
         self.cfg.button_look = self.button_look.currentData()
         self.cfg.orb_lite = self.orb_lite.isChecked()
-        self.cfg.orb_dark = not self.orb_plain.isChecked()
-        self.cfg.hover_motion = self.hover_motion.currentData()
+        self.cfg.button_scale = self.button_scale.value()
         self.cfg.float_text_only = self.float_text_only.isChecked()
         self.cfg.float_keep = self.float_keep.isChecked()
         self.cfg.save_recordings = self.keep_audio.isChecked()
         self.cfg.start_sound = self.start_sound.currentData()
         self.cfg.stop_sound = self.stop_sound.currentData()
-        self.cfg.commit_at = self.commit_at.currentData()
         self.cfg.glow = self.glow.currentData()
         self.cfg.auto_off_minutes = self.auto_off.currentData()
         self._save()
@@ -774,9 +841,6 @@ class SettingsDialog(QDialog):
             box.setEnabled(self.cfg.on_focus == "float")
 
     def _glow_changed(self):
-        if not self._loading and self.glow.currentData() == glowmod.CUSTOM and not self.cfg.glow_custom:
-            # 自訂 starts from the style shown before it
-            self.cfg.glow_custom = glowmod.custom_from(glowmod.BY_ID.get(self.cfg.glow, glowmod.STYLES[0]))
         self._apply()
         self._show_glow()
         self._show_samples()
@@ -786,6 +850,8 @@ class SettingsDialog(QDialog):
     def _sound_changed(self, box, kind: str):
         if not self._loading:
             cues.play(box.currentData(), kind)
+            if box.currentData():
+                self._playing(cues.duration(box.currentData(), kind))
             self._show_sounds()
         self._apply()
 
@@ -793,9 +859,16 @@ class SettingsDialog(QDialog):
         return self.sound_set.currentData() is None
 
     def _show_sounds(self):
-        """The 開始 / 結束 drop-downs only for 自定義; 試聽 only when there is something to play."""
+        """The 開始 / 結束 drop-downs only for 自定義; 試聽 only when there is something to play, and not while it
+        plays."""
         self.custom_sounds.setVisible(self._custom())
-        self.sound_listen.setEnabled(bool(self.start_sound.currentData() or self.stop_sound.currentData()))
+        self.sound_listen.setEnabled(bool(self.start_sound.currentData() or self.stop_sound.currentData())
+                                     and not self._sound_done.isActive())
+
+    def _playing(self, seconds: float):
+        """A sound plays for that long: 試聽 disabled meanwhile."""
+        self._sound_done.start(int(seconds * 1000) + 100)
+        self.sound_listen.setEnabled(False)
 
     def _sound_set_changed(self):
         cue_id = self.sound_set.currentData()
@@ -813,9 +886,14 @@ class SettingsDialog(QDialog):
         self._set_timer.stop()
         start, stop = self.start_sound.currentData(), self.stop_sound.currentData()
         cues.play(start, "start")
+        total = cues.duration(start, "start") if start else 0
         if stop:
+            wait = (total + _SET_PAUSE) if start else 0
             self._set_timer.setProperty("cue", stop)
-            self._set_timer.start(int(((cues.duration(start, "start") + _SET_PAUSE) if start else 0) * 1000))
+            self._set_timer.start(int(wait * 1000))
+            total = wait + cues.duration(stop, "stop")
+        if total:
+            self._playing(total)
 
     def _save(self):
         self.cfg.save()
@@ -1202,7 +1280,19 @@ class SettingsDialog(QDialog):
             i, line = line, line + 1
             edit = QLineEdit(row[0], placeholderText="要說的話")
             edit.textEdited.connect(lambda t, r=row: (r.__setitem__(0, t), self._rules_edited()))
-            kind = _combo(SPOKEN_ACTIONS, row[2] if row[1] == rules.COMMAND else row[1])
+            fixed = _built_in(row)
+            grid.addWidget(QLabel("說 "), i, 0)
+            grid.addWidget(edit, i, 1)
+            grid.addWidget(QLabel(" 就會"), i, 2)
+            if fixed:   # a default: what it does in words, only the phrase is edited
+                edit.setPlaceholderText("（不使用）")
+                does = QLabel(_does(row[1], row[2]), wordWrap=True)
+                does.setStyleSheet("color: #5F6670")
+                grid.addWidget(does, i, 3, 1, 2)
+                continue
+            current = row[2] if row[1] == rules.COMMAND else row[1]
+            # a command a default row already does is not offered again (one more phrase goes in that row)
+            kind = _combo([a for a in SPOKEN_ACTIONS if a[0] not in _BUILT_IN_COMMANDS or a[0] == current], current)
             kind.setMinimumContentsLength(6)
             kind.currentIndexChanged.connect(lambda _, k=kind, r=row: self._own_type(r, k.currentData()))
             if row[1] == rules.KEYS:
@@ -1227,18 +1317,9 @@ class SettingsDialog(QDialog):
                 value = QLabel(_COMMAND_NOTES.get(row[2], ""))
                 value.setStyleSheet("color: gray")
             value.setMinimumWidth(90)
-            fixed = _built_in(row)
-            kind.setEnabled(not fixed)
-            value.setEnabled(not fixed)
-            if fixed:
-                edit.setPlaceholderText("（不使用）")
-            grid.addWidget(QLabel("說「"), i, 0)
-            grid.addWidget(edit, i, 1)
-            grid.addWidget(QLabel("」就會"), i, 2)
             grid.addWidget(kind, i, 3)
             grid.addWidget(value, i, 4)
-            if not fixed:
-                grid.addWidget(_remove_button("刪除這條", lambda _=False, r=row: self._remove_own(r)), i, 5)
+            grid.addWidget(_remove_button("刪除這條", lambda _=False, r=row: self._remove_own(r)), i, 5)
         grid.setColumnStretch(1, 1)
         grid.setColumnStretch(4, 1)
         self.rules_body.addLayout(grid)
@@ -1264,17 +1345,35 @@ class SettingsDialog(QDialog):
         self._save()
         self._show_problems()
 
+    def _row_problems(self) -> list:
+        """(row, text) for each rule with a problem (rules.problems: it is skipped); a default left empty is off."""
+        pairs = []
+        for row in self._own:
+            for phrase in rules.phrases(row[0]) or [""]:
+                pairs.append((row, Rule(rules.SPEECH, phrase=phrase, steps=[Step(row[1], row[2])])))
+        rs = [r for _, r in pairs]
+        out = []
+        for row, r in pairs:
+            if not rules.normalize(r.phrase) and _built_in(row):
+                continue
+            text = "、".join(rules.problems(r, rs))
+            if text:
+                out.append((row, f"「{r.phrase or '（空白）'}」：{text}"))
+        return out
+
+    def _warn_rules(self):
+        """The 自訂操作 tab comes into view: the problems of now are shown (2026-10-16, the user's request: only
+        then, so a row just added and not filled in yet does not bring a warning)."""
+        self._warn_rows = [row for row, _ in self._row_problems()]
+        self._show_problems()
+
     def _show_problems(self):
-        """Clashes the rows cannot show on their own; a rule with a problem is skipped (rules.problems)."""
-        rs = self.cfg.rules
-        spoken = []
-        for r in rs:
-            if r.source == rules.SPEECH:
-                if not rules.normalize(r.phrase) and (r.steps[0].type, r.steps[0].value) in _BUILT_IN:
-                    continue   # a default left empty: turned off
-                text = "、".join(rules.problems(r, rs))
-                if text:
-                    spoken.append(f"「{r.phrase or '（空白）'}」：{text}")
+        """The problems the rows cannot show on their own, of the rows that had them when the tab came into view: one
+        fixed goes at once, a new one waits until the tab is opened again."""
+        if not hasattr(self, "spoken_problems"):
+            return
+        spoken = [text for row, text in self._row_problems()
+                  if any(row is w for w in getattr(self, "_warn_rows", ()))]
         self.spoken_problems.setText("\n".join(f"⚠ {t}" for t in spoken))
         self.spoken_problems.setVisible(bool(spoken))
 
