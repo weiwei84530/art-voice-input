@@ -30,19 +30,32 @@ _COMMAND_NOTES = {rules.UNDO: "收回 VoiceInput 剛做的修改", rules.STOP: "
                   rules.CUT: "剪下選取的文字", rules.PASTE: "貼上（有選取時取代它）"}
 # the 自訂操作 tab lists spoken operations by what they do (2026-10-16, the user's choice), in this order, under
 # these headings; a row's place in its group by _ORDER, then as it was
-_GROUPS = ["輸入", "修改", "剪貼簿", "其他", "結束"]
+_GROUPS = ["輸入", "修改", "剪貼簿", "結束", "自訂"]
 _ORDER = {(rules.KEYS, "Shift+Enter"): (0, 0), (rules.KEYS, "Space"): (0, 1), (rules.KEYS, "Tab"): (0, 2),
           (rules.TEXT, None): (0, 3), (rules.WRAP, None): (0, 4),
           (rules.KEYS, "Backspace"): (1, 0), (rules.KEYS, "Delete"): (1, 1), (rules.COMMAND, rules.UNDO): (1, 2),
           (rules.COMMAND, rules.SELECT_ALL): (2, 0), (rules.COMMAND, rules.COPY): (2, 1),
           (rules.COMMAND, rules.CUT): (2, 2), (rules.COMMAND, rules.PASTE): (2, 3),
-          (rules.KEYS, "Enter"): (4, 0), (rules.COMMAND, rules.STOP): (4, 1)}
+          (rules.KEYS, "Enter"): (3, 0), (rules.COMMAND, rules.STOP): (3, 1)}
+# the default operations' steps: their rows are always listed, with the action fixed (2026-10-16, the user's
+# choice: only the phrase is edited, left empty to turn one off; anything else is a row of 自訂)
+_BUILT_IN = []
+for _r in rules.defaults():
+    if (_r.steps[0].type, _r.steps[0].value) not in _BUILT_IN:
+        _BUILT_IN.append((_r.steps[0].type, _r.steps[0].value))
+
+
+def _built_in(row) -> bool:
+    return (row[1], row[2]) in _BUILT_IN
 
 
 def _place(row) -> tuple[int, int]:
-    """(group, order in it) of a spoken row [phrases, step type, value]; other keys go under 其他."""
+    """(group, order in it) of a spoken row [phrases, step type, value]: a default one in its group, the user's own
+    under 自訂 at the bottom, next to ＋ 新增口說操作."""
     _, kind, value = row
-    return _ORDER.get((kind, value if kind in (rules.KEYS, rules.COMMAND) else None), (3, 0))
+    if not _built_in(row):
+        return 4, 0
+    return _ORDER.get((kind, value if kind in (rules.KEYS, rules.COMMAND) else None), (4, 0))
 
 
 def _swatch(color: str) -> QIcon:
@@ -1034,7 +1047,10 @@ class SettingsDialog(QDialog):
             if row is None:
                 self._own.append([r.phrase, st.type, st.value])
             else:
-                row[0] += "、" + r.phrase
+                row[0] = "、".join(x for x in (row[0], r.phrase) if x)
+        for kind, value in _BUILT_IN:   # a default turned off (its phrase left empty) stays listed
+            if not any((o[1], o[2]) == (kind, value) for o in self._own):
+                self._own.append(["", kind, value])
         self._draw_rules()
 
     def _draw_rules(self):
@@ -1084,12 +1100,18 @@ class SettingsDialog(QDialog):
                 value = QLabel(_COMMAND_NOTES.get(row[2], ""))
                 value.setStyleSheet("color: gray")
             value.setMinimumWidth(90)
+            fixed = _built_in(row)
+            kind.setEnabled(not fixed)
+            value.setEnabled(not fixed)
+            if fixed:
+                edit.setPlaceholderText("（不使用）")
             grid.addWidget(QLabel("說「"), i, 0)
             grid.addWidget(edit, i, 1)
             grid.addWidget(QLabel("」就會"), i, 2)
             grid.addWidget(kind, i, 3)
             grid.addWidget(value, i, 4)
-            grid.addWidget(_remove_button("刪除這條", lambda _=False, r=row: self._remove_own(r)), i, 5)
+            if not fixed:
+                grid.addWidget(_remove_button("刪除這條", lambda _=False, r=row: self._remove_own(r)), i, 5)
         grid.setColumnStretch(1, 1)
         grid.setColumnStretch(4, 1)
         self.rules_body.addLayout(grid)
@@ -1121,6 +1143,8 @@ class SettingsDialog(QDialog):
         spoken = []
         for r in rs:
             if r.source == rules.SPEECH:
+                if not rules.normalize(r.phrase) and (r.steps[0].type, r.steps[0].value) in _BUILT_IN:
+                    continue   # a default left empty: turned off
                 text = "、".join(rules.problems(r, rs))
                 if text:
                     spoken.append(f"「{r.phrase or '（空白）'}」：{text}")

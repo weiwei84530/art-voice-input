@@ -210,8 +210,8 @@ def normalize(phrase: str) -> str:
 def _same_trigger(a: Rule, b: Rule) -> bool:
     if a.source != b.source:
         return False
-    if a.source == SPEECH:
-        return normalize(a.phrase) == normalize(b.phrase)
+    if a.source == SPEECH:   # an empty phrase is no trigger (a default turned off, a row not filled in yet)
+        return bool(normalize(a.phrase)) and normalize(a.phrase) == normalize(b.phrase)
     return a.key == b.key and a.gesture == b.gesture
 
 

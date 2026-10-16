@@ -123,6 +123,10 @@ and a 自訂 style (`glow.CUSTOM`, `config.glow_custom`: 2-4 colors, 旋轉速�
 started from the style shown before, applied when a slider is let go and shown for 3s). A launch after a run was
 killed while listening unmutes the speakers (`mute.recover`, a marker file `.muted` while our mute is on: the
 agents' restarts with Stop-Process left the user's computer muted).
+On 自訂操作 the default operations' rows (`settings._BUILT_IN`, the steps of `rules.defaults`) are always listed
+with their action and value fixed (the user's choice): only the phrase is edited, empty turns one off (no warning;
+an empty phrase is no trigger in `rules._same_trigger`). Every other row is listed under 自訂, the last group, next
+to ＋ 新增口說操作.
 
 Four tabs, sized for the log: 一般 (microphone, "mute the speakers while recording", punctuation names, "selected 。 →
 ，", "節日的節" (described characters), autostart; the menu timeout was removed
