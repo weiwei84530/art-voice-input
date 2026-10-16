@@ -26,10 +26,21 @@ class Config:
     glow_motion: str = "soft"      # how it moves (glow.MOTIONS): soft, wave, comet, ripple
     # the floating button's and the bubble's look (orbs.LOOKS): the microphone, or an energy orb in the glow's colors
     button_look: str = "mic"
+    # 節流模式 (2026-10-16): the orbs as first made, 15 fps and coarser; off, 30 fps and finer (looks first)
+    orb_lite: bool = False
+    orb_dark: bool = True          # 光環 / 虹膜 with their dark disc (off: an experiment, 2026-10-16)
+    # how the floating button and the bubble shrink under the pointer (floatbtn.HOVER_MOTIONS)
+    hover_motion: str = "bounce"
     # the 自訂 glow (glow == "custom"): colors (2-4), turn, pulse, depth, bright (glow.CUSTOM_KEYS); 2026-10-16
     glow_custom: dict = field(default_factory=dict)
     # the floating microphone button's place (on_focus "float"), as fractions of the screen's free range
     float_pos: list = field(default_factory=lambda: [0.98, 0.88])
+    # the floating button only while text can be typed where the focus is and listening is off; False: always, while
+    # listening too, a click turning it off (2026-10-16, the user's request)
+    float_text_only: bool = True
+    # 按下後不隱藏: the floating button stays while listening (a click jumps it and turns listening off) instead of
+    # growing and fading out with the glow (2026-10-16, the user's request)
+    float_keep: bool = False
     # when the focus comes into a text box (2026-10-16, the user's requests): "" nothing, "bubble" a small microphone
     # bubble by the caret (a click listens), "float" the draggable floating button, shown only while text can be
     # typed where the focus is, "listen" listening turns on, and off when the focus leaves for a place where nothing

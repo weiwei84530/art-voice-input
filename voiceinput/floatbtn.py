@@ -4,92 +4,52 @@ to the window that had it, as with the key. Dragged, it stays where it was dropp
 screen the pointer is on at that same place (the user has three screens).
 Both draw the look picked on the 外觀 tab (orbs.py: the microphone, or one of nine energy orbs in the glow's
 colors), animated only while shown.
+
+Motions (`OrbButton`, 2026-10-16, the user's design): one look at rest, no hover color. The pointer over it shrinks it
+a little (`HOVER_MOTIONS`, picked on the 外觀 tab: smooth, bouncing or springy). When listening starts it grows quickly
+and fades out as the glow fades in (`glow.FADE_MS`); when listening ends it shrinks back from that size and fades in
+as the glow fades out. With 按下後不隱藏 (`float_keep`) the floating button stays: a click makes it jump a little and
+come back, and while listening a click turns listening off. Its window has room around the button (`_ROOM`) for the
+orb's light and for growing; the room is transparent, so clicks there go through. The button's place is the middle
+of it.
+With 只在可以打字的地方顯示 unticked (`float_text_only`, the 外觀 tab, 2026-10-16, the user's request) the floating
+button shows wherever the focus is.
 """
 import ctypes
 
-from PySide6.QtCore import QPoint, QPointF, QPropertyAnimation, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QEasingCurve, QPoint, QPointF, QRectF, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QCursor, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
+from .glow import FADE_MS
 from .orbs import OrbPlayer
 
 _SIZE = 44
+_ROOM = 2.2      # the window, times the button: the orb's light grown on a click still fits
+_HOVER = 0.88    # the size under the pointer
+_BURST = 1.5     # the size it grows to as it fades out
 _GWL_EXSTYLE, _WS_EX_NOACTIVATE, _WS_EX_TOPMOST = -20, 0x08000000, 0x8
 
-
-class Bubble(QWidget):
-    """The small microphone bubble right of the caret of a text box the focus just came into (on_focus "bubble",
-    2026-10-16, the user's requests): a click turns listening on; it follows the caret, and goes when the user types,
-    the focus leaves or listening starts (it stays while nothing happens). Never takes focus."""
-    clicked = Signal()
-    SIZE = 28
-
-    def __init__(self):
-        super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
-        self.setAttribute(Qt.WA_ShowWithoutActivating)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedSize(self.SIZE, self.SIZE)
-        self.setToolTip("開啟麥克風")
-        self._hover = False
-        self.orb = OrbPlayer(self, self.SIZE)
-
-    def hwnd(self) -> int:
-        return int(self.winId())
-
-    def showEvent(self, e):
-        self.orb.start()
-
-    def hideEvent(self, e):
-        self.orb.stop()
-
-    def show_by(self, rect):
-        """rect: (x, y, w, h) in physical pixels of the caret (w 0) or, unknown, the text box; the bubble goes just
-        right of it, centered on a caret's line, kept on screen."""
-        x, y, w, h = (int(v) for v in rect)
-        p, ratio = _logical(x + w, y + h)
-        screen = QGuiApplication.screenAt(p) or QGuiApplication.primaryScreen()
-        a = screen.availableGeometry()
-        top = p.y() - self.SIZE if h / ratio > self.SIZE else p.y() - round(h / ratio / 2) - self.SIZE // 2
-        self.move(min(max(p.x() + 6, a.left()), a.right() - self.SIZE), min(max(top, a.top()), a.bottom() - self.SIZE))
-        self.show()
-        hwnd = self.hwnd()
-        u32 = ctypes.windll.user32
-        u32.SetWindowLongW(hwnd, _GWL_EXSTYLE, u32.GetWindowLongW(hwnd, _GWL_EXSTYLE) | _WS_EX_NOACTIVATE | _WS_EX_TOPMOST)
-
-    def paintEvent(self, e):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        if not self.orb.paint(p):
-            s = self.SIZE / _SIZE
-            p.scale(s, s)
-            _paint_mic(p, self._hover)
-        p.end()
-
-    def enterEvent(self, e):
-        self._hover = self.orb.hover = True
-        self.update()
-
-    def leaveEvent(self, e):
-        self._hover = self.orb.hover = False
-        self.update()
-
-    def mouseReleaseEvent(self, e):
-        if e.button() == Qt.LeftButton:
-            self.hide()
-            self.clicked.emit()
+# how it shrinks under the pointer and comes back (the user's request: a choice to compare): name, easing, ms
+HOVER_MOTIONS = {"smooth": "平滑", "bounce": "彈跳", "spring": "彈簧"}
 
 
-def _logical(x: int, y: int):
-    for s in QGuiApplication.screens():
-        g, r = s.geometry(), s.devicePixelRatio()
-        if g.x() <= x < g.x() + g.width() * r and g.y() <= y < g.y() + g.height() * r:
-            return QPoint(g.x() + int((x - g.x()) / r), g.y() + int((y - g.y()) / r)), r
-    return QPoint(x, y), 1.0
+def _hover_curve(motion: str):
+    if motion == "bounce":
+        c = QEasingCurve(QEasingCurve.OutBack)
+        c.setOvershoot(2.4)   # past the size and back once
+        return c, 320
+    if motion == "spring":
+        c = QEasingCurve(QEasingCurve.OutElastic)
+        c.setAmplitude(1.0)
+        c.setPeriod(0.42)     # a few small swings
+        return c, 520
+    return QEasingCurve(QEasingCurve.OutCubic), 200
 
 
-def _paint_mic(p: QPainter, hover: bool):
+def _paint_mic(p: QPainter):
     p.setPen(QPen(QColor(255, 255, 255, 60), 1))
-    p.setBrush(QColor(58, 58, 68, 235) if hover else QColor(32, 32, 36, 220))
+    p.setBrush(QColor(32, 32, 36, 220))
     p.drawEllipse(QRectF(1, 1, _SIZE - 2, _SIZE - 2))
     c = QColor(240, 240, 240)
     p.setPen(Qt.NoPen)
@@ -103,47 +63,240 @@ def _paint_mic(p: QPainter, hover: bool):
     p.drawLine(QPointF(22, 28), QPointF(22, 33))
 
 
-class FloatButton(QWidget):
+class OrbButton(QWidget):
+    """The look (orb or microphone) of a button of `size` px in the middle of a widget `room` times as big, with its
+    motions: its scale (k) and opacity (alpha) animated with easing."""
     clicked = Signal()
-    moved = Signal(float, float)   # the new place, as fractions of the screen's free range
 
-    def __init__(self, place=(0.98, 0.88)):
-        super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+    def __init__(self, size: int, room: float = _ROOM, parent=None, flags=Qt.WindowType.Widget):
+        super().__init__(parent, flags)
+        self.bsize = size
+        side = round(size * room)
+        self.margin = (side - size) // 2
+        self.setFixedSize(side, side)
+        self.orb = OrbPlayer(self, size)
+        self.hover_motion = "bounce"
+        self.k = 1.0
+        self.alpha = 1.0
+        self.leaving = False   # growing and fading out: hidden at the end
+        self._then = None      # the next scale after this one (a jump: up, then back)
+        self._grow = QVariantAnimation(self)
+        self._grow.valueChanged.connect(self._set_k)
+        self._grow.finished.connect(self._grown)
+        self._fade = QVariantAnimation(self)
+        self._fade.valueChanged.connect(self._set_alpha)
+        self._fade.finished.connect(self._faded)
+
+    def set_look(self, look: str, colors: list, lite: bool = False, dark: bool = True, hover: str = "bounce"):
+        self.hover_motion = hover if hover in HOVER_MOTIONS else "bounce"
+        if (self.orb.look, self.orb.colors, self.orb.lite, self.orb.dark) != (look, list(colors), lite, dark):
+            self.orb.set_look(look, colors, lite, dark)
+            if self.isVisible():
+                self.orb.start()
+
+    # --- animation
+    def _set_k(self, v):
+        self.k = float(v)
+        self.update()
+
+    def _set_alpha(self, v):
+        self.alpha = float(v)
+        self.update()
+
+    def _scale_to(self, k: float, ms: int, curve, then=None):
+        self._grow.stop()
+        self._then = then
+        self._grow.setStartValue(self.k)
+        self._grow.setEndValue(float(k))
+        self._grow.setDuration(ms)
+        self._grow.setEasingCurve(curve)
+        self._grow.start()
+
+    def _grown(self):
+        if self._then:
+            k, ms, curve = self._then
+            self._scale_to(k, ms, curve)
+
+    def _fade_to(self, alpha: float, ms: int):
+        self._fade.stop()
+        self._fade.setStartValue(self.alpha)
+        self._fade.setEndValue(float(alpha))
+        self._fade.setDuration(ms)
+        self._fade.setEasingCurve(QEasingCurve.OutQuad)
+        self._fade.start()
+
+    def _faded(self):
+        if self.leaving and self.alpha <= 0.0:
+            self._gone()
+
+    def _gone(self):
+        self.hide()
+
+    def _appear(self):
+        """Shown (a window: without taking the focus)."""
+        self.show()
+
+    def fade_in(self, ms: int = 180):
+        """In at its size (the focus came where it shows)."""
+        if self.isVisible() and not self.leaving:
+            return
+        self.leaving = False
+        if not self.isVisible():
+            self.k, self.alpha = 1.0, 0.0
+            self._appear()
+        self._scale_to(1.0, ms, QEasingCurve(QEasingCurve.OutCubic))
+        self._fade_to(1.0, ms)
+
+    def burst(self):
+        """Listening started: it grows quickly and fades out as the glow fades in, then hides."""
+        if not self.isVisible():
+            return
+        self.leaving = True
+        self._scale_to(_BURST, FADE_MS, QEasingCurve(QEasingCurve.OutCubic))
+        self._fade_to(0.0, FADE_MS)
+
+    def come_back(self):
+        """Listening ended: back from the grown size to its own, fading in as the glow fades out."""
+        self.leaving = False
+        if not self.isVisible():
+            self.k, self.alpha = _BURST, 0.0
+            self._appear()
+        self._scale_to(1.0, FADE_MS, QEasingCurve(QEasingCurve.OutCubic))
+        self._fade_to(1.0, FADE_MS)
+
+    def jump(self):
+        """A click that does not hide it: up a little, quickly, and back with a bounce."""
+        back = QEasingCurve(QEasingCurve.OutBack)
+        back.setOvershoot(2.0)
+        self._scale_to(1.22, 110, QEasingCurve(QEasingCurve.OutCubic), then=(1.0, 320, back))
+
+    # --- events
+    def showEvent(self, e):
+        self.orb.start()
+
+    def hideEvent(self, e):
+        self.orb.stop()
+        self._grow.stop()
+        self._fade.stop()
+        self.leaving = False
+
+    def enterEvent(self, e):
+        if not self.leaving:
+            curve, ms = _hover_curve(self.hover_motion)
+            self._scale_to(_HOVER, ms, curve)
+
+    def leaveEvent(self, e):
+        if not self.leaving:
+            curve, ms = _hover_curve(self.hover_motion)
+            self._scale_to(1.0, ms, curve)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+        p.setOpacity(max(0.0, min(1.0, self.alpha)))
+        c = self.width() / 2
+        p.translate(c, c)
+        p.scale(self.k, self.k)
+        if self.orb.look == "mic":
+            p.scale(self.bsize / _SIZE, self.bsize / _SIZE)
+            p.translate(-_SIZE / 2, -_SIZE / 2)
+            _paint_mic(p)
+        else:
+            p.translate(-self.orb.size / 2, -self.orb.size / 2)
+            self.orb.paint(p)
+        p.end()
+
+    def mouseReleaseEvent(self, e):
+        if e.button() == Qt.LeftButton and self.rect().contains(e.position().toPoint()):
+            self.clicked.emit()
+
+
+class _OnTop(OrbButton):
+    """A button in a window of its own on top that never takes the focus."""
+
+    def __init__(self, size: int):
+        super().__init__(size, flags=Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedSize(_SIZE, _SIZE)
         self.setToolTip("開啟麥克風")
-        self.place = tuple(place)
-        self.orb = OrbPlayer(self, _SIZE)
-        self._screen = None
-        self._press = None     # (global point, window position) while the button is down
-        self._dragged = False
-        self._hover = False
-        self._follow = QTimer(self, interval=300, timeout=self._follow_pointer)
-        self._fade = QPropertyAnimation(self, b"windowOpacity", self, duration=180, startValue=0.0, endValue=1.0)
 
     def hwnd(self) -> int:
         return int(self.winId())
 
+    def _appear(self):
+        self.show()
+        hwnd = self.hwnd()
+        u32 = ctypes.windll.user32
+        u32.SetWindowLongW(hwnd, _GWL_EXSTYLE, u32.GetWindowLongW(hwnd, _GWL_EXSTYLE) | _WS_EX_NOACTIVATE | _WS_EX_TOPMOST)
+
+
+class Bubble(_OnTop):
+    """The small microphone bubble right of the caret of a text box the focus just came into (on_focus "bubble",
+    2026-10-16, the user's requests): a click turns listening on; it follows the caret, and goes when the user types
+    or the focus leaves (it stays while nothing happens); it grows and fades out when listening starts and comes back
+    by the caret when listening ends. Never takes focus."""
+    SIZE = 28
+
+    def __init__(self):
+        super().__init__(self.SIZE)
+
+    def show_by(self, rect, grow: bool = False):
+        """rect: (x, y, w, h) in physical pixels of the caret (w 0) or, unknown, the text box; the bubble goes just
+        right of it, centered on a caret's line, kept on screen. grow: back after listening (come_back)."""
+        x, y, w, h = (int(v) for v in rect)
+        p, ratio = _logical(x + w, y + h)
+        screen = QGuiApplication.screenAt(p) or QGuiApplication.primaryScreen()
+        a = screen.availableGeometry()
+        top = p.y() - self.SIZE if h / ratio > self.SIZE else p.y() - round(h / ratio / 2) - self.SIZE // 2
+        m = self.margin
+        self.move(min(max(p.x() + 6, a.left()), a.right() - self.SIZE) - m,
+                  min(max(top, a.top()), a.bottom() - self.SIZE) - m)
+        if grow:
+            self.come_back()
+        elif not self.isVisible():
+            self.k, self.alpha, self.leaving = 1.0, 1.0, False
+            self._appear()
+
+
+def _logical(x: int, y: int):
+    for s in QGuiApplication.screens():
+        g, r = s.geometry(), s.devicePixelRatio()
+        if g.x() <= x < g.x() + g.width() * r and g.y() <= y < g.y() + g.height() * r:
+            return QPoint(g.x() + int((x - g.x()) / r), g.y() + int((y - g.y()) / r)), r
+    return QPoint(x, y), 1.0
+
+
+class FloatButton(_OnTop):
+    moved = Signal(float, float)   # the new place, as fractions of the screen's free range
+
+    def __init__(self, place=(0.98, 0.88)):
+        super().__init__(_SIZE)
+        self.place = tuple(place)
+        self._screen = None
+        self._press = None     # (global point, window position) while the button is down
+        self._dragged = False
+        self._follow = QTimer(self, interval=300, timeout=self._follow_pointer)
+
+    def _appear(self):
+        self._screen = None
+        self._follow_pointer()
+        super()._appear()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self._follow.start()
+
+    def hideEvent(self, e):
+        super().hideEvent(e)
+        self._follow.stop()
+
     def appear(self):
-        if not self.isVisible():
-            self._screen = None
-            self._follow_pointer()
-            self.setWindowOpacity(0.0)
-            self.show()
-            self._fade.stop()
-            self._fade.start()   # fades in (the user's request: it shows when text can be typed)
-            hwnd = self.hwnd()
-            u32 = ctypes.windll.user32
-            u32.SetWindowLongW(hwnd, _GWL_EXSTYLE, u32.GetWindowLongW(hwnd, _GWL_EXSTYLE)
-                               | _WS_EX_NOACTIVATE | _WS_EX_TOPMOST)
-            self._follow.start()
-            self.orb.start()
+        self.fade_in()   # fades in (the user's request: it shows when text can be typed)
 
     def vanish(self):
-        self._follow.stop()
-        self.orb.stop()
-        self.hide()
+        if not self.leaving:   # a burst hides it when it ends
+            self.hide()
 
     def _follow_pointer(self):
         if self._press is not None:
@@ -153,22 +306,8 @@ class FloatButton(QWidget):
             self._screen = screen
             a = screen.availableGeometry()
             fx, fy = self.place
-            self.move(a.left() + round(fx * (a.width() - _SIZE)), a.top() + round(fy * (a.height() - _SIZE)))
-
-    def paintEvent(self, e):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        if not self.orb.paint(p):
-            _paint_mic(p, self._hover)
-        p.end()
-
-    def enterEvent(self, e):
-        self._hover = self.orb.hover = True
-        self.update()
-
-    def leaveEvent(self, e):
-        self._hover = self.orb.hover = False
-        self.update()
+            self.move(a.left() + round(fx * (a.width() - _SIZE)) - self.margin,
+                      a.top() + round(fy * (a.height() - _SIZE)) - self.margin)
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
@@ -193,9 +332,10 @@ class FloatButton(QWidget):
             return
         screen = QGuiApplication.screenAt(self.geometry().center()) or QGuiApplication.primaryScreen()
         a = screen.availableGeometry()
-        x = min(max(self.x(), a.left()), a.right() - _SIZE)
-        y = min(max(self.y(), a.top()), a.bottom() - _SIZE)
-        self.move(QPoint(x, y))
+        m = self.margin   # the button kept on screen, not the room around it
+        x = min(max(self.x() + m, a.left()), a.right() - _SIZE)
+        y = min(max(self.y() + m, a.top()), a.bottom() - _SIZE)
+        self.move(QPoint(x - m, y - m))
         self._screen = screen
         self.place = ((x - a.left()) / max(1, a.width() - _SIZE), (y - a.top()) / max(1, a.height() - _SIZE))
         self.moved.emit(*self.place)

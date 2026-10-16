@@ -219,6 +219,7 @@ class App(QObject):
         self._own_hwnds = {self.float_btn.hwnd(), self.bubble.hwnd()}
         self._apply_look()   # clicks on these are not caret moves
         self._box = None                         # the text box the focus is in (on_focus), its identity
+        self._caret_rect = None                  # where its caret was last seen (the bubble comes back there)
         self._box_quiet = False                  # listening was turned off by hand in it: not on again by itself
         self._box_auto = False                   # listening was turned on by the focus
         self._focus_busy = False
@@ -591,8 +592,8 @@ class App(QObject):
             wait += _CUE_LATENCY
             self.listener.still(wait)   # the start sound is not speech; muting waits for its end
         self._heard_at = time.monotonic()
-        self._update_float()
-        self.bubble.hide()
+        self._update_float("start")
+        self.bubble.burst()   # grows and fades out with the glow fading in
         self._marks_timer.start()
         if self.cfg.mute_while_recording:
             QTimer.singleShot(int(wait * 1000), lambda: self.muter.mute() if self._listening else None)
@@ -612,17 +613,38 @@ class App(QObject):
             self._notify(f"已自動關閉麥克風（{minutes} 分鐘沒有聽到講話）")
 
     # --- the floating button and leaving text (2026-10-16) ---
-    def _update_float(self):
-        """Main thread: in on_focus "float" the floating button fades in while listening is off and the focus is
-        where text can be typed (the user's request, 2026-10-16: listening is for editing text)."""
-        if self.cfg.on_focus == "float" and self._box is not None and not self._listening and not self._quitting:
-            self.float_btn.appear()
+    def _update_float(self, event: str = ""):
+        """Main thread: in on_focus "float" the floating button fades in while the focus is where text can be typed
+        (the user's request, 2026-10-16: listening is for editing text), anywhere with float_text_only off. When
+        listening starts ("start") it grows and fades out with the glow, and comes back as the glow goes ("stop"),
+        unless float_keep keeps it on screen."""
+        b = self.float_btn
+        if self.cfg.on_focus != "float" or self._quitting:
+            show = False
         else:
-            self.float_btn.vanish()
+            show = (self._box is not None or not self.cfg.float_text_only) \
+                and (not self._listening or self.cfg.float_keep)
+        b.setToolTip("關閉麥克風" if self._listening else "開啟麥克風")
+        if show:
+            if event == "stop" and (not b.isVisible() or b.leaving):
+                b.come_back()
+            else:
+                b.appear()
+        elif event == "start":
+            b.burst()
+        else:
+            b.vanish()
 
     def _float_clicked(self):
         """Main thread: the floating button turns listening on, as a tap of the key would (the text goes to the
-        window that has the focus: the button never takes it)."""
+        window that has the focus: the button never takes it); kept on screen while listening (float_keep), it
+        jumps at a click and turns listening off."""
+        if self.cfg.float_keep:
+            self.float_btn.jump()
+        if self._listening:
+            if self._listen_owner is None or self._listen_owner.finished:
+                self._stop_listen()
+            return
         self._listen_now("button")
 
     def _listen_now(self, name: str, quiet: bool = False) -> bool:
@@ -644,10 +666,7 @@ class App(QObject):
         """The floating button's and the bubble's look, in the glow's colors (彩虹 when there is no glow)."""
         colors = palette(style_for(self.cfg.glow, self.cfg.glow_custom))
         for w in (self.float_btn, self.bubble):
-            if (w.orb.look, w.orb.colors) != (self.cfg.button_look, colors):
-                w.orb.set_look(self.cfg.button_look, colors)
-                if w.isVisible():
-                    w.orb.start()
+            w.set_look(self.cfg.button_look, colors, self.cfg.orb_lite, self.cfg.orb_dark, self.cfg.hover_motion)
 
     def _float_moved(self, fx: float, fy: float):
         self.cfg.float_pos = [round(fx, 4), round(fy, 4)]
@@ -713,6 +732,8 @@ class App(QObject):
         if not mode or editable is None:
             return
         if editable:
+            if rect:
+                self._caret_rect = rect
             new = key != self._box
             if new:
                 self._box, self._box_quiet = key, False
@@ -762,7 +783,9 @@ class App(QObject):
         self.glow.hide()
         self._marks_timer.stop()
         self.marks.hide()
-        self._update_float()
+        self._update_float("stop")
+        if self.cfg.on_focus == "bubble" and self._box is not None and self._caret_rect:
+            self.bubble.show_by(self._caret_rect, grow=True)   # back by the caret as the glow fades out
         # the end sound marks the microphone going off, nothing about the text (the user's choice, 2026-10-16: the
         # 文字輸入完成時 option was removed)
         self.muter.restore()

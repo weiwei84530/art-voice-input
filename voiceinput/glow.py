@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QWidget
 
 DEPTH = 72          # px of the screen each strip covers, the glow's widest
 _SCALE = 3          # strips are drawn at 1/_SCALE and scaled up
+FADE_MS = 220       # the glow fades in and out in this time (the floating button and the bubble move with it)
 _LEVELS = 12        # falloff masks from quiet to loud
 _FPS = 24
 
@@ -249,7 +250,7 @@ class EdgeGlow:
         self._timer = QTimer(interval=1000 // _FPS, timeout=self._tick)
         self._fades = []
         for s in self._strips:
-            fade = QPropertyAnimation(s, b"windowOpacity", duration=220)
+            fade = QPropertyAnimation(s, b"windowOpacity", duration=FADE_MS)
             fade.finished.connect(lambda s=s, f=fade: s.hide() if f.endValue() == 0.0 else None)
             self._fades.append(fade)
         self._on = False

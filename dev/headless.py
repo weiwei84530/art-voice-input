@@ -163,8 +163,13 @@ appmod.EdgeGlow.show = lambda self, screen=None: None   # no glow on the user's 
 appmod.DraftMarks.show = lambda self, rects: None   # nor marks over their own app's text
 appmod.FloatButton.appear = lambda self: print("      [浮動按鈕 顯示]")   # nor the floating button
 appmod.FloatButton.vanish = lambda self: print("      [浮動按鈕 隱藏]")
+appmod.FloatButton.burst = lambda self: print("      [浮動按鈕 放大淡出]")
+appmod.FloatButton.come_back = lambda self: print("      [浮動按鈕 縮回淡入]")
+appmod.FloatButton.jump = lambda self: print("      [浮動按鈕 彈一下]")
+appmod.Bubble.burst = lambda self: None
 appmod.focus_info = lambda: (None, None, None)   # the real focus is the user's: focus: steps say what it is
-appmod.Bubble.show_by = lambda self, rect: (print(f"      [語音氣泡 {rect}]"), appmod.Bubble.setVisible(self, False))
+appmod.Bubble.show_by = lambda self, rect, grow=False: (print(f"      [語音氣泡 {rect}{' 縮回淡入' if grow else ''}]"),
+                                                       appmod.Bubble.setVisible(self, False))
 A = appmod.App(qapp)
 A.tray.hide()
 A.tray.showMessage = lambda title, text, *a: print(f"      [通知] {title}: {text}")

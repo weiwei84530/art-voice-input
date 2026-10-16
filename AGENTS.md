@@ -133,10 +133,24 @@ about 5-8% of a core more than 柔光 at 24 fps; their strips are deeper (`_REAC
 按鈕樣式 (`button_look`, `orbs.py`, the 外觀 tab with animated examples at 44px and 28px; 2026-10-16, the user kept
 all nine mockups of https://claude.ai/artifact/NJDviDDkxkjnLWkoQTNGgD and the microphone): the floating button and
 the bubble as an energy orb in the glow's colors (彩虹 without a glow). Each look draws a frame at a phase of its
-loop with whole cycles per loop, frames drawn as they first play and then copied at 15 fps, only while shown; drawn
-live while hovered. Measured offscreen: every look ~0.2-0.4% of a core once its loop is drawn, up to ~2-4% during
-the first loop; 星雲 (24 specks, 5-dot trails) and 日冕 (28 filaments) drew slowest and were thinned (all < 0.9ms a
-44px frame now). The 自訂 glow's sliders show each value while dragged (at most every 0.08s), saved when let go.
+loop with whole cycles per loop, frames drawn as they first play and then copied, only while shown. Later the same
+evening (the user's requests): an orb is drawn on a canvas 1.4 times the microphone's size (`orbs.SCALE`; every look
+had looked smaller than the microphone), 光環 / 虹膜 / 電漿 / 星雲 sized to match it; 節流模式 (`orb_lite`, off by
+default: looks first) keeps the first version (15 fps, glows blurred from a quarter size, fewer specks and
+filaments), without it 30 fps, glows as smooth gradients (流光's outer light looked coarse), 28 filaments, 24 specks
+with 5-dot trails; 光環、虹膜拿掉黑色（實驗） (`orb_dark` False) leaves out their dark disc and pupil. One look at rest
+(no hover color; `floatbtn.OrbButton`): the pointer over it shrinks it to 0.88 (游標移上去時, `hover_motion`: 平滑
+OutCubic, 彈跳 OutBack, 彈簧 OutElastic, to compare); when listening starts it grows to 1.5 and fades out in the
+glow's fade-in time (`glow.FADE_MS`, 220ms), and when listening ends it shrinks back and fades in as the glow fades
+out; the bubble comes back by the caret then (`App._caret_rect`). The 外觀 tab's examples do the same (a click plays
+both). The windows have room around the button (2.2 times, transparent, click-through). 浮動按鈕: 只在可以打字的地方
+顯示 (`float_text_only`, on by default; off: wherever the focus is) and 按下後不隱藏 (`float_keep`: it stays while
+listening, a click jumps it and turns listening off; the user chose that over fading out). Measured offscreen
+(the button kept shown; noisy, Windows' process clock ticks at 15.6ms): 節流 ~0-1.5% of a core after the first loop,
+精緻 ~0.6-2.8%, the first loop up to ~4% / ~6%. The figures measured before (0.2-0.4%) were wrong: Qt 6's
+`app.quit()` closes every window, so the test measured hidden buttons after the first loop; wait with a
+`QEventLoop` in such tests. The 自訂 glow's sliders show each value while dragged (at most every 0.08s), saved when
+let go.
 選字's 模糊音 (2026-10-16 evening, the user's requests): ㄩㄣ with ㄧㄣ, ㄈ with ㄏㄨ (飛 / 灰, 發 / 花), ㄋ with ㄌ
 (`candidates._FUZZY`); a word only fuzzy-alike is listed from dictionary frequency 3 (`app._FUZZY_MIN`: 官癮, 灌嬰
 were offered for 光陰); the user's hotwords are matched by sound too (`candidates.rank_of`), so words McBopomofo
@@ -315,7 +329,8 @@ edge of the character before it) or a terminal's cursor; a click listens; it fol
 nothing happens, and goes when the user types, the focus leaves or listening starts), 顯示可拖動的浮動按鈕
 (`floatbtn.FloatButton`, the floating button's checkbox of a few hours before, migrated: a round button on top,
 fading in only while the focus is where text can be typed and listening is off, hidden elsewhere (the user's
-request: listening is for editing text); a click listens like a tap of the key; it never takes focus and clicks on it
+request: listening is for editing text; both can be changed on the 外觀 tab since the same evening, see 按鈕樣式); a
+click listens like a tap of the key; it never takes focus and clicks on it
 are not caret moves; dragged, it stays where it was dropped (`float_pos`, fractions of the screen's free range) on the
 screen the pointer is on), or 自動開麥克風（離開時關閉）. Every 0.3s
 (`App._watch_focus`, one thread for UI Automation) `selection.focus_info` reads the focused control: whether text can
