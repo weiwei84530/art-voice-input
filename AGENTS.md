@@ -130,6 +130,13 @@ before: masks made once per level), 波浪 (the inner edge rolls along the edges
 compute their mask every frame (`motion_mask`) on parts of the strips near each edge, the falloff from a table and
 along-edge values in one row or column: 2-3ms a frame for four strips at 1920x1080 (12ms as first written), so
 about 5-8% of a core more than 柔光 at 24 fps; their strips are deeper (`_REACH`) so waves are not cut off.
+按鈕樣式 (`button_look`, `orbs.py`, the 外觀 tab with animated examples at 44px and 28px; 2026-10-16, the user kept
+all nine mockups of https://claude.ai/artifact/NJDviDDkxkjnLWkoQTNGgD and the microphone): the floating button and
+the bubble as an energy orb in the glow's colors (彩虹 without a glow). Each look draws a frame at a phase of its
+loop with whole cycles per loop, frames drawn as they first play and then copied at 15 fps, only while shown; drawn
+live while hovered. Measured offscreen: every look ~0.2-0.4% of a core once its loop is drawn, up to ~2-4% during
+the first loop; 星雲 (24 specks, 5-dot trails) and 日冕 (28 filaments) drew slowest and were thinned (all < 0.9ms a
+44px frame now). The 自訂 glow's sliders show each value while dragged (at most every 0.08s), saved when let go.
 選字's 模糊音 (2026-10-16 evening, the user's requests): ㄩㄣ with ㄧㄣ, ㄈ with ㄏㄨ (飛 / 灰, 發 / 花), ㄋ with ㄌ
 (`candidates._FUZZY`); a word only fuzzy-alike is listed from dictionary frequency 3 (`app._FUZZY_MIN`: 官癮, 灌嬰
 were offered for 光陰); the user's hotwords are matched by sound too (`candidates.rank_of`), so words McBopomofo

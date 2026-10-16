@@ -2,12 +2,16 @@
 is off and the focus is where text can be typed; a click turns listening on. It never takes focus, so the text goes
 to the window that had it, as with the key. Dragged, it stays where it was dropped; its place is kept as a fraction of the screen, and it shows on the
 screen the pointer is on at that same place (the user has three screens).
+Both draw the look picked on the 外觀 tab (orbs.py: the microphone, or one of nine energy orbs in the glow's
+colors), animated only while shown.
 """
 import ctypes
 
 from PySide6.QtCore import QPoint, QPointF, QPropertyAnimation, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import QWidget
+
+from .orbs import OrbPlayer
 
 _SIZE = 44
 _GWL_EXSTYLE, _WS_EX_NOACTIVATE, _WS_EX_TOPMOST = -20, 0x08000000, 0x8
@@ -27,9 +31,16 @@ class Bubble(QWidget):
         self.setFixedSize(self.SIZE, self.SIZE)
         self.setToolTip("開啟麥克風")
         self._hover = False
+        self.orb = OrbPlayer(self, self.SIZE)
 
     def hwnd(self) -> int:
         return int(self.winId())
+
+    def showEvent(self, e):
+        self.orb.start()
+
+    def hideEvent(self, e):
+        self.orb.stop()
 
     def show_by(self, rect):
         """rect: (x, y, w, h) in physical pixels of the caret (w 0) or, unknown, the text box; the bubble goes just
@@ -48,17 +59,18 @@ class Bubble(QWidget):
     def paintEvent(self, e):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        s = self.SIZE / _SIZE
-        p.scale(s, s)
-        _paint_mic(p, self._hover)
+        if not self.orb.paint(p):
+            s = self.SIZE / _SIZE
+            p.scale(s, s)
+            _paint_mic(p, self._hover)
         p.end()
 
     def enterEvent(self, e):
-        self._hover = True
+        self._hover = self.orb.hover = True
         self.update()
 
     def leaveEvent(self, e):
-        self._hover = False
+        self._hover = self.orb.hover = False
         self.update()
 
     def mouseReleaseEvent(self, e):
@@ -102,6 +114,7 @@ class FloatButton(QWidget):
         self.setFixedSize(_SIZE, _SIZE)
         self.setToolTip("開啟麥克風")
         self.place = tuple(place)
+        self.orb = OrbPlayer(self, _SIZE)
         self._screen = None
         self._press = None     # (global point, window position) while the button is down
         self._dragged = False
@@ -125,9 +138,11 @@ class FloatButton(QWidget):
             u32.SetWindowLongW(hwnd, _GWL_EXSTYLE, u32.GetWindowLongW(hwnd, _GWL_EXSTYLE)
                                | _WS_EX_NOACTIVATE | _WS_EX_TOPMOST)
             self._follow.start()
+            self.orb.start()
 
     def vanish(self):
         self._follow.stop()
+        self.orb.stop()
         self.hide()
 
     def _follow_pointer(self):
@@ -143,15 +158,16 @@ class FloatButton(QWidget):
     def paintEvent(self, e):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        _paint_mic(p, self._hover)
+        if not self.orb.paint(p):
+            _paint_mic(p, self._hover)
         p.end()
 
     def enterEvent(self, e):
-        self._hover = True
+        self._hover = self.orb.hover = True
         self.update()
 
     def leaveEvent(self, e):
-        self._hover = False
+        self._hover = self.orb.hover = False
         self.update()
 
     def mousePressEvent(self, e):

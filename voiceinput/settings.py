@@ -17,7 +17,9 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QColorDial
 
 from . import audio, cues, hotwords, packs, recordings, rules
 from . import glow as glowmod
+from .floatbtn import _paint_mic
 from .highlight import COLORS as MARK_COLORS
+from .orbs import LOOKS, OrbPlayer, palette
 from .memory import BOUNDARY
 from .keys import KEY_TRIGGERS, MOUSE_TRIGGERS, combo_text, is_modifier
 from .rules import Rule, Step
@@ -281,6 +283,34 @@ def _with_info(widget, tip: str, stretch: bool = True) -> QWidget:
     return box
 
 
+class _OrbSample(QWidget):
+    """The 外觀 tab's example of the button look, animated, at the floating button's or the bubble's size."""
+
+    def __init__(self, size: int):
+        super().__init__()
+        self.setFixedSize(size, size)
+        self.orb = OrbPlayer(self, size)
+
+    def set_look(self, look: str, colors: list):
+        self.orb.set_look(look, colors)
+        if self.isVisible():
+            self.orb.start()
+
+    def showEvent(self, e):
+        self.orb.start()
+
+    def hideEvent(self, e):
+        self.orb.stop()
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        if not self.orb.paint(p):
+            p.scale(self.width() / 44, self.width() / 44)
+            _paint_mic(p, False)
+        p.end()
+
+
 class KeyCapture(QLineEdit):
     """Click, then press a key combination: shows and stores it as text (Ctrl+Shift+Z)."""
     captured = Signal(str)
@@ -475,9 +505,12 @@ class SettingsDialog(QDialog):
         for row, (key, label, lo, hi, scale) in enumerate((("turn", "旋轉速度", 0, 40, 100), ("pulse", "呼吸", 0, 100, 100),
                                                           ("depth", "寬度", 40, 200, 100),
                                                           ("bright", "亮度", 30, 160, 100)), 1):
-            slider = QSlider(Qt.Horizontal, minimum=lo, maximum=hi, tracking=False)
+            slider = QSlider(Qt.Horizontal, minimum=lo, maximum=hi)
             slider.setProperty("scale", scale)
-            slider.valueChanged.connect(lambda v, k=key, sc=scale: self._custom_changed(k, v / sc))
+            # live while dragged (the user's request, 2026-10-16): the glow shows each value, saved when let go
+            slider.valueChanged.connect(lambda v, k=key, w=slider, sc=scale:
+                                        self._custom_changed(k, v / sc, save=not w.isSliderDown()))
+            slider.sliderReleased.connect(lambda: self._custom_changed(None, None))
             slider.wheelEvent = lambda e, w=slider: _scroll_instead(w, e)
             self.glow_sliders[key] = slider
             g.addWidget(QLabel(label), row, 0)
@@ -500,7 +533,21 @@ class SettingsDialog(QDialog):
         mark_row.addStretch()
         self.mark_group.buttonClicked.connect(self._mark_clicked)
 
+        self.button_look = QComboBox()
+        for k, label in LOOKS.items():
+            self.button_look.addItem(label, k)
+        self.look_samples = [_OrbSample(44), _OrbSample(28)]
+        look_row = QHBoxLayout()
+        look_row.addWidget(self.button_look)
+        look_row.addSpacing(8)
+        for w in self.look_samples:
+            look_row.addWidget(w, 0, Qt.AlignVCenter)
+        look_row.addStretch()
+        self.button_look.currentIndexChanged.connect(self._look_changed)
+
         form = QFormLayout()
+        form.addRow(_titled("按鈕樣式", "浮動按鈕和游標旁語音氣泡的樣子：原本的麥克風，或跟光暈同色的能量球"
+                                     "（沒開光暈時用彩虹的顏色）。右邊是實際大小的範例"), look_row)
         form.addRow(_titled("螢幕邊緣光暈", "麥克風開著時，螢幕邊緣亮起一圈光，講話時會變亮。依序選顏色樣式、"
                                       "動態（柔光／波浪：邊緣像浪一樣起伏／流星：兩道光繞著螢幕跑／漣漪：一圈圈往內擴散）"
                                       "和亮哪幾邊；下面是樣式的參數，選「自訂」才能調整。選了或按「預覽」會先亮一下讓你看"),
@@ -520,6 +567,7 @@ class SettingsDialog(QDialog):
         self.glow.currentIndexChanged.connect(self._glow_changed)
         self.glow_edges.currentIndexChanged.connect(self._glow_changed)
         self.glow_motion.currentIndexChanged.connect(self._glow_changed)
+        self._live = QTimer(self, singleShot=True, interval=80, timeout=self._preview)
         return page
 
     def _glow_params(self) -> dict:
@@ -551,13 +599,29 @@ class SettingsDialog(QDialog):
             self.glow_colors.addWidget(QToolButton(text="－", autoRaise=True, clicked=self._custom_fewer))
         self.glow_colors.addStretch()
 
-    def _custom_changed(self, key: str, value):
+    def _custom_changed(self, key, value, save: bool = True):
+        """A parameter of 自訂 changed (key None: a slider let go). While a slider is dragged the glow follows it
+        (at most every 0.08s) and nothing is saved yet."""
         c = self._glow_params()
-        c[key] = round(value, 2) if isinstance(value, float) else value
+        if key is not None:
+            c[key] = round(value, 2) if isinstance(value, float) else value
         self.cfg.glow_custom = c
-        self._save()
-        self._show_glow()
-        self._preview()
+        if save:
+            self._save()
+            self._show_glow()
+        self._show_samples()
+        if not self._live.isActive():
+            self._live.start()
+
+    def _look_changed(self):
+        self._apply()
+        self._show_samples()
+
+    def _show_samples(self):
+        """The button look's examples, in the colors of the glow picked."""
+        colors = palette(glowmod.style_for(self.glow.currentData(), self.cfg.glow_custom))
+        for w in self.look_samples:
+            w.set_look(self.button_look.currentData(), colors)
 
     def _custom_color(self, i: int):
         """A color of the 自訂 glow changed (i), or added (-1)."""
@@ -622,7 +686,9 @@ class SettingsDialog(QDialog):
         self.commit_at.setCurrentIndex(max(0, self.commit_at.findData(self.cfg.commit_at)))
         self.glow.setCurrentIndex(max(0, self.glow.findData(self.cfg.glow)))
         self.glow_motion.setCurrentIndex(max(0, self.glow_motion.findData(self.cfg.glow_motion)))
+        self.button_look.setCurrentIndex(max(0, self.button_look.findData(self.cfg.button_look)))
         self._show_glow()
+        self._show_samples()
         i = self.auto_off.findData(self.cfg.auto_off_minutes)
         if i < 0:   # a value set by hand in config.json
             self.auto_off.addItem(f"{self.cfg.auto_off_minutes} 分鐘沒講話", self.cfg.auto_off_minutes)
@@ -652,6 +718,7 @@ class SettingsDialog(QDialog):
         self.cfg.on_focus = self.on_focus.currentData()
         self.cfg.glow_edges = self.glow_edges.currentData()
         self.cfg.glow_motion = self.glow_motion.currentData()
+        self.cfg.button_look = self.button_look.currentData()
         self.cfg.save_recordings = self.keep_audio.isChecked()
         self.cfg.start_sound = self.start_sound.currentData()
         self.cfg.stop_sound = self.stop_sound.currentData()
@@ -666,6 +733,7 @@ class SettingsDialog(QDialog):
             self.cfg.glow_custom = glowmod.custom_from(glowmod.BY_ID.get(self.cfg.glow, glowmod.STYLES[0]))
         self._apply()
         self._show_glow()
+        self._show_samples()
         if not self._loading:
             self._preview()
 

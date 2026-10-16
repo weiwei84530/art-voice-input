@@ -47,6 +47,7 @@ from .asr import SAMPLE_RATE, Recognizer
 from .config import Config
 from .floatbtn import Bubble, FloatButton
 from .glow import EdgeGlow, style_for
+from .orbs import palette
 from .highlight import DraftMarks, draft_rects
 from .logbook import LogBook, esc
 from .hotwords import Hotwords
@@ -215,7 +216,8 @@ class App(QObject):
         self.float_btn.moved.connect(self._float_moved)
         self.bubble = Bubble()
         self.bubble.clicked.connect(lambda: self._listen_now("bubble"))
-        self._own_hwnds = {self.float_btn.hwnd(), self.bubble.hwnd()}   # clicks on these are not caret moves
+        self._own_hwnds = {self.float_btn.hwnd(), self.bubble.hwnd()}
+        self._apply_look()   # clicks on these are not caret moves
         self._box = None                         # the text box the focus is in (on_focus), its identity
         self._box_quiet = False                  # listening was turned off by hand in it: not on again by itself
         self._box_auto = False                   # listening was turned on by the focus
@@ -637,6 +639,15 @@ class App(QObject):
         self._start_listen(press)
         self._show_listen(press)
         return self._listening
+
+    def _apply_look(self):
+        """The floating button's and the bubble's look, in the glow's colors (彩虹 when there is no glow)."""
+        colors = palette(style_for(self.cfg.glow, self.cfg.glow_custom))
+        for w in (self.float_btn, self.bubble):
+            if (w.orb.look, w.orb.colors) != (self.cfg.button_look, colors):
+                w.orb.set_look(self.cfg.button_look, colors)
+                if w.isVisible():
+                    w.orb.start()
 
     def _float_moved(self, fx: float, fy: float):
         self.cfg.float_pos = [round(fx, 4), round(fy, 4)]
@@ -1734,6 +1745,7 @@ class App(QObject):
             if self._listening and self._listen_shown and self.cfg.glow:
                 self.glow.show(self._pointer_screen())
         self.marks.set_color(self.cfg.highlight_color)
+        self._apply_look()
         self._update_float()
         if self.cfg.on_focus != "bubble":
             self.bubble.hide()

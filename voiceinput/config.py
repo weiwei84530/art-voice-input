@@ -24,6 +24,8 @@ class Config:
     glow: str = ""                 # glow.py style along the screen's edges while listening, "" for none
     glow_edges: str = "all"        # which edges glow (glow.EDGES): all, tb, lr, top, bottom
     glow_motion: str = "soft"      # how it moves (glow.MOTIONS): soft, wave, comet, ripple
+    # the floating button's and the bubble's look (orbs.LOOKS): the microphone, or an energy orb in the glow's colors
+    button_look: str = "mic"
     # the 自訂 glow (glow == "custom"): colors (2-4), turn, pulse, depth, bright (glow.CUSTOM_KEYS); 2026-10-16
     glow_custom: dict = field(default_factory=dict)
     # the floating microphone button's place (on_focus "float"), as fractions of the screen's free range

@@ -348,6 +348,8 @@ class EdgeGlow:
         soft = self.motion == "soft"
         key = (g.x(), g.y(), g.width(), g.height(), self.edges, st.depth, st.bright)
         if soft and key not in self._masks:
+            while len(self._masks) >= 6:   # a slider dragged makes one set per value: the oldest go
+                self._masks.pop(next(iter(self._masks)))
             self._masks[key] = [[mask(g, r, _strength(k), edges, st.depth, st.bright) for k in range(_LEVELS)]
                                 if r is not None else [] for r in rects]
         for i, (s, r) in enumerate(zip(self._strips, rects)):
