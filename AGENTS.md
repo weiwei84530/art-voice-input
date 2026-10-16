@@ -32,7 +32,7 @@ menus (fix menu, fuzzy readings, menu timeout). The user plans to redesign popup
 off: SenseVoice is not loaded and the suspects code in `app.py` is commented out (`suspects.py` and
 `candidates.homophones`, which it needs, are kept). Tray error notices (model not ready, mic failure, terminal
 selection lost) stay. Sections below describe
-the branch; history of the removed features is in git (main, up to 71e5516). Brought back 2026-10-11 in a new form:
+the branch; history of the removed features is in git (main, up to 726cde3). Brought back 2026-10-11 in a new form:
 the 選字 menu (old look, `picker.py`), hotwords (a weighted word list) and pick memory (`memory.py`); see below.
 
 ## Platform
@@ -342,7 +342,7 @@ spoken punctuation mark gets that mark instead, and a mark said right after an a
 A spoken mark (or described character) with text selected when it was said replaces the selection (it was typed at
 the caret until 2026-10-15: a selected 。 said 冒號 over stayed, ： went to the end).
 「X改成Y」 said alone changed the last X typed before the caret to Y (same characters, then the same toneless
-reading) for a few hours on 2026-10-14/15; removed at the user's request (git: 8e14854 adds it).
+reading) for a few hours on 2026-10-14/15; removed at the user's request (git: d59596c adds it).
 A piece that is no command alone but, decoded at the pause with the speech before it, is exactly a command (its
 tokens from where the piece began, `_split_at`) runs as one, the speech before it committed (`_ran_tail`; the user's
 換行 came out as "Hang Hung," alone and 送出 as "Contral.", as themselves in the sentence, and were typed as text,
@@ -632,7 +632,7 @@ The dictionary (`candidates.py`, since 2026-10-02): McBopomofo's word list (MIT,
 built by `dev/build_dict.py` from a pinned commit): ~146k Taiwanese phrases + Big5 single characters with Bopomofo
 readings and Taiwanese-corpus frequencies, cached in DATA_DIR/cache/word_index.pkl (build ~10s, load ~0.4s). It
 answers `is_word` / `frequency` for disfluencies and `homophones` for 選字 (and the commented-out suspects). jieba was
-used until 2026-10-02 (commit 58c1535) and dropped for missing Taiwanese words and mainland frequencies.
+used until 2026-10-02 (commit 7593a98) and dropped for missing Taiwanese words and mainland frequencies.
 
 ## After a dictation (2026-09-29)
 
@@ -664,7 +664,7 @@ removed the same day they were built: the user corrects by selecting with the mo
   at most 4 characters come before 的 (2026-10-14: 我這邊想要顯示的是 typed 示); on 3931 logged results that was the
   only false hit; TTS 節日的節,
   薔薇的薇, 這個字是教育的育 right (程式的程 was heard as 城市的城 and typed 城).
-- **Bopomofo spelling** (拼讀: ㄔ ㄤ 昌 types 昌) was built and reverted on 2026-10-11 (db3f0e7, c0ae24e): with a real
+- **Bopomofo spelling** (拼讀: ㄔ ㄤ 昌 types 昌) was built and reverted on 2026-10-11 (c342c21, a41dab5): with a real
   voice X-ASR heard most symbol names as English letters (ㄐ ㄧ ㄝ → "G E A"), and there is no way to force Chinese,
   so it missed too often for a feature meant for frequent use (the user's verdict).
 - **Selected 。** (setting, 2026-10-07): speaking on a selected 。 replaces it with ， + the utterance + 。

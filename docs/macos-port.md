@@ -1,7 +1,7 @@
 # Porting VoiceInput to macOS
 
 Status (2026-10-03): VoiceInput is Windows only. The half-done macOS paths were removed in the commit after
-`f6a7b83` (that commit still has them: `install.command`, `start.command`, the LaunchAgent in `autostart.py`, the
+`064f40c` (that commit still has them: `install.command`, `start.command`, the LaunchAgent in `autostart.py`, the
 `~/Library/Application Support` data folder, Cmd+V paste, a plain pynput listener in `hotkey.py`). This file lists
 what a real port needs, so the work can start without re-investigating.
 
@@ -61,9 +61,9 @@ the user install a driver.
 | Click-through indicator | `WS_EX_TRANSPARENT` (`overlay._click_through`) | `Qt.WindowTransparentForInput` should be enough; check it stays above full-screen apps (`collectionBehavior`) |
 | Tray icon | `QSystemTrayIcon`, left click opens settings | Menu bar icon; a click shows the menu, so open settings from a menu item |
 | Dark taskbar icon | registry (`app._dark_taskbar`) | `NSApp.effectiveAppearance` or a template icon |
-| Launch at login | HKCU Run (`autostart.py`) | LaunchAgent plist (code in `f6a7b83`), or `SMAppService` for a bundle |
+| Launch at login | HKCU Run (`autostart.py`) | LaunchAgent plist (code in `064f40c`), or `SMAppService` for a bundle |
 | Data folder | `%LOCALAPPDATA%\VoiceInput` (`paths.py`) | `~/Library/Application Support/VoiceInput` |
-| Install / start | `install.bat`, `start.bat` | `install.command`, `start.command` in `f6a7b83` (uv, Python 3.12) |
+| Install / start | `install.bat`, `start.bat` | `install.command`, `start.command` in `064f40c` (uv, Python 3.12) |
 | Test audio | `dev/tts.ps1` (zh-TW Hanhan) | `say -v Meijia -o x.aiff` then convert to 16kHz wav |
 
 Platform independent, expected to work unchanged: `asr.py` (sherpa-onnx has macOS arm64 wheels), `audio.py`
