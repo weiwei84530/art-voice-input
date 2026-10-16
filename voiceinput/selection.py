@@ -70,6 +70,7 @@ def _uia():
 # control types where nothing can be typed (UIA_*ControlTypeId): a button, a list, a menu, a tab …
 _NOT_TEXT = {50000, 50002, 50005, 50006, 50007, 50008, 50009, 50010, 50011, 50013, 50014, 50015, 50016, 50017,
              50018, 50019, 50021, 50023, 50024, 50029, 50031, 50034, 50035, 50037}
+_WEB = {"Chrome", "Gecko"}   # UI Automation framework ids of browsers
 _DESKTOP = {"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"}
 
 
@@ -164,8 +165,13 @@ def _editable(el, U) -> bool | None:
             return None if read_only is None else not read_only
         if kind in _NOT_TEXT:
             return False
-        if not read_only and el.CurrentIsKeyboardFocusable and el.GetCurrentPattern(U.UIA_TextPatternId):
+        text = el.GetCurrentPattern(U.UIA_TextPatternId)
+        if not read_only and el.CurrentIsKeyboardFocusable and text:
             return True
+        if not text and el.CurrentFrameworkId in _WEB and not el.CurrentClassName.startswith("Chrome_"):
+            # a web page's focused element with no text: GitHub's file list pane, focused by a click next to its Go
+            # to file box, is a focusable Group without a TextPattern (2026-10-16: listening stayed on)
+            return False
         return None
     except Exception:
         return None
