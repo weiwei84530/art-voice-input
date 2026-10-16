@@ -54,7 +54,7 @@ from .hotkey import Hotkeys
 from .keys import MOUSE_TRIGGERS, combo_vks
 from .listen import LEAD, Listener
 from .memory import Memory, is_latin, situation
-from .mute import Muter
+from .mute import Muter, recover as recover_mute
 from .output import backspace, copy_text, paste_text, press_chord, press_delete, press_key, restore_now
 from . import picker as picker_mod
 from .picker import Picker
@@ -1908,5 +1908,6 @@ def main():
         log.info("already running")
         return 0
 
+    recover_mute()   # killed while listening last time: the speakers come back (not in App: tests build one)
     app = App(qapp)  # noqa: F841 (keep reference alive)
     return qapp.exec()

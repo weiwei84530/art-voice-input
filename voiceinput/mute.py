@@ -2,6 +2,10 @@
 
 The mute is undone when the dictation has been pasted. Speakers the user had muted themselves are left alone: only
 a mute we set is undone. Core Audio (IAudioEndpointVolume) through comtypes, no extra package.
+
+A marker file (paths.MUTED_PATH) is there while our mute is on, so a launch after the app was killed while
+listening (a restart by Stop-Process, a crash) unmutes first (recover(); the user's request, 2026-10-16: the
+computer came back muted). Quitting normally restores it anyway.
 """
 import ctypes
 import logging
@@ -10,6 +14,8 @@ from ctypes.wintypes import BOOL, DWORD
 
 import comtypes
 from comtypes import COMMETHOD, GUID, IUnknown
+
+from .paths import MUTED_PATH
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +90,8 @@ class Muter:
             vol = _endpoint()
             if vol.GetMute():
                 return
+            MUTED_PATH.parent.mkdir(parents=True, exist_ok=True)
+            MUTED_PATH.write_text("muted by VoiceInput while listening", encoding="utf-8")
             vol.SetMute(True, None)
             self._ours = True
         except Exception:
@@ -95,5 +103,18 @@ class Muter:
         self._ours = False
         try:
             _endpoint().SetMute(False, None)
+            MUTED_PATH.unlink(missing_ok=True)
         except Exception:
             log.exception("unmute failed")
+
+
+def recover() -> None:
+    """At launch: a mute left by a run that was killed while listening is undone."""
+    if not MUTED_PATH.exists():
+        return
+    try:
+        _endpoint().SetMute(False, None)
+        log.info("unmuted the speakers a killed run had muted")
+    except Exception:
+        log.exception("unmute at launch failed")
+    MUTED_PATH.unlink(missing_ok=True)

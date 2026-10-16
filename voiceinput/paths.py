@@ -11,6 +11,7 @@ DATA_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Loc
 CONFIG_PATH = DATA_DIR / "config.json"
 LOG_PATH = DATA_DIR / "voiceinput.log"
 LOCK_PATH = DATA_DIR / ".voiceinput.lock"
+MUTED_PATH = DATA_DIR / ".muted"   # there while we keep the speakers muted (mute.py)
 DEFAULT_MODELS_DIR = DATA_DIR / "models"
 
 
