@@ -43,6 +43,8 @@ automatically; read it before reviving or redesigning something). Module docstri
   recognition X-ASR int8 `sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03` (130MB, ~0.75s per
   18s, punctuation, good English); VAD silero (`models.vad_path()`). SenseVoice Small (second opinion,
   `suspects.py`) is not loaded: its code in `app.py` is commented out. Memory ~1.1GB, much of it the word index.
+- The app will be shared with other users and must stay light (the user's machine: 8GB RAM, i5-8500): fixes must
+  work for anyone (no per-user acoustic training) and not add big models.
 
 ## Module map
 
@@ -74,8 +76,9 @@ automatically; read it before reviving or redesigning something). Module docstri
 
 Listening is a switch: on, it takes text, spoken commands and mouse edits until turned off.
 - **On / off**: 麥克風快捷鍵 (`config.hotkey`, captured from any key, combination or mouse button but the left; a
-  press is always a tap, fully suppressed; a modifier alone fires on release, with Alt/Win an unassigned 0xE8 is sent
-  so no menu opens), the floating button, the bubble, 點進輸入框時 = 自動開麥克風 (`auto_listen`), spoken 結束,
+  press is always a tap, fully suppressed; a modifier alone fires on release with nothing else pressed and is not
+  suppressed, with Alt/Win an unassigned 0xE8 is sent so no menu opens), the floating button, the bubble,
+  點進輸入框時 = 自動開麥克風 (`auto_listen`), spoken 結束,
   送出訊息後自動關閉麥克風 (`stop_on_enter`: Enter / Ctrl+Enter or an operation's Enter step), 自動關閉麥克風 (no
   speech for `auto_off_minutes`, default 5; tray notice). Red warning on 一般 when nothing can turn it on.
 - **Focus** (`App._watch_focus`, every 0.3s, `selection.focus_info`: editable?, identity, rect; a terminal always
@@ -97,8 +100,8 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
   of each pause kept, `_GAP_KEEP`) — beyond 30s the recognizer gives no timestamps, so nothing would settle. A draft
   shows the recognizer's 。？！ at its end; the next pause turns it into ， when the sentence goes on.
 - **Commit**: on a command or the end of listening (a draft over 60s commits at a pause). It keeps the recognizer's
-  。？！ or adds 。 (？ after 嗎, . after English), not when the caret has text on both sides; a spoken mark replaces
-  that. A commit reuses the last pause's decode when its last piece is the spans' last (`App._live`).
+  。？！ or adds 。 (？ after 嗎, . when the draft has no Chinese), not when the caret has text on both sides; a
+  spoken mark replaces that. A commit reuses the last pause's decode when its last piece is the spans' last (`App._live`).
 - **Caret moved** (click, key, selection; `_caret_left` from the hooks): the draft stays as typed, the next speech
   starts a new one; a late update is redone at the new caret (`_redo_job`). A draft started over a selection
   replaces it.
@@ -117,8 +120,9 @@ An utterance that is exactly an operation's phrase, a punctuation name or a desc
 and runs (nothing decoded when nothing was said since the last commit).
 - Decoding (`App._command_first`): a piece with at most 1.2s of speech is decoded first with commands boosted
   (score 5, commands alone: hotwords and packs competed) and padded with 0.3s of zeros at both ends, then plainly if
-  that is no command. A piece that, decoded with the speech before it, ends exactly in a command runs as one
-  (`_split_at`, `_ran_tail`). Repeats the boost made (結束結束結束) count once (`_one_command`).
+  that is no command. Command phrases are kept out of 詞庫 biasing (`_bias_words`: 括號 at 200% made 逗號 / 換行
+  into 括號). A piece that, decoded with the speech before it, ends exactly in a command runs as one (`_split_at`,
+  `_ran_tail`). Repeats the boost made (結束結束結束) count once (`_one_command`).
 - Sound-alike (`_alike`, `candidates.sounds_alike`): same tones required, fuzzy pairs, dictionary readings of the
   command (any reading of a 多音字 only where the dictionary lacks the word). 金嘆號 → 驚嘆號; 都好, 問好, 放心 are not
   commands. Still taken: 封號 → 分號, 據點 → 句點.
@@ -139,7 +143,8 @@ and runs (nothing decoded when nothing was said since the last commit).
   點點點 is not boosted (it ran away).
 - Described characters (`describe_char`): everything before 的 exactly one dictionary word, no lead-in (節日的節 →
   節; 顯示的是 → 示). Spelled letters over a selected English word type that word (`edit.spelled`, counts as a pick).
-- `period_to_comma`: speaking on a selected 。 gives ，+ utterance + 。.
+- Not carried over from press-and-talk yet: `period_to_comma` (selected 。 → ，+ utterance + 。; checkbox hidden,
+  `app.py` ignores it) and trimming punctuation when replacing a selection.
 - **復原** (`Session.history`, unlimited while the caret hasn't moved): takes back VoiceInput's last change while it
   is right before the caret: typed text, a pause's update of the draft (one each), a mark, a new line, Space, text
   over a selection (selection comes back), a deleted selection, 剪下 / 貼上 (ordinary apps; paste of one line ≤300
@@ -176,9 +181,10 @@ sentence end → 嗎 questions → trailing punctuation.
 - **選字 menu** (`picker.py`): opens by itself while listening (`App._auto_pick`) after a mouse drag or double click
   that selects ≤4 Chinese characters or ≤3 English words (read 80ms after release). Tabs by closeness of sound
   (pointer over a tab opens it), on the side away from the selection; grid 4x4 (one character) or 2x5; no timeout,
-  any click or key closes it. Chinese (`candidates.ranked`): 同音, 不同聲調, 模糊音 (ㄩㄣ/ㄧㄣ, ㄈ/ㄏㄨ, ㄋ/ㄌ; fuzzy-only
-  words from frequency 3, `app._FUZZY_MIN`; 詞庫 words matched by sound too). English: 近音字 (`sounds.near`, weighted
-  phoneme edit distance), 詞庫 (`sounds.alike`), 大小寫 (`memory.variants`).
+  any click or key closes it. Chinese (`candidates.ranked`): 同音, 不同聲調, 模糊音 (`candidates._FUZZY`: zh/z,
+  sh/s, an/ang, en/eng, r/l, ㄩㄣ/ㄧㄣ, ㄈ/ㄏㄨ, ㄋ/ㄌ …; fuzzy-only words from frequency 3, `app._FUZZY_MIN`; 詞庫
+  words by sound too). English: 近音字 (`sounds.near`, weighted phoneme edit distance), 詞庫 (`sounds.alike`), 大小寫
+  (`memory.variants`).
 - **詞庫 list** (`hotwords.py`, `hotword-list.json`; code says hotwords, UI says 詞庫 / 優先度): 優先度 shown as
   stored − 100 (0% nothing, +100% top, negative red). A pick of 2+ characters or English moves the picked word +25%
   and the replaced one −25%. Typed words are top. English never below 0%. Single characters never listed. ✕ puts a
@@ -186,7 +192,7 @@ sentence end → 嗎 questions → trailing punctuation.
   another one starts with is not sent (剪貼 made 剪貼簿 into 剪貼布).
 - **詞包** (`packs.py`, shipped `voiceinput/packs/<id>.txt`, user copies in DATA_DIR/packs read instead, edits apply at
   the next dictation; an update appends new shipped terms under a dated comment, `packs/shipped` keeps the last
-  shipped copy). Seven packs, 723 words, none ticked by default; ticked words bias at 150% unlisted. No version
+  shipped copy). Seven packs (`packs.ORDER`), none ticked by default; ticked words bias at 150% unlisted. No version
   numbers, no common words as products, nothing the hotword encoding can't hold (UI/UX, 4K). A pick or typed word an
   unticked pack lists brings a tray hint (`_suggest_pack`) every time.
 - **English spelling** (`spelling.py`): a run of English words whose letters equal a known term's (詞庫, packs,
@@ -218,8 +224,8 @@ sentence end → 嗎 questions → trailing punctuation.
 
 Tabs: 一般 (microphone, 麥克風快捷鍵, 點進輸入框時 drop-down 不使用 / 語音氣泡 / 自動開麥克風 (`show_bubble` /
 `auto_listen`, at most one), 顯示浮動按鈕 + its two options, 自動關閉麥克風, stop_on_enter, mute, punctuation names,
-period_to_comma, described characters, autostart, 設定檔 row, 開發測試 with --debug), 外觀 (glow, draft mark color,
-提示音, 按鈕樣式 + 44px example, 按鈕大小 `button_scale` 75-125%, 效能 節流模式 `orb_lite`), 辨識紀錄, 自訂操作, 詞庫.
+described characters, autostart, 設定檔 row, 開發測試 with --debug), 外觀 (glow, draft mark color, 提示音,
+按鈕樣式 + 44px example, 按鈕大小 `button_scale` 75-125%, 效能 節流模式 `orb_lite`), 辨識紀錄, 自訂操作, 詞庫.
 - Each setting's help is an ⓘ after its name (`settings._Info`), not tooltips.
 - 設定檔 (`userdata.py`): 匯出 writes all settings and the 詞庫 (list, aliases, 選字記憶, pack files) to one JSON; 匯入
   replaces settings except `userdata.LOCAL` (mic, autostart, float place) and merges the 詞庫 (file wins); 還原預設
@@ -267,7 +273,8 @@ period_to_comma, described characters, autostart, 設定檔 row, 開發測試 wi
 - `dev/headless.py` runs the real App against a simulated text box (feed:WAV, op:PHRASE, clip:TEXT): default for
   tests. Audio: Windows TTS (zh-TW Hanhan, `dev/tts.ps1`) or the user's saved recordings (`recordings.py`,
   DATA_DIR/recordings with index.jsonl; development only, to be removed before release, keep it inside that module,
-  `App._keep`, the 開發測試 row and `save_recordings`). Saved recordings were decoded with that moment's 詞庫.
+  `App._keep`, the 開發測試 row and `save_recordings`). Saved recordings were decoded with that moment's 詞庫;
+  press-and-talk ones (before 2026-10-14) still hold the start sound the app cut out.
 - Never let a test write the user's real data files while their VoiceInput runs.
 - `dev/e2e.py` types into real Notepad / Windows Terminal: only when the user is away (it once typed into their
   Notepad document).
@@ -275,7 +282,7 @@ period_to_comma, described characters, autostart, 設定檔 row, 開發測試 wi
 
 ## Open questions
 
-- With auto_listen, listening turned off by 送出 / the idle timeout stays off in that box until the focus leaves
-  (asked, not decided).
+- With auto_listen, listening turned off by 送出 / the idle timeout stays off in that box until the focus leaves or
+  a click into it (asked, not decided).
 - Not yet tried in a real terminal: the spoken edit commands. Not tried with the draft mark: Notepad, LINE,
   Electron apps, scrolling while drafting.
