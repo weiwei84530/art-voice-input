@@ -17,6 +17,9 @@ BUTTON_SCALE_RANGE = (75, 125)
 class Config:
     # defaults: the user's own setup (screenshots of 2026-10-17)
     mic: str = ""                  # input device name, "" = system default
+    # the settings window's and the 選字 menu's colors (2026-10-18, the redesign): light, dark or system (Windows'
+    # app mode)
+    theme: str = "system"
     autostart: bool = True
     mute_while_recording: bool = True   # mute the speakers while listening
     period_to_comma: bool = True   # speaking on a selected 。 turns it into ， + the utterance + 。
@@ -68,9 +71,9 @@ class Config:
     # 送出後關閉麥克風 (2026-10-16, the user's request): Enter (or Ctrl+Enter) pressed, or a spoken operation's Enter
     # step (送出), turns listening off; Shift+Enter (a new line) does not
     stop_on_enter: bool = False
-    hotword_sort: str = "date"     # order of the 詞庫 tab (settings.HOTWORD_SORTS)
-    pick_sort: str = "date"        # order of 選字記憶 on the 詞庫 tab (settings.PICK_SORTS)
-    alias_sort: str = "date"       # order of 英文強制替換 (settings.ALIAS_SORTS)
+    hotword_sort: str = "date"     # order of 詞庫列表 (ui/page_bank.SORTS)
+    pick_sort: str = "date"        # order of 選字記憶 (ui/page_bank.SORTS)
+    alias_sort: str = "date"       # order of 英文替換 (ui/page_bank.SORTS)
     hotword_section: str = ""      # the open section of the 詞庫 tab ("" none, packs, words, picks, aliases)
     # ids of the ticked term packs (packs.py); none by default since 2026-10-17 (the user's choice; the AI pack before)
     packs: list = field(default_factory=list)

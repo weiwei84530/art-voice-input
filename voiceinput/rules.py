@@ -67,7 +67,7 @@ def defaults(newline: bool = True, send: bool = True, dev: bool = False) -> list
     typing (換行 / 下一行 Shift+Enter, 空白, 括號 （ ）, 引號 「」), changing (刪除 Backspace, 復原 / 撤銷), the
     clipboard (全選 / 複製 / 剪下 / 貼上) and ending (送出 Enter, listening goes on; 結束 turns it off). No key
     rules since 2026-10-16: the hotkey is config.hotkey. dev (--debug): also the user's own 標點 = "- ", a row of
-    自訂 (not a default operation: settings._BUILT_IN is built without it; the user's request, 2026-10-17)."""
+    自訂 (not a default operation: ui/page_cmd.BUILT lists the default rows without it; the user's request, 2026-10-17)."""
     out = [Rule(SPEECH, phrase=p, steps=[Step(KEYS, "Shift+Enter")]) for p in ("換行", "下一行")] if newline else []
     out += [Rule(SPEECH, phrase="空白", steps=[Step(KEYS, "Space")]),
             Rule(SPEECH, phrase="括號", steps=[Step(WRAP, ["（", "）"])]),

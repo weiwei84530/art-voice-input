@@ -66,7 +66,7 @@ automatically; read it before reviving or redesigning something). Module docstri
 | `picker.py` | the 選字 menu |
 | `floatbtn.py` / `orbs.py` | floating button and bubble (`OrbButton`), the ten 按鈕樣式 looks |
 | `glow.py` | screen-edge glow while listening |
-| `settings.py` | settings window (5 tabs) |
+| `ui/` | settings window (2026-10 redesign): `theme.py` tokens + QSS, `kit.py` widgets, `shell.py` home and transition, `window.py` app interface, `page_*.py` the six pages |
 | `logbook.py` | 辨識紀錄 rows |
 | `config.py` / `userdata.py` | `Config` (load migrates old keys) / settings file export, import, reset |
 | `hotkey.py` / `keys.py` | low-level hooks, hotkey capture, key names |
@@ -228,11 +228,22 @@ sentence end → 嗎 questions → trailing punctuation.
 Defaults (`Config`) are the user's own setup: no hotkey, bubble, floating button (流光 look), 彩虹 glow, autostart
 on; 保存錄音 / 短停頓就執行指令 on by default only with --debug.
 
-Tabs: 一般 (microphone, 麥克風快捷鍵, 點進輸入框時 drop-down 不使用 / 語音氣泡 / 自動開麥克風 (`show_bubble` /
-`auto_listen`, at most one), 顯示浮動按鈕 + its two options, 自動關閉麥克風, stop_on_enter, mute, punctuation names,
-described characters, autostart, 設定檔 row, 開發測試 with --debug), 外觀 (glow, draft mark color, 提示音,
-按鈕樣式 + 44px example, 按鈕大小 `button_scale` 75-125%, 效能 節流模式 `orb_lite`), 辨識紀錄, 自訂操作, 詞庫.
-- Each setting's help is an ⓘ after its name (`settings._Info`), not tooltips.
+Settings window (`ui/`, the 2026-10 redesign; mockups on the claude.ai Design canvas
+https://claude.ai/artifact/8UWdBateenAsqfZKeHPeiG, style C): frameless 960x640, Windows 11 rounded corners. Home:
+the orange brand block (status, logo, 阿特語音輸入法, version from `voiceinput.__version__`) and six tiles, each icon
+bled large into the tile's bottom right (tilted 5°; hover lifts it up-right, turning clockwise). A tile opens its page
+(transition Fly): the block shrinks to a 56px strip that goes home, the icon flies to the page title. Pages: 麥克風
+(hotkey card, 點進輸入框時 radio, floating button + its two options; auto-off chips, stop_on_enter, device, mute), 外觀與聲音
+(live preview, button looks, glow tiles + motions, 自訂 fold for colors / sliders / edges, mark color, 節流模式,
+sounds), 語音指令 (design C4: "當我說 [chips] 就 [what]" grouped with an orange bar per group, phrase chips edited in
+place, 自訂 rows choose 按下按鍵 / 打出文字 / 左右包住, 新增一句; a phrase said for two things, punctuation names
+included, is marked; 說標點的名字 and 說「詞的字」 cards below), 詞庫 (design 1: segmented tabs with counts, search,
+order), 辨識紀錄 (design 1: timeline, filters 全部 / 文字 / 指令 / 選字與復原, 清除紀錄 → `App._clear_log`), 系統
+(design 3: 外觀模式 亮色 / 暗色 / 跟隨系統 with sun / moon / computer icons, autostart, settings file drop zone,
+developer options with --debug, about). `config.theme` drives the settings window and (planned) the 選字 menu;
+the floating button, bubble and glow are colored and not themed. `dev/settings_preview.py [page] [--dark]
+[shot.png]` shows the window on a temp copy of the user's data.
+- Each setting's help is an ⓘ after its name (`ui.kit.Info`), not tooltips.
 - 設定檔 (`userdata.py`): 匯出 writes all settings and the 詞庫 (list, aliases, 選字記憶, pack files) to one JSON; 匯入
   replaces settings except `userdata.LOCAL` (mic, autostart, float place) and merges the 詞庫 (file wins); 還原預設
   resets everything including the 詞庫.

@@ -64,7 +64,7 @@ from .reading import reading_key
 from .selection import (Context, ContextProbe, focus_info, move_cursor_after, term_watcher,
                         terminal_in_front)
 from .session import Session, foreground
-from .settings import SettingsDialog
+from .ui.window import SettingsWindow
 from .textfmt import format_text, to_traditional
 
 log = logging.getLogger("voiceinput")
@@ -240,9 +240,10 @@ class App(QObject):
         self.picker.picked.connect(self.on_menu_pick)
         self.picker.closed.connect(self._forget_menu)
         self._picker_hwnd = int(self.picker.winId())
-        self.settings = SettingsDialog(self.cfg, self.hotwords, self.memory)
+        self.settings = SettingsWindow(self.cfg, self.hotwords, self.memory)
         self.settings.applied.connect(self.apply_settings)
-        self.book = LogBook(self._log_changed)   # the 辨識紀錄 tab, kept for this session only
+        self.book = LogBook(self._log_changed)   # the 辨識紀錄 page, kept for this session only
+        self.settings.clear_log.connect(self._clear_log)
         self.settings.glow_preview.connect(self._preview_glow)
         self._heard_at = 0.0                     # when speech last began while listening (auto_off_minutes)
         self._idle_timer = QTimer(self, interval=5000, timeout=self._check_idle)
@@ -1802,6 +1803,10 @@ class App(QObject):
     def _log_changed(self):
         if self.settings.isVisible():
             self.settings.set_log(self.book.sessions)
+
+    def _clear_log(self):
+        self.book.sessions.clear()
+        self.settings.set_log(self.book.sessions)
 
     def open_settings(self):
         self.settings.load_values()
