@@ -15,20 +15,21 @@ BUTTON_SCALE_RANGE = (75, 125)
 
 @dataclass
 class Config:
+    # defaults: the user's own setup (screenshots of 2026-10-17)
     mic: str = ""                  # input device name, "" = system default
-    autostart: bool = False
+    autostart: bool = True
     mute_while_recording: bool = True   # mute the speakers while listening
     period_to_comma: bool = True   # speaking on a selected 。 turns it into ， + the utterance + 。
     punctuation_names: bool = True  # an utterance of just a punctuation name (逗號, 句號 …) types the mark
     describe_char: bool = True     # 節日的節 types 節 (edit.described)
     # the key or mouse button, with modifiers, a press of which turns listening on and off (keys.parse_hotkey), ""
     # none (2026-10-16, the user's design: the one key binding left; any key since 2026-10-17)
-    hotkey: str = "mouse_middle"
-    glow: str = ""                 # glow.py style along the screen's edges while listening, "" for none
+    hotkey: str = ""
+    glow: str = "siri"             # glow.py style along the screen's edges while listening, "" for none
     glow_edges: str = "all"        # which edges glow (glow.EDGES): all, tb, lr, top, bottom
     glow_motion: str = "soft"      # how it moves (glow.MOTIONS): soft, wave, comet, ripple
     # the floating button's and the bubble's look (orbs.LOOKS): the microphone, or an energy orb in the glow's colors
-    button_look: str = "mic"
+    button_look: str = "flow"
     # 節流模式 (2026-10-16): the orbs as first made, 15 fps and coarser; off, 30 fps and finer (looks first)
     orb_lite: bool = False
     # the floating button's and the bubble's size, percent of the usual (75-125; 2026-10-16, the user's request)
@@ -53,7 +54,7 @@ class Config:
     # auto_listen): the bubble by the click that put the focus in a text box, and the draggable floating button
     # (kept on screen with float_keep, a fixed place to turn listening off); either may go with auto_listen
     show_bubble: bool = True
-    show_float: bool = False
+    show_float: bool = True
     # 點進輸入框時 自動開麥克風 (the 一般 tab): a text box the focus comes into turns listening on, leaving it for a
     # place where nothing can be typed turns it off. One choice with show_bubble since 2026-10-17 (the 一般 tab's
     # 點進輸入框時: 不使用 / bubble / this; the user's design), so at most one of them is on
@@ -75,11 +76,12 @@ class Config:
     packs: list = field(default_factory=list)
     start_sound: str = "blip"     # cues.py id played when the recording indicator shows, "" for none
     stop_sound: str = "blip"      # cues.py id played when the recording ends, "" for none
-    save_recordings: bool = False   # development only, to be removed before release (recordings.py)
+    # development only, to be removed before release (recordings.py); on by default with --debug
+    save_recordings: bool = field(default_factory=lambda: DEBUG)
     # development test (2026-10-17, dev/cmdlab): a short piece that is a command (app._quick_ok) runs after 0.15s of
     # silence, before the VAD's 0.3s ends the piece
-    early_commands: bool = False
-    rules: list = field(default_factory=rules.defaults)   # custom operations (rules.Rule)
+    early_commands: bool = field(default_factory=lambda: DEBUG)   # on by default with --debug
+    rules: list = field(default_factory=lambda: rules.defaults(dev=DEBUG))   # custom operations (rules.Rule)
     rules_version: int = RULES_VERSION
 
     @classmethod

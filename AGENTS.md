@@ -132,8 +132,9 @@ and runs (nothing decoded when nothing was said since the last commit).
   pause at once when a command (`_quick_ok`, all commands for now), the following piece cut (`_quick_done`).
 - Spoken operations (`rules.py`, 自訂操作 tab): phrase(s) separated by 、 → one step: keys, text, 左右輸入文字
   (`WRAP`, caret put back between), or a command: 復原, 結束錄音, 全選 / 複製 / 剪下 / 貼上. Defaults
-  (`rules.defaults`, rows fixed but the phrase; empty turns off): 換行 Shift+Enter, 空白, 標點 "- ", 括號 （）,
-  引號 「」, 刪除 Backspace, 復原 / 撤銷, clipboard four, 送出 Enter (listening goes on), 結束. 自訂 rows can't take
+  (`rules.defaults`, rows fixed but the phrase; empty turns off): 換行、下一行 Shift+Enter, 空白, 括號 （）,
+  引號 「」, 刪除 Backspace, 復原 / 撤銷, clipboard four, 送出 Enter (listening goes on), 結束. With --debug the
+  defaults (`rules.defaults(dev=True)`) also have the user's 標點 = "- " as a 自訂 row. 自訂 rows can't take
   a command a default row has. Problems shown in red when the tab comes into view. The engine still has situations,
   multi-step and key rules (old configs only).
 - Edit commands: ordinary apps get Ctrl+A/C/X/V. Terminals: 複製 puts our read selection on the clipboard (Ctrl+C
@@ -223,6 +224,9 @@ sentence end → 嗎 questions → trailing punctuation.
   terminal edit.
 
 ## Settings window and looks
+
+Defaults (`Config`) are the user's own setup: no hotkey, bubble, floating button (流光 look), 彩虹 glow, autostart
+on; 保存錄音 / 短停頓就執行指令 on by default only with --debug.
 
 Tabs: 一般 (microphone, 麥克風快捷鍵, 點進輸入框時 drop-down 不使用 / 語音氣泡 / 自動開麥克風 (`show_bubble` /
 `auto_listen`, at most one), 顯示浮動按鈕 + its two options, 自動關閉麥克風, stop_on_enter, mute, punctuation names,

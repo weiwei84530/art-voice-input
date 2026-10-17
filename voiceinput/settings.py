@@ -63,7 +63,7 @@ def _does(kind: str, value) -> str:
         return {"Shift+Enter": "換行（按 Shift+Enter）", "Space": "輸入一個空白", "Tab": "按 Tab",
                 "Backspace": "刪除游標前的一個字（有選取時刪除選取的文字）",
                 "Delete": "刪除游標後的一個字（有選取時刪除選取的文字）",
-                "Enter": "按 Enter 送出，麥克風繼續開著"}.get(value, f"按 {value}")
+                "Enter": "按 Enter 送出"}.get(value, f"按 {value}")
     if kind == rules.TEXT:
         return f"輸入「{value}」"
     if kind == rules.WRAP and isinstance(value, (list, tuple)) and len(value) == 2:

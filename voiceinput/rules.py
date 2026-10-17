@@ -62,14 +62,14 @@ class Rule:
         return next((i for i, s in enumerate(self.steps) if s.type == COMMAND and s.value == RECORD), None)
 
 
-def defaults(newline: bool = True, send: bool = True) -> list[Rule]:
-    """The spoken operations (the user's own setup, 2026-10-14/16), in the order the 自訂操作 tab groups them:
-    typing (換行 Shift+Enter, 空白, 標點 "- ", 括號 （ ）, 引號 「」), changing (刪除 Backspace, 復原 / 撤銷), the
+def defaults(newline: bool = True, send: bool = True, dev: bool = False) -> list[Rule]:
+    """The spoken operations (the user's own setup, 2026-10-14/17), in the order the 自訂操作 tab groups them:
+    typing (換行 / 下一行 Shift+Enter, 空白, 括號 （ ）, 引號 「」), changing (刪除 Backspace, 復原 / 撤銷), the
     clipboard (全選 / 複製 / 剪下 / 貼上) and ending (送出 Enter, listening goes on; 結束 turns it off). No key
-    rules since 2026-10-16: the hotkey is config.hotkey."""
-    out = [Rule(SPEECH, phrase="換行", steps=[Step(KEYS, "Shift+Enter")])] if newline else []
+    rules since 2026-10-16: the hotkey is config.hotkey. dev (--debug): also the user's own 標點 = "- ", a row of
+    自訂 (not a default operation: settings._BUILT_IN is built without it; the user's request, 2026-10-17)."""
+    out = [Rule(SPEECH, phrase=p, steps=[Step(KEYS, "Shift+Enter")]) for p in ("換行", "下一行")] if newline else []
     out += [Rule(SPEECH, phrase="空白", steps=[Step(KEYS, "Space")]),
-            Rule(SPEECH, phrase="標點", steps=[Step(TEXT, "- ")]),
             Rule(SPEECH, phrase="括號", steps=[Step(WRAP, ["（", "）"])]),
             Rule(SPEECH, phrase="引號", steps=[Step(WRAP, ["「", "」"])]),
             Rule(SPEECH, phrase="刪除", steps=[Step(KEYS, "Backspace")]),
@@ -82,6 +82,8 @@ def defaults(newline: bool = True, send: bool = True) -> list[Rule]:
     if send:
         out.append(Rule(SPEECH, phrase="送出", steps=[Step(KEYS, "Enter")]))
     out.append(Rule(SPEECH, phrase="結束", steps=[Step(COMMAND, STOP)]))
+    if dev:
+        out.append(Rule(SPEECH, phrase="標點", steps=[Step(TEXT, "- ")]))
     return out
 
 
