@@ -53,6 +53,9 @@ Sentences elsewhere in this file that say otherwise are history.
   gets a yellow ! after what was heard; its tooltip lists them.
 - 光環 / 虹膜: their open middle takes clicks (a disc of alpha 1/255 under every look: fully clear pixels of a
   translucent window let clicks through). 液態金屬's outer light is held closer to the drop.
+- 按鈕樣式 has a tenth look, 蝕光 (`eclipse`, `orbs._eclipse`; the user's pick of three mockups of a more abstract
+  呼吸光核, https://claude.ai/artifact/JusBdNnhtKkniSnjoqzYc9): three crescents of light (radial gradients with an
+  off-centre focal circle) turning at different speeds, added with CompositionMode_Plus, a white core; 12s loop.
 
 ## Lean branch (2026-10-10)
 

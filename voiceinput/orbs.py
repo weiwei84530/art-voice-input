@@ -26,9 +26,10 @@ FPS = 15        # 節流模式
 FINE_FPS = 30
 SCALE = 1.4     # canvas / the microphone button's size
 LOOKS = {"mic": "麥克風（原始）", "flow": "流光", "breath": "呼吸光核", "halo": "光環", "plasma": "電漿",
-         "tokamak": "約束場", "corona": "日冕", "iris": "虹膜", "liquid": "液態金屬", "nebula": "星雲"}
+         "tokamak": "約束場", "corona": "日冕", "iris": "虹膜", "liquid": "液態金屬", "nebula": "星雲",
+         "eclipse": "蝕光"}
 _LOOPS = {"flow": 6.0, "breath": 12.0, "halo": 8.0, "plasma": 3.0, "tokamak": 8.0, "corona": 8.0, "iris": 8.0,
-          "liquid": 8.0, "nebula": 8.0}
+          "liquid": 8.0, "nebula": 8.0, "eclipse": 12.0}
 TAU = math.tau
 
 
@@ -357,8 +358,37 @@ def _nebula(p, s, ph, h, colors, px, fine):
 
 _SMALL = 50   # a canvas below this (the bubble's) gets fewer details
 
+def _eclipse(p, s, ph, h, colors, px, fine):
+    """蝕光 (2026-10-17, the user's pick of three mockups, https://claude.ai/artifact/JusBdNnhtKkniSnjoqzYc9): three
+    crescents of light, a ring seen past an off-centre shadow (a radial gradient whose focal circle is off the
+    centre), turning at different speeds and ways and meeting into a full ring now and then; a pin-point core.
+    Added light (Plus), so where they cross it brightens."""
+    c, u, n = s / 2, ph * TAU, len(colors)
+    breathe = 0.5 + 0.5 * math.sin(4 * u)
+    p.save()
+    p.setCompositionMode(QPainter.CompositionMode_Plus)
+    p.setPen(Qt.NoPen)
+    for k, turns in enumerate((1, -2, 3)):
+        a = turns * u + k * TAU / 3
+        R = s * (0.30 + 0.025 * k + 0.03 * breathe)
+        off = R * (0.38 - 0.12 * breathe)
+        col = _drift(colors, ph * n + k * n / 3)
+        g = QRadialGradient(QPointF(c, c), R, QPointF(c + math.cos(a) * off, c + math.sin(a) * off), R * 0.55)
+        g.setColorAt(0, _c(col, 0))
+        g.setColorAt(0.62, _c(col, 0))
+        g.setColorAt(0.82, _c(_mix(col, "#ffffff", 0.25), min(1.0, 0.75 + 0.2 * h)))
+        g.setColorAt(1, _c(col, 0))
+        p.setBrush(g)
+        _disc(p, c, c, R)
+    p.setBrush(_radial(c, c, s * 0.2, [(0, _c("#ffffff", 0.9)), (0.18, _c("#ffffff", 0.5 + 0.3 * breathe)),
+                                        (1, _c(_drift(colors, ph * n), 0))]))
+    _disc(p, c, c, s * 0.2)
+    p.restore()
+
+
 _DRAW = {"flow": _flow, "breath": _breath, "halo": _halo, "plasma": _plasma, "tokamak": _tokamak,
-         "corona": _corona, "iris": _iris, "liquid": _liquid, "nebula": _nebula}
+         "corona": _corona, "iris": _iris, "liquid": _liquid, "nebula": _nebula,
+         "eclipse": _eclipse}
 
 
 def palette(style) -> list:
