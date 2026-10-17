@@ -5,7 +5,9 @@ sentence with its story in sentences, was built first and found too busy the sam
 
 A session: id, listening, start, end, counts, rows. A row: time, heard (what was said, as recognized alone), change
 (the document's change as HTML: new text green, removed struck through red, long unchanged stretches cut to …), tag
-(a few words: 整句重聽, 指令：換行, 復原 …) and its kind (for its color), tip, copy (the sentence it finished)."""
+(a few words: 整句重聽, 指令：換行, 復原 …) and its kind (for its color), tip, copy (the sentence it finished), bank
+(what the 詞庫 may have done to it: the 辨識紀錄 tab marks such rows with a yellow ! whose tooltip lists it;
+2026-10-17, the user's request)."""
 import difflib
 import html
 import itertools
@@ -13,6 +15,10 @@ import time
 from collections import deque
 
 from . import rules
+from .textfmt import changes
+
+BANK_HITS = "詞庫"   # the step App._text_of adds: the 詞庫's words in the text
+_BANK_STEPS = ("英文拼寫", "選字記憶")
 
 INS = "background-color:#DCF3E2; color:#17643A"
 DEL = "background-color:#FBE1E1; color:#A23030; text-decoration:line-through"
@@ -102,6 +108,18 @@ def describe(steps: list) -> str:
     return "、".join(words)
 
 
+def bank_of(entry: dict | None) -> list[str]:
+    """What the 詞庫 did, or may have done, to the text: words raised or lowered that it has, English spelled as a
+    known term or alias, 選字記憶's changes."""
+    out = []
+    for name, before, after in (entry or {}).get("steps", []):
+        if name == BANK_HITS:
+            out.append(f"加權的詞：{before}（可能因此辨識成這樣）")
+        elif name in _BANK_STEPS and after is not None:
+            out.append(f"{name}：" + "、".join(f"{a} → {b}" for a, b in changes(before, after)))
+    return out
+
+
 def tech_of(entry: dict | None, extra: str = "") -> str:
     """The details line: seconds, the recognizer's own text, each formatting step's change."""
     parts = []
@@ -155,10 +173,10 @@ class LogBook:
         return g
 
     def _row(self, heard: str, change: str, tag: str = "", kind: str = "", tip: str = "", copy: str = "",
-             draft: bool = True):
+             draft: bool = True, bank: list | None = None):
         g = self._session(draft)
         g["rows"].append({"id": next(self._ids), "time": _now(), "heard": heard, "change": change, "tag": tag,
-                          "kind": kind, "tip": tip, "copy": copy})
+                          "kind": kind, "tip": tip, "copy": copy, "bank": bank or []})
         del g["rows"][:-300]
         g["end"] = _now()
         self._on_change()
@@ -186,7 +204,8 @@ class LogBook:
             why.append("標點落在你停頓的地方，前面就固定了；之後停頓只重聽後面的句子，比較快")
         tech = tech_of(info.get("entry"), f"整句重聽 {info['redo_s']:.2f} 秒" if "redo_s" in info else "")
         change = diff_html(before, after) if before else ins(after)
-        g = self._row(said, change, tag, kind, _tip(why, tech))
+        bank = list(dict.fromkeys(bank_of(info.get("entry")) + info.get("bank", [])))
+        g = self._row(said, change, tag, kind, _tip(why, tech), bank=bank)
         if said and not info.get("redo"):
             g["counts"]["pieces"] += 1
 
@@ -222,7 +241,7 @@ class LogBook:
             why.append("說的是標點名稱或「某個詞的某個字」，只打那個符號或字"
                        + ("，取代你選取的字" if over else ""))
             copy = after + typed if drafted and not over else ""
-        g = self._row(heard, change or "（無）", tag, "op", _tip(why, tech_of(entry)), copy)
+        g = self._row(heard, change or "（無）", tag, "op", _tip(why, tech_of(entry)), copy, bank=bank_of(entry))
         g["counts"]["commands"] += 1
 
     def committed(self, before: str, after: str, marked: bool, by_stop: bool):

@@ -184,6 +184,39 @@ class Memory:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self.path.write_text(text, encoding="utf-8")
 
+    def export(self) -> dict:
+        with self._lock:
+            return {"examples": [dict(e, key=k) for k, exs in self.examples.items() for e in exs],
+                    "styles": dict(self.styles)}
+
+    def merge(self, data: dict) -> int:
+        """匯入詞庫 (2026-10-17): examples of an exported file added unless the same one is here (new serials, so
+        they count as the newest); its style counts win. Returns how many examples came in."""
+        n = 0
+        with self._lock:
+            for ex in data.get("examples", []):
+                try:
+                    key, value, left, right = ex["key"], ex["value"], list(ex["left"]), list(ex["right"])
+                except (KeyError, TypeError):
+                    continue
+                if not _single(value):
+                    continue
+                exs = self.examples.setdefault(key, [])
+                if any((e["value"], e["left"], e["right"]) == (value, left, right) for e in exs):
+                    continue
+                exs.insert(0, {"value": value, "left": left, "right": right, "serial": self._serial,
+                               "added": ex.get("added") or _now()})
+                self._serial += 1
+                n += 1
+            self.styles.update({k: int(v) for k, v in data.get("styles", {}).items()})
+        self.save()
+        return n
+
+    def clear(self):
+        with self._lock:
+            self.examples, self.styles = {}, {}
+        self.save()
+
     # --- examples ---
     def listed(self) -> list[dict]:
         """Every example as {key, value, left, right, serial, added}, newest first (the 詞庫 tab)."""

@@ -15,11 +15,12 @@ def _python() -> str:
     return str(pyw if pyw.exists() else exe)
 
 
-def set_enabled(enabled: bool) -> None:
+def set_enabled(enabled: bool, debug: bool = False) -> None:
+    """debug: the entry launches with --debug too (it follows how this run was launched)."""
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run",
                         0, winreg.KEY_SET_VALUE) as k:
         if enabled:
-            winreg.SetValueEx(k, APP_ID, 0, winreg.REG_SZ, f'"{_python()}" "{LAUNCHER}"')
+            winreg.SetValueEx(k, APP_ID, 0, winreg.REG_SZ, f'"{_python()}" "{LAUNCHER}"' + (" --debug" if debug else ""))
         else:
             try:
                 winreg.DeleteValue(k, APP_ID)

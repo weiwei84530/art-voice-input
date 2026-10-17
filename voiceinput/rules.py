@@ -4,15 +4,14 @@ Since 2026-10-16 only spoken operations are set (the user's design: listening is
 interface, and one hotkey, config.hotkey, taps it on and off; the key rows that also took back and deleted were
 removed). A rule is an utterance that is exactly a phrase and one step: a command (結束錄音 stop listening, 復原 take
 back VoiceInput's last change, 全選 / 複製 / 剪下 / 貼上), a key combination, text to type, or text typed on both
-sides of the caret or selection (左右輸入文字). The engine still knows mouse and key triggers, gestures, situations
-and several steps: the app builds the hotkey's one rule (a tap that records) from config.hotkey, and old configs
-are read through them (migrate, upgrade).
+sides of the caret or selection (左右輸入文字). The engine still knows situations and several steps; key and mouse
+rules are only read from old configs, for the key that recorded (config.hotkey). Gestures (tap, double tap, hold)
+were removed 2026-10-17 with the hotkey's (the user's choice: a press of the hotkey is a tap).
 """
 import re
 from dataclasses import asdict, dataclass, field
 
 MOUSE, KEY, SPEECH = "mouse", "key", "speech"
-TAP, DOUBLE, HOLD = "tap", "double", "hold"
 ANY, DICTATED, SELECTION = "any", "dictated", "selection"
 COMMAND, KEYS, TEXT, WAIT = "command", "keys", "text", "wait"
 WRAP = "wrap"   # 左右輸入文字 (2026-10-16): value [left, right], typed around the caret or the selection
@@ -24,8 +23,6 @@ UNDO = "undo"        # 復原: double tap and the spoken 復原 by default (the 
 # Code clears its input on Ctrl+C, its mouse selection is not the cursor's, and nothing there selects all
 SELECT_ALL, COPY, CUT, PASTE = "select_all", "copy", "cut", "paste"
 EDIT_COMMANDS = (SELECT_ALL, COPY, CUT, PASTE)
-_LISTEN = "listen"   # 連續聽寫, a command for a few hours on 2026-10-14 until 錄音 itself became continuous
-_ADD_HOTWORD = "add_hotword"   # 加入熱詞, removed 2026-10-11: hotwords are typed in the 選字 menu instead
 # config rules_version: 2 added the tap on a selection that opens 選字, 3 a tap that listens, 4 dropped 連續聽寫,
 # 5 makes 送出 stop listening, 6 turns the double-tap deletes into 復原 and adds the spoken 復原, 7 brings back the
 # double tap on a selection that deletes it, 8 adds the spoken 撤銷 (復原) and 刪除 (Backspace), 9 makes 送出 leave
@@ -47,9 +44,8 @@ class Step:
 @dataclass
 class Rule:
     source: str = MOUSE
-    key: str = "mouse_middle"   # mouse / keyboard trigger: a name in keys.MOUSE_TRIGGERS / keys.KEY_TRIGGERS
+    key: str = "mouse_middle"   # mouse / keyboard trigger (old configs only): the key that recorded
     phrase: str = ""            # speech trigger: the whole utterance
-    gesture: str = HOLD         # not used by speech triggers
     when: str = ANY
     steps: list = field(default_factory=lambda: [Step()])
     enabled: bool = True
@@ -89,65 +85,17 @@ def defaults(newline: bool = True, send: bool = True) -> list[Rule]:
     return out
 
 
-def migrate(rules: list[Rule]) -> list[Rule]:
-    """The one 刪除 command (before the split, 2026-10-11) becomes the command for the rule's situation; a rule for
-    any situation becomes two: one for a selection, one right after a dictation."""
-    out = []
-    for r in rules:
-        if any(s.type == COMMAND and s.value == _ADD_HOTWORD for s in r.steps):
-            r.steps = [s for s in r.steps if not (s.type == COMMAND and s.value == _ADD_HOTWORD)]
-            if not r.steps:
-                continue
-        if not any(s.type == COMMAND and s.value == "delete" for s in r.steps):
-            out.append(r)
-            continue
-        for when, command in ((SELECTION, DELETE_SELECTION), (DICTATED, DELETE_DICTATION)):
-            if r.when in (when, ANY):
-                steps = [Step(COMMAND, command) if s.type == COMMAND and s.value == "delete" else Step(s.type, s.value)
-                         for s in r.steps]
-                out.append(Rule(r.source, r.key, r.phrase, r.gesture, when, steps, r.enabled))
-    return out
-
-
 def upgrade(rules: list[Rule], version: int) -> list[Rule]:
-    """Defaults added after a config was saved, on the key that records by holding unless that tap is taken:
-    version 2 adds tap on a selection = 選字, version 3 tap = 錄音 (listening until the next tap). Version 4: the
-    連續聽寫 command became 錄音."""
-    hold = next((r for r in rules if r.source != SPEECH and r.gesture == HOLD and r.record_index() is not None), None)
-    if hold and version < 2:
-        if not any(r.key == hold.key and r.gesture == TAP and r.when in (SELECTION, ANY) for r in rules):
-            rules.append(Rule(hold.source, hold.key, gesture=TAP, when=SELECTION, steps=[Step(COMMAND, PICK)]))
-    if hold and version < 3:
-        if not any(r.key == hold.key and r.gesture == TAP and r.when == ANY for r in rules):
-            rules.append(Rule(hold.source, hold.key, gesture=TAP, steps=[Step(COMMAND, RECORD)]))
-    if version < 4:
-        for r in rules:
-            r.steps = [Step(COMMAND, RECORD) if st.type == COMMAND and st.value == _LISTEN else st for st in r.steps]
+    """Spoken defaults added after a config was saved (the key rules' upgrades went with gestures, 2026-10-17: the
+    key rules are dropped by simplify anyway)."""
     if version < 5:
         for r in rules:
             if r.source == SPEECH and normalize(r.phrase) == "送出" and not any(
                     st.type == COMMAND and st.value == STOP for st in r.steps):
                 r.steps.append(Step(COMMAND, STOP))
     if version < 6:
-        deletes = [r for r in rules if r.source != SPEECH and r.gesture == DOUBLE
-                   and [(st.type, st.value) for st in r.steps] in ([(COMMAND, DELETE_SELECTION)],
-                                                                   [(COMMAND, DELETE_DICTATION)])]
-        for key in dict.fromkeys(r.key for r in deletes):
-            first = next(i for i, r in enumerate(rules) if r in deletes and r.key == key)
-            mine = [r for r in deletes if r.key == key]
-            if not any(r.key == key and r.gesture == DOUBLE and r.when == ANY and r not in mine for r in rules):
-                rules.insert(first, Rule(mine[0].source, key, gesture=DOUBLE, steps=[Step(COMMAND, UNDO)]))
-            for r in mine:
-                rules.remove(r)
         if not any(r.source == SPEECH and normalize(r.phrase) == "復原" for r in rules):
             rules.append(Rule(SPEECH, phrase="復原", steps=[Step(COMMAND, UNDO)]))
-    if version < 7:
-        for i, r in reversed(list(enumerate(rules))):
-            if r.source != SPEECH and r.gesture == DOUBLE and r.when == ANY \
-                    and [(st.type, st.value) for st in r.steps] == [(COMMAND, UNDO)] \
-                    and not any(o.key == r.key and o.gesture == DOUBLE and o.when == SELECTION for o in rules):
-                rules.insert(i, Rule(r.source, r.key, gesture=DOUBLE, when=SELECTION,
-                                     steps=[Step(COMMAND, DELETE_SELECTION)]))
     if version < 8:
         for phrase, step in (("撤銷", Step(COMMAND, UNDO)), ("刪除", Step(KEYS, "Backspace"))):
             if not any(r.source == SPEECH and normalize(r.phrase) == phrase for r in rules):
@@ -212,12 +160,12 @@ def _same_trigger(a: Rule, b: Rule) -> bool:
         return False
     if a.source == SPEECH:   # an empty phrase is no trigger (a default turned off, a row not filled in yet)
         return bool(normalize(a.phrase)) and normalize(a.phrase) == normalize(b.phrase)
-    return a.key == b.key and a.gesture == b.gesture
+    return a.key == b.key
 
 
-def candidates(rules: list[Rule], source: str, trigger: str, gesture: str = "") -> list[Rule]:
-    """Enabled, valid rules for a trigger (a key name, or the utterance for speech) and gesture."""
-    probe = Rule(source, key=trigger, phrase=trigger, gesture=gesture)
+def candidates(rules: list[Rule], source: str, trigger: str) -> list[Rule]:
+    """Enabled, valid rules for a trigger (the utterance for speech)."""
+    probe = Rule(source, key=trigger, phrase=trigger)
     return [r for r in rules if r.enabled and _same_trigger(r, probe) and not problems(r, rules)]
 
 
@@ -250,6 +198,6 @@ def problems(rule: Rule, rules: list[Rule]) -> list[str]:
             if r is rule:
                 break
             if r.enabled and _same_trigger(r, rule) and r.when == rule.when:
-                out.append("和上面一條操作的觸發、按法、情境都相同，這條不會生效")
+                out.append("和上面一條操作的觸發、情境都相同，這條不會生效")
                 break
     return out

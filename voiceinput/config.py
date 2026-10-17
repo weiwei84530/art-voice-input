@@ -7,7 +7,9 @@ from .rules import VERSION as RULES_VERSION
 from .paths import CONFIG_PATH
 
 
-GESTURE_TIME_RANGE = (0.15, 0.8)
+# launched with --debug (2026-10-17, the user's request): the 開發測試 settings are shown and work; a release is
+# launched without it, and they are off. Set by app.main before the config is loaded.
+DEBUG = False
 BUTTON_SCALE_RANGE = (75, 125)
 
 
@@ -19,8 +21,8 @@ class Config:
     period_to_comma: bool = True   # speaking on a selected 。 turns it into ， + the utterance + 。
     punctuation_names: bool = True  # an utterance of just a punctuation name (逗號, 句號 …) types the mark
     describe_char: bool = True     # 節日的節 types 節 (edit.described)
-    # the mouse button or key (keys.MOUSE_TRIGGERS / KEY_TRIGGERS) a tap of which turns listening on and off, ""
-    # none (2026-10-16, the user's design: the one key binding left; the key rows of 自訂操作 were removed)
+    # the key or mouse button, with modifiers, a press of which turns listening on and off (keys.parse_hotkey), ""
+    # none (2026-10-16, the user's design: the one key binding left; any key since 2026-10-17)
     hotkey: str = "mouse_middle"
     glow: str = ""                 # glow.py style along the screen's edges while listening, "" for none
     glow_edges: str = "all"        # which edges glow (glow.EDGES): all, tb, lr, top, bottom
@@ -48,10 +50,11 @@ class Config:
     # 輸入框旁的按鈕 (the 外觀 tab, two checkboxes; 2026-10-16, the user's design: they were one choice with
     # auto_listen): the bubble by the click that put the focus in a text box, and the draggable floating button
     # (kept on screen with float_keep, a fixed place to turn listening off); either may go with auto_listen
-    show_bubble: bool = False
+    show_bubble: bool = True
     show_float: bool = False
-    # 點進輸入框時自動開麥克風 (the 一般 tab): a text box the focus comes into turns listening on, leaving it for a
-    # place where nothing can be typed turns it off
+    # 點進輸入框時 自動開麥克風 (the 一般 tab): a text box the focus comes into turns listening on, leaving it for a
+    # place where nothing can be typed turns it off. One choice with show_bubble since 2026-10-17 (the 一般 tab's
+    # 點進輸入框時: 不使用 / bubble / this; the user's design), so at most one of them is on
     auto_listen: bool = False
     # the color the draft is marked with (highlight.py), #AARRGGBB; highlighter yellow by default, unlike a
     # selection's blue (2026-10-16, the user's choice: a selection-blue draft passed for a selection)
@@ -66,13 +69,10 @@ class Config:
     pick_sort: str = "date"        # order of 選字記憶 on the 詞庫 tab (settings.PICK_SORTS)
     alias_sort: str = "date"       # order of 英文強制替換 (settings.ALIAS_SORTS)
     hotword_section: str = ""      # the open section of the 詞庫 tab ("" none, packs, words, picks, aliases)
-    packs: list = field(default_factory=lambda: ["ai"])   # ids of the ticked term packs (packs.py)
-    pack_hints: list = field(default_factory=list)   # packs a notice already suggested (App._suggest_pack)
+    # ids of the ticked term packs (packs.py); none by default since 2026-10-17 (the user's choice; the AI pack before)
+    packs: list = field(default_factory=list)
     start_sound: str = "blip"     # cues.py id played when the recording indicator shows, "" for none
     stop_sound: str = "blip"      # cues.py id played when the recording ends, "" for none
-    # seconds: a press this long is a hold, a press this soon after a tap's release makes a double tap (both given
-    # back to the hotkey); no longer on a tab since 2026-10-16
-    gesture_time: float = 0.15
     save_recordings: bool = False   # development only, to be removed before release (recordings.py)
     # development test (2026-10-17, dev/cmdlab): a short piece that is a command (app._quick_ok) runs after 0.15s of
     # silence, before the VAD's 0.3s ends the piece
@@ -94,14 +94,16 @@ class Config:
             on_focus = data.get("on_focus") or ("float" if data.get("float_button") else "")
             cfg.show_bubble, cfg.show_float = on_focus == "bubble", on_focus == "float"
             cfg.auto_listen = on_focus == "listen"
+        if cfg.auto_listen:
+            cfg.show_bubble = False
         if data.get("glow") == "custom":   # the 自訂 style (2026-10-16, a few hours): 彩虹 changed that way
             cfg.glow = "siri"
             cfg.glow_edits = {"siri": data.get("glow_custom") or {}}
         cfg.button_scale = min(max(int(cfg.button_scale), BUTTON_SCALE_RANGE[0]), BUTTON_SCALE_RANGE[1])
-        cfg.gesture_time = min(max(float(cfg.gesture_time), GESTURE_TIME_RANGE[0]), GESTURE_TIME_RANGE[1])
+        if not DEBUG:   # development only: off without --debug
+            cfg.save_recordings = cfg.early_commands = False
         if "rules" in data:
-            old = rules.upgrade(rules.migrate([rules.Rule.from_dict(d) for d in data["rules"]]),
-                                data.get("rules_version", 1))
+            old = rules.upgrade([rules.Rule.from_dict(d) for d in data["rules"]], data.get("rules_version", 1))
             if "hotkey" not in data:   # the key that recorded (the 自訂操作 key rows, until 2026-10-16)
                 cfg.hotkey = next((r.key for r in old if r.enabled and r.source != rules.SPEECH
                                    and r.record_index() is not None), "")

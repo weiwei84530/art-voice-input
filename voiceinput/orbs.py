@@ -302,16 +302,18 @@ def _liquid(p, s, ph, h, colors, px, fine):
     # its light in the colors of the drop's edge next to it, turning with it, like 流光's (the user's request,
     # 2026-10-16: one color at a time did not match the drop)
     p.save()
-    p.setOpacity(0.55 + 0.3 * h)
+    # held close to the drop (the user's request, 2026-10-17: it reached too far and looked heavy)
+    p.setOpacity(0.45 + 0.3 * h)
     if fine:
         k = R / c
         p.drawImage(QRectF(0, 0, s, s), _masked(px, s, _conic(c, c, ph, colors),
-                                                [(0, 1), (k * 0.9, 1), (k * 1.15, 0.5), (k * 1.35, 0.18), (1, 0)]))
+                                                [(0, 1), (k * 0.95, 1), (k * 1.07, 0.45), (k * 1.18, 0.12),
+                                                 (k * 1.3, 0), (1, 0)]))
     else:
         def light(q):
             q.setPen(Qt.NoPen)
             q.setBrush(_conic(c, c, ph, colors))
-            _disc(q, c, c, R * 1.2)
+            _disc(q, c, c, R * 1.08)
         p.drawImage(QRectF(0, 0, s, s), _blurred(px, s, light))
     p.restore()
     p.setPen(Qt.NoPen)

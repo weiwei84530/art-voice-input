@@ -5,24 +5,27 @@ term packs to tick (packs.py), every listed word with its 優先度 (−100% .. 
 sortable, and its entries removable. Every change is applied and saved immediately."""
 import html
 import os
+import time
+from dataclasses import fields
+from pathlib import Path
 
 from pypinyin import lazy_pinyin
 from PySide6.QtCore import QEvent, QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QIcon, QImage, QPainter, QPen, QPixmap, QTextDocument
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QColorDialog, QComboBox, QDialog,
-                               QDialogButtonBox, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+                               QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
                                QPushButton, QScrollArea, QSizePolicy, QSlider, QTabWidget, QTextBrowser,
                                QToolButton,
                                QToolTip, QVBoxLayout, QWidget)
 
-from . import audio, cues, hotwords, packs, recordings, rules
+from . import audio, config, cues, hotwords, packs, recordings, rules, wordbank
 from . import glow as glowmod
-from .config import BUTTON_SCALE_RANGE
+from .config import BUTTON_SCALE_RANGE, Config
 from .floatbtn import OrbButton
 from .highlight import COLORS as MARK_COLORS
 from .orbs import LOOKS, palette
 from .memory import BOUNDARY
-from .keys import KEY_TRIGGERS, MOUSE_TRIGGERS, combo_text, is_modifier
+from .keys import combo_text, hotkey_label, is_modifier
 from .rules import Rule, Step
 
 SPOKEN_ACTIONS = [(rules.KEYS, "按鍵"), (rules.TEXT, "輸入文字"), (rules.WRAP, "左右輸入文字"), (rules.UNDO, "復原"),
@@ -358,6 +361,7 @@ class KeyCapture(QLineEdit):
 class SettingsDialog(QDialog):
     applied = Signal()
     glow_preview = Signal(str)   # a glow style picked: shown for a moment
+    capture_hotkey = Signal(bool)   # 麥克風快捷鍵: take the next press (True), or stop waiting for it
 
     def __init__(self, cfg, hotwords, memory):
         super().__init__()
@@ -395,18 +399,49 @@ class SettingsDialog(QDialog):
         self.stop_on_enter = QCheckBox("送出訊息後自動關閉麥克風")
         self.mute = QCheckBox("錄音時暫時靜音電腦音效")
         self.describe = QCheckBox("說「詞＋的＋字」時只輸入那個字，例如「節日的節」")
-        self.hotkey = QComboBox()
-        self.hotkey.addItem("不使用", "")
-        for k, label in MOUSE_TRIGGERS.items():
-            self.hotkey.addItem(f"滑鼠{label}", k)
-        for k, (label, _) in KEY_TRIGGERS.items():
-            self.hotkey.addItem(f"鍵盤 {label}", k)
-        self.auto_listen = QCheckBox("點進輸入框時自動開麥克風")
+        # 麥克風快捷鍵 (2026-10-17, the user's design): click, then press any key or mouse button but the left one,
+        # with modifiers if wanted (hotkey.Hotkeys.capture); ✕ clears it
+        self.hotkey = QPushButton(clicked=self._capture_clicked)
+        self.hotkey.setMinimumWidth(180)
+        self._capturing = False
+        self.hotkey_clear = QToolButton(text="✕", autoRaise=True, clicked=self._clear_hotkey)
+        self.hotkey_clear.setToolTip("不使用快捷鍵")
+        hotkey_row = QHBoxLayout()
+        hotkey_row.addWidget(self.hotkey)
+        hotkey_row.addWidget(self.hotkey_clear)
+        hotkey_row.addStretch()
+        # 點進輸入框時 (2026-10-17, the user's design: the bubble and listening on by the focus are one choice; both
+        # are shown or turned on by a left click that puts the focus in a text box)
+        self.near_box = QComboBox()
+        self.near_box.addItem("不使用", "")
+        self.near_box.addItem("在點擊處旁顯示語音氣泡", "bubble")
+        self.near_box.addItem("自動開麥克風，離開時關閉", "listen")
+        # 浮動按鈕 (moved from 外觀 the same day), its two options under it, greyed out while it is off
+        self.show_float = QCheckBox("顯示浮動按鈕")
+        self.float_text_only = QCheckBox("只在可以打字的地方顯示")
+        self.float_keep = QCheckBox("按下後不隱藏")
+        float_box = QWidget()
+        float_v = QVBoxLayout(float_box)
+        float_v.setContentsMargins(0, 0, 0, 0)
+        float_v.setSpacing(2)
+        float_v.addWidget(_with_info(self.show_float, "停在螢幕上的按鈕，點一下開麥克風，拖到哪就留在哪；"
+                                                      "樣子和大小在外觀頁設定"))
+        float_opts = QHBoxLayout()
+        float_opts.setContentsMargins(22, 0, 0, 0)
+        float_opts.addWidget(_with_info(self.float_text_only, "勾選時，浮動按鈕只在游標停在可以打字的地方時出現；"
+                                                              "不勾就到處都顯示", stretch=False))
+        float_opts.addSpacing(16)
+        float_opts.addWidget(_with_info(self.float_keep, "不勾時，開麥克風時按鈕放大淡出，關掉後縮回來；"
+                                                         "勾了按鈕會留著，按下時彈一下，麥克風開著時再點一下就關掉",
+                                        stretch=False))
+        float_opts.addStretch()
+        float_v.addLayout(float_opts)
         self.auto_off = QComboBox()
         self.auto_off.addItem("不自動關閉", 0)
         for m in (1, 3, 5, 10, 30):
             self.auto_off.addItem(f"{m} 分鐘沒講話", m)
-        # development only, to be removed before release (the user's plan): recordings.py
+        # development only, to be removed before release (the user's plan): recordings.py; shown only when launched
+        # with --debug (config.DEBUG, 2026-10-17)
         self.keep_audio = QCheckBox("保存錄音（測試用）")
         folder = QPushButton("開啟錄音資料夾", clicked=self._open_recordings)
         audio_row = QHBoxLayout()
@@ -423,19 +458,22 @@ class SettingsDialog(QDialog):
 
         form = QFormLayout()
         form.addRow("麥克風", self.mic)
-        form.addRow(_titled("麥克風快捷鍵", "按一下開麥克風，再按一下關。按住或連按兩下會照常交給原本的程式"
-                                      "（例如滑鼠中鍵照樣能用）"), self.hotkey)
+        form.addRow(_titled("麥克風快捷鍵", "按一下右邊的按鈕，再按下想用的鍵盤按鍵（可以加 Ctrl、Shift、Alt、Win）"
+                                      "或滑鼠按鍵（左鍵以外）；按 Esc 或點滑鼠左鍵取消。之後按一下這個鍵就開麥克風，"
+                                      "再按一下關。這個鍵原本的功能會被取代"), hotkey_row)
+        form.addRow(_titled("點進輸入框時", "用滑鼠左鍵點進可以打字的地方時：\n"
+                                      "・語音氣泡：點擊處旁出現小按鈕，點一下開麥克風；打字、捲動滾輪或點到不能打字的地方"
+                                      "就收起來\n"
+                                      "・自動開麥克風：直接開麥克風，點到不能打字的地方（網頁空白處、按鈕、桌面）就關掉；"
+                                      "用其他方式關掉後，再點一次輸入框就會重新打開"), self.near_box)
+        form.addRow("", float_box)
         # nothing left to turn listening on (the tray notice of the key rows' days, now said here)
         self.no_way = _problem_label()
-        self.no_way.setText("目前沒有任何方式能開麥克風：請設定「麥克風快捷鍵」、勾選「點進輸入框時自動開麥克風」，"
-                            "或在外觀頁勾選「輸入框旁的按鈕」")
+        self.no_way.setText("目前沒有任何方式能開麥克風：請設定「麥克風快捷鍵」、「點進輸入框時」或勾選「顯示浮動按鈕」")
         self.no_way.setWordWrap(True)
         form.addRow("", self.no_way)
         form.addRow(_titled("自動關閉麥克風", "麥克風開著卻一直沒聽到人聲時自動關掉，避免忘了關；關掉時播結束音"),
                     self.auto_off)
-        form.addRow("", _with_info(self.auto_listen, "游標進到輸入框（含終端機）就開麥克風，離開到網頁空白處、按鈕、"
-                                                     "桌面時關掉。用快捷鍵、說「結束」或送出關掉後，要換個輸入框才會再自動開；"
-                                                     "可以搭配外觀頁的「輸入框旁的按鈕」在原地重新打開"))
         form.addRow("", _with_info(self.stop_on_enter, "按 Enter（或 Ctrl+Enter）送出，或說「送出」之後，麥克風就自動關掉，"
                                                        "適合講完一則訊息就結束的用法。Shift+Enter 換行不算"))
         form.addRow("", _with_info(self.mute, "麥克風開著時把喇叭靜音，關閉麥克風後恢復；原本就靜音的話不會動"))
@@ -446,10 +484,29 @@ class SettingsDialog(QDialog):
                                                   "（例如「教育的育」；「這個字是教育的育」不算）；輸入的是詞裡讀音相同的那個字。"
                                                   "不想要這個功能就取消勾選"))
         form.addRow("", self.autostart)
+        dev = form.rowCount()
         form.addRow("開發測試", audio_row)
         form.addRow("", _with_info(self.early, "單獨說出的指令停頓 0.15 秒就執行（平常要等 0.3 秒），所有指令都適用；"
                                                "認不出來就照常等 0.3 秒。代價是句子中間剛好停一下時可能被當成指令。"
                                                "下次開麥克風時生效"))
+        for i in range(dev, form.rowCount()):
+            form.setRowVisible(i, config.DEBUG)
+        # 設定與詞庫 (2026-10-17, the user's design)
+        reset = QPushButton("還原預設", clicked=self._reset_all)
+        export = QPushButton("匯出詞庫…", clicked=self._export_words)
+        import_ = QPushButton("匯入詞庫…", clicked=self._import_words)
+        clear = QPushButton("清空詞庫", clicked=self._clear_words)
+        file_row = QHBoxLayout()
+        file_row.addWidget(_with_info(reset, "把這個設定視窗裡的所有設定（一般、外觀、自訂操作）還原成預設，"
+                                             "不包含詞庫（詞包、詞庫列表、選字記憶、英文強制替換）", stretch=False))
+        file_row.addSpacing(16)
+        file_row.addWidget(export)
+        file_row.addWidget(import_)
+        file_row.addWidget(_with_info(clear, "匯出、匯入、清空的都是詞庫頁的全部內容：勾選的詞包和你改過的詞包內容、"
+                                             "詞庫列表、選字記憶、英文強制替換。匯入會合併到現有的詞庫，兩邊都有的以匯入檔為準；"
+                                             "想整個換掉就先清空再匯入", stretch=False))
+        file_row.addStretch()
+        form.addRow("設定與詞庫", file_row)
         page = QWidget()
         v = QVBoxLayout(page)
         v.addLayout(form)
@@ -457,13 +514,103 @@ class SettingsDialog(QDialog):
         v.addWidget(self.status)
 
         self.mic.currentIndexChanged.connect(self._apply)
-        self.hotkey.currentIndexChanged.connect(self._apply)
-        self.auto_listen.toggled.connect(self._apply)
+        self.near_box.currentIndexChanged.connect(self._apply)
         self.auto_off.currentIndexChanged.connect(self._apply)
         for box in (self.punct, self.period_comma, self.describe, self.autostart, self.mute, self.keep_audio,
-                    self.stop_on_enter, self.early):
+                    self.stop_on_enter, self.early, self.show_float, self.float_text_only, self.float_keep):
             box.toggled.connect(self._apply)
         return page
+
+    def _capture_clicked(self):
+        """麥克風快捷鍵: the next press becomes the hotkey (App._capture_hotkey); clicked again, cancelled."""
+        self._capturing = not self._capturing
+        self._show_hotkey()
+        self.capture_hotkey.emit(self._capturing)
+
+    def hotkey_captured(self, spec):
+        """The press captured (a hotkey spec), or None: cancelled (Esc, a left click)."""
+        if not self._capturing:
+            return
+        self._capturing = False
+        if spec:
+            self.cfg.hotkey = spec
+            self._save()
+            self._show_no_way()
+        self._show_hotkey()
+
+    def _clear_hotkey(self):
+        if self._capturing:
+            self._capturing = False
+            self.capture_hotkey.emit(False)
+        self.cfg.hotkey = ""
+        self._save()
+        self._show_hotkey()
+        self._show_no_way()
+
+    def _show_hotkey(self):
+        self.hotkey.setText("請按下按鍵…（Esc 取消）" if self._capturing else hotkey_label(self.cfg.hotkey))
+        self.hotkey_clear.setEnabled(bool(self.cfg.hotkey) or self._capturing)
+
+    def hideEvent(self, e):
+        if self._capturing:   # closed while waiting for a key
+            self._capturing = False
+            self.capture_hotkey.emit(False)
+            self._show_hotkey()
+        super().hideEvent(e)
+
+    def _reset_all(self):
+        """還原預設: every setting of this window as it comes, but the 詞庫 tab's (its packs ticked, orders, open
+        section)."""
+        if QMessageBox.question(self, "還原預設", "把這個設定視窗裡的所有設定（一般、外觀、自訂操作）還原成預設？\n"
+                                               "詞庫不受影響。") != QMessageBox.Yes:
+            return
+        fresh = Config()
+        keep = {"packs", "hotword_sort", "pick_sort", "alias_sort", "hotword_section"}
+        for f in fields(Config):
+            if f.name not in keep:
+                setattr(self.cfg, f.name, getattr(fresh, f.name))
+        self._save()
+        self.load_values()
+
+    def _export_words(self):
+        name = f"VoiceInput 詞庫 {time.strftime('%Y-%m-%d')}.json"
+        path, _ = QFileDialog.getSaveFileName(self, "匯出詞庫", str(Path.home() / "Documents" / name), "詞庫 (*.json)")
+        if not path:
+            return
+        try:
+            wordbank.export(Path(path), self.cfg, self.hotwords, self.memory)
+        except OSError as e:
+            QMessageBox.warning(self, "匯出詞庫", f"無法寫入檔案：{e}")
+            return
+        self.set_status(f"已匯出詞庫到 {path}")
+
+    def _import_words(self):
+        path, _ = QFileDialog.getOpenFileName(self, "匯入詞庫", str(Path.home() / "Documents"), "詞庫 (*.json)")
+        if not path:
+            return
+        try:
+            data = wordbank.load(Path(path))
+            n = wordbank.merge(data, self.cfg, self.hotwords, self.memory)
+        except (OSError, ValueError) as e:
+            QMessageBox.warning(self, "匯入詞庫", f"無法匯入：{e}")
+            return
+        self._words_changed()
+        QMessageBox.information(self, "匯入詞庫", f"已合併：詞庫列表 {n['words']} 個詞、選字記憶 {n['picks']} 筆、"
+                                              f"詞包新增 {n['pack_terms']} 個詞")
+
+    def _clear_words(self):
+        if QMessageBox.question(self, "清空詞庫", "清空詞庫列表、選字記憶、英文強制替換，詞包恢復成原始內容並取消勾選？\n"
+                                              "這個動作無法復原，需要的話先匯出詞庫。") != QMessageBox.Yes:
+            return
+        wordbank.clear(self.cfg, self.hotwords, self.memory)
+        self._words_changed()
+        self.set_status("已清空詞庫")
+
+    def _words_changed(self):
+        self.cfg.save()
+        self.hotwords.set_packs(packs.words_for(self.cfg.packs), packs.PCT)
+        self.refresh_hotwords()
+        self.applied.emit()
 
     # --- 外觀 (2026-10-16, the user's request: what is seen and heard) ---
     def _look_page(self) -> QWidget:
@@ -566,11 +713,15 @@ class SettingsDialog(QDialog):
         self.button_look = QComboBox()
         for k, label in LOOKS.items():
             self.button_look.addItem(label, k)
-        self.look_samples = [_OrbSample(44), _OrbSample(28)]
+        # the floating button's example next to the drop-down (2026-10-17, the user's request; the bubble's smaller
+        # one was dropped with the 輸入框旁的按鈕 checkboxes)
+        self.look_samples = [_OrbSample(44)]
         for w in self.look_samples:
             w.clicked.connect(w.clicked_demo)
         look_row = QHBoxLayout()
         look_row.addWidget(self.button_look)
+        look_row.addSpacing(4)
+        look_row.addWidget(self.look_samples[0], 0, Qt.AlignVCenter)
         look_row.addStretch()
         self.button_look.currentIndexChanged.connect(self._look_changed)
         self.orb_lite = QCheckBox("節流模式")
@@ -589,46 +740,13 @@ class SettingsDialog(QDialog):
         size_row.addWidget(self.button_scale)
         size_row.addWidget(self.button_scale_text)
         size_row.addStretch()
-        self.float_text_only = QCheckBox("只在可以打字的地方顯示")
-        self.float_text_only.toggled.connect(self._apply)
-        self.float_keep = QCheckBox("按下後不隱藏")
-        self.float_keep.toggled.connect(self._apply)
-        float_row = QHBoxLayout()
-        float_row.addWidget(_with_info(self.float_text_only, "勾選時，浮動按鈕只在游標停在可以打字的地方時出現；"
-                                                             "不勾就到處都顯示", stretch=False))
-        float_row.addSpacing(16)
-        float_row.addWidget(_with_info(self.float_keep, "不勾時，開麥克風時按鈕放大淡出，關掉後縮回來；"
-                                                        "勾了按鈕會留著，按下時彈一下，麥克風開著時再點一下就關掉",
-                                       stretch=False))
-        float_row.addStretch()
-
-        # 輸入框旁的按鈕 (moved from 一般's 游標進到輸入框時, 2026-10-16, the user's design: two checkboxes, both may be
-        # on, each with its example after it; auto_listen became a 一般 checkbox that may go with either)
-        self.show_bubble = QCheckBox("語音氣泡：點進輸入框時出現在點擊處旁")
-        self.show_float = QCheckBox("浮動按鈕：停在螢幕上，可拖動")
-        button_rows = QVBoxLayout()
-        button_rows.setSpacing(0)
-        for box, sample in ((self.show_bubble, self.look_samples[1]), (self.show_float, self.look_samples[0])):
-            box.toggled.connect(self._apply)
-            row = QHBoxLayout()
-            row.addWidget(box)
-            row.addSpacing(4)
-            row.addWidget(sample, 0, Qt.AlignVCenter)
-            row.addStretch()
-            button_rows.addLayout(row)
-
         form = QFormLayout()
-        form.addRow(_titled("輸入框旁的按鈕", "提醒你這裡可以用語音輸入，點一下就開麥克風：\n"
-                                         "・語音氣泡：用滑鼠點進可以打字的地方時，點擊處旁出現小按鈕；打字、捲動滾輪或"
-                                         "點到不能打字的地方就收起來\n"
-                                         "・浮動按鈕：停在螢幕上的按鈕，拖到哪就留在哪；下面可以設定何時顯示。勾「按下後不隱藏」"
-                                         "就是一個固定位置的開關\n"
-                                         "兩個可以同時勾，也可以和一般頁的「點進輸入框時自動開麥克風」一起用。右邊是實際大小的範例，"
-                                         "滑鼠移上去或點一下可以看動畫"), button_rows)
-        form.addRow(_titled("按鈕樣式", "浮動按鈕和語音氣泡的樣子：原本的麥克風，或跟光暈同色的能量球"
-                                     "（沒開光暈時用彩虹的顏色）。上面的勾選框旁有實際大小的範例"), look_row)
+        look_title = _titled("按鈕樣式", "浮動按鈕和語音氣泡的樣子：原本的麥克風，或跟光暈同色的能量球"
+                                      "（沒開光暈時用彩虹的顏色）。右邊是浮動按鈕實際大小的範例，"
+                                      "滑鼠移上去或點一下可以看動畫")
+        look_title.setMinimumHeight(self.look_samples[0].height())   # level with the drop-down, not above it
+        form.addRow(look_title, look_row)
         form.addRow(_titled("按鈕大小", "浮動按鈕和語音氣泡的大小，100% 是標準大小；上面的範例會跟著變"), size_row)
-        form.addRow(_titled("浮動按鈕", "勾了上面的「浮動按鈕」才有作用"), float_row)
         form.addRow(_titled("螢幕邊緣光暈", "麥克風開著時，螢幕邊緣亮起一圈光，講話時會變亮。依序選顏色樣式、"
                                       "動態（柔光／波浪：邊緣像浪一樣起伏／流星：兩道光繞著螢幕跑／漣漪：一圈圈往內擴散）"
                                       "和亮哪幾邊；下面是樣式的參數，可以直接調整，調過的樣式會標「（已編輯）」，"
@@ -803,9 +921,9 @@ class SettingsDialog(QDialog):
         self.stop_on_enter.setChecked(self.cfg.stop_on_enter)
         self.mute.setChecked(self.cfg.mute_while_recording)
         self.describe.setChecked(self.cfg.describe_char)
-        self.hotkey.setCurrentIndex(max(0, self.hotkey.findData(self.cfg.hotkey)))
-        self.auto_listen.setChecked(self.cfg.auto_listen)
-        self.show_bubble.setChecked(self.cfg.show_bubble)
+        self._show_hotkey()
+        near = "listen" if self.cfg.auto_listen else "bubble" if self.cfg.show_bubble else ""
+        self.near_box.setCurrentIndex(max(0, self.near_box.findData(near)))
         self.show_float.setChecked(self.cfg.show_float)
         self.glow_edges.setCurrentIndex(max(0, self.glow_edges.findData(self.cfg.glow_edges)))
         self._show_mark_color()
@@ -855,9 +973,8 @@ class SettingsDialog(QDialog):
         self.cfg.stop_on_enter = self.stop_on_enter.isChecked()
         self.cfg.mute_while_recording = self.mute.isChecked()
         self.cfg.describe_char = self.describe.isChecked()
-        self.cfg.hotkey = self.hotkey.currentData()
-        self.cfg.auto_listen = self.auto_listen.isChecked()
-        self.cfg.show_bubble = self.show_bubble.isChecked()
+        near = self.near_box.currentData()
+        self.cfg.show_bubble, self.cfg.auto_listen = near == "bubble", near == "listen"
         self.cfg.show_float = self.show_float.isChecked()
         self.cfg.glow_edges = self.glow_edges.currentData()
         self.cfg.glow_motion = self.glow_motion.currentData()
@@ -866,8 +983,9 @@ class SettingsDialog(QDialog):
         self.cfg.button_scale = self.button_scale.value()
         self.cfg.float_text_only = self.float_text_only.isChecked()
         self.cfg.float_keep = self.float_keep.isChecked()
-        self.cfg.save_recordings = self.keep_audio.isChecked()
-        self.cfg.early_commands = self.early.isChecked()
+        if config.DEBUG:
+            self.cfg.save_recordings = self.keep_audio.isChecked()
+            self.cfg.early_commands = self.early.isChecked()
         self.cfg.start_sound = self.start_sound.currentData()
         self.cfg.stop_sound = self.stop_sound.currentData()
         self.cfg.glow = self.glow.currentData()
@@ -1201,8 +1319,14 @@ class SettingsDialog(QDialog):
     def _log_hover(self, url):
         """The pointer over a row: its why and details as a tooltip."""
         row = self._log_rows.get(int(url.path() or -1))
-        text = "" if row is None else "複製這句" if url.scheme() == "copy" else \
-            "\n".join(x for x in (row["tag"], row["tip"]) if x)
+        if row is None:
+            text = ""
+        elif url.scheme() == "copy":
+            text = "複製這句"
+        elif url.scheme() == "bank":
+            text = "\n".join(["詞庫可能影響了這句："] + row["bank"])
+        else:
+            text = "\n".join(x for x in (row["tag"], row["tip"]) if x)
         if text:
             QToolTip.showText(QCursor.pos(), text, self.log)
         else:
@@ -1226,12 +1350,16 @@ class SettingsDialog(QDialog):
             # cell said words have (the user's request, 2026-10-15)
             event = r["heard"].startswith("（") and r["heard"].endswith("）")
             copy = (f"<a href='copy:{r['id']}'><img src='{_COPY_ICON}' width=14 height=14></a>" if r["copy"] else "")
+            # the 詞庫 took part (logbook.bank_of): a small yellow ! after what was heard, its tooltip says how
+            bank = (f"<td style='padding-left:4px'><a href='bank:{r['id']}'><span style='background-color:#FFD84D; "
+                    f"color:#5C4300; font-weight:bold; font-size:11px'>&nbsp;!&nbsp;</span></a></td>"
+                    if r.get("bank") else "")
             return (f"<tr><td valign=top width=54 style='color:{gray}; font-size:11px; padding:5px 0 5px 0; "
                     f"font-family:Consolas,monospace'><a href='{tip}' style='color:{gray}'>{r['time']}</a></td>"
                     f"<td valign=top width='36%' style='padding:3px 8px 3px 0'>"
                     + (f"<div style='padding:2px 0'><a href='{tip}' style='color:{gray}'>{heard}</a></div>" if event
                        else f"<table cellspacing=0 cellpadding=0><tr><td bgcolor='#EEF1F5' style='padding:2px 7px'>"
-                       f"<a href='{tip}' style='color:{ink}'>{heard}</a></td></tr></table>" if heard else "")
+                       f"<a href='{tip}' style='color:{ink}'>{heard}</a></td>{bank}</tr></table>" if heard else "")
                     + f"</td><td valign=top style='padding:4px 0'><a href='{tip}' style='color:{ink}'>{r['change']}</a>"
                     + f"</td><td valign=top align=right width=22 style='padding:5px 0 0 4px'>{copy}</td></tr>")
 
@@ -1260,8 +1388,6 @@ class SettingsDialog(QDialog):
 
     # --- 自訂操作: the simple editor (2026-10-16, the user's design): a row per spoken phrase, grouped ---
     def _rules_page(self) -> QWidget:
-        reset = QPushButton("還原預設", clicked=self._reset_rules)
-
         self.rules_body = QVBoxLayout()
         self.rules_body.setSpacing(6)
         inner = QWidget()
@@ -1274,13 +1400,9 @@ class SettingsDialog(QDialog):
         self.rules_scroll.viewport().setAutoFillBackground(False)
         inner.setAutoFillBackground(False)
 
-        bottom = QHBoxLayout()
-        bottom.addStretch()
-        bottom.addWidget(reset)
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.addWidget(self.rules_scroll, 1)
-        layout.addLayout(bottom)
         return page
 
     def refresh_rules(self):
@@ -1438,10 +1560,4 @@ class SettingsDialog(QDialog):
         self._own.remove(row)
         self._rules_edited()
         self._draw_rules()
-
-    def _reset_rules(self):
-        if QMessageBox.question(self, "還原預設", "把自訂操作還原成預設？目前的設定會被取代。") == QMessageBox.Yes:
-            self.cfg.rules = rules.defaults()
-            self._save()
-            self.refresh_rules()
 

@@ -3,20 +3,19 @@ place of the focused app, so nothing is typed into real windows. Audio comes fro
 
   .venv\Scripts\python.exe dev\headless.py <dir> step,step,...
 
-Each step is a wav name in <dir>/wav (the hotkey held while it is spoken), sel:WORD (select the last WORD in the
+Each step is a wav name in <dir>/wav (the hotkey pressed before and after it is spoken), sel:WORD (select the last WORD in the
 box), mousesel:WORD (the same with the mouse: the 選字 menu may open while listening), floatclick (the floating
 button is clicked), window:N (window N comes to the front; the text box is 4242), focus:box:N / focus:none (what the
-focus watcher reads: text box N, or a place where nothing can be typed), click (the user clicks: ends what the app knows about the text), tap (one tap of the hotkey), undo / tap2
-(double tap), toggle:WAV (tap, speak, tap),
-hotkey:NAME (the key or button the next steps press, default mouse_middle), rules:default (the default operations),
+focus watcher reads: text box N, or a place where nothing can be typed), click (the user clicks: ends what the app knows about the text), tap (one press of the hotkey), toggle:WAV (tap,
+speak, tap), hotkey:SPEC (the hotkey, keys.parse_hotkey; default mouse_middle), rules:default (the default operations),
 rule:JSON (add an operation, rules.Rule.from_dict), at:WORD (put the caret right after the last WORD; at: puts it at
 the end), say:TEXT (dictate TEXT as if recognized), op:PHRASE (a spoken operation of the
 user's config run without audio), clip:TEXT (the box's clipboard; the real one is never read), nocaret (the next
 probe cannot read the caret's line), set:NAME=VALUE (change a setting in memory only; apply: as the settings window does after a change), packs:ID+ID (tick term packs, in memory only) or key:BACK (the
-user presses Backspace n times: key:BACK*3), key:ENTER (the user presses Enter), dbl:MS (a double tap, each press MS ms long), dblbusy (a double tap whose release is handled 0.5s late), pick:N / pickw:WORD (click a row of the 選字 menu), feed:WAV (while
+user presses Backspace n times: key:BACK*3), key:ENTER (the user presses Enter), pick:N / pickw:WORD (click a row of the 選字 menu), feed:WAV (while
 continuous listening is on: WAV and 1s of silence reach the microphone; feed:WAV+WAV joins clips with 0.6s pauses),
-logshot:NAME (the 辨識紀錄 tab saved as <dir>/NAME.png), wait:SEC (silence for SEC seconds), tap0 (a tap; the next step starts once it is known to be one,
-while queued work still runs), racemove:WORD (the caret moves after the last WORD, at the end when empty, right
+logshot:NAME (the 辨識紀錄 tab saved as <dir>/NAME.png), wait:SEC (silence for SEC seconds), tap0 (a tap; the next step starts at once, while queued work
+still runs), racemove:WORD (the caret moves after the last WORD, at the end when empty, right
 before the next draft update reaches the document). Settings are never saved; hotwords and smart picks live in <dir> (hotwords.test.json,
 smart-picks.test.json, emptied at the start), never in the real files.
 """
@@ -122,8 +121,6 @@ appmod.watch_clipboard = lambda: None
 appmod.terminal_in_front = lambda: False       # the box is no terminal, whatever window is really in front
 appmod.foreground = session.foreground = lambda: HWND
 appmod.Hotkeys.start = lambda self: None           # no real hotkey / keyboard hook
-replayed = []                                      # gestures given back to the key (key name per press)
-appmod.Hotkeys.replay = lambda self, name, times=1: replayed.extend([name] * times)
 appmod.App._watch_mouse = lambda self: None       # the user's real clicks must not end the simulated session
 
 
@@ -238,7 +235,7 @@ def load(name):
 
 
 KEY = A.cfg.hotkey = "mouse_middle"
-A.hotkeys.set_keys(A._hotkeys())
+A.hotkeys.set_hotkey(KEY)
 
 
 def _steps(arg: str) -> list[str]:
@@ -271,14 +268,8 @@ def user_input():
     A.main.emit(A._caret_left)
 
 
-def down():
-    A.hotkeys._held.add(KEY)       # what the hook would record
-    A.on_key_down(KEY, time.monotonic())
-
-
-def up():
-    A.hotkeys._held.discard(KEY)
-    A.on_key_up(KEY, time.monotonic())
+def tap():
+    A.hotkey_tap.emit()            # what the hook reports
 
 
 t0 = time.monotonic()
@@ -328,22 +319,16 @@ try:
             user_input()
             print(f"[選取 {w}]")
             continue
-        if step in ("tap", "undo", "tap2") or step.startswith("toggle:"):
-            replayed.clear()
-            down(), pump(0.05), up()
+        if step == "tap" or step.startswith("toggle:"):
+            tap()
             if step.startswith("toggle:"):
-                pump(A.cfg.gesture_time + 0.2)
+                pump(0.2)
                 if A._listening:
                     feed(load(step[7:]))
                     pump(2.0)
-                down(), pump(0.05), up()
-            elif step != "tap":
-                pump(0.05)
-                down(), pump(0.05), up()
+                tap()
             pump(2.5 if step.startswith("toggle:") else 1.0)
-            given = f"  (還給按鍵：{replayed})" if replayed else ""
-            given += menu()
-            print(f"[{step}] → 文字框：{box.text[:box.caret] + '|' + box.text[box.caret:]!r}{given}")
+            print(f"[{step}] → 文字框：{box.text[:box.caret] + '|' + box.text[box.caret:]!r}{menu()}")
             continue
         if step.startswith("wait:"):   # nothing happens for SEC seconds (the microphone hears silence)
             end = time.monotonic() + float(step[5:])
@@ -354,7 +339,7 @@ try:
             print(f"[{step}] 聽寫中：{A._listening}")
             continue
         if step == "tap0":   # a tap, and the next step right when it is known to be one (queued work still runs)
-            down(), pump(0.05), up(), pump(A.cfg.gesture_time + 0.05)
+            tap(), pump(0.05)
             print(f"[tap0] 聽寫中：{A._listening}")
             continue
         if step.startswith("racemove:"):   # the caret moves (to after WORD) right before the next draft update
@@ -371,7 +356,7 @@ try:
             continue
         if step.startswith("hotkey:"):
             KEY = A.cfg.hotkey = step[7:]
-            A.hotkeys.set_keys(A._hotkeys())
+            A.hotkeys.set_hotkey(KEY)
             print(f"[按鍵 {KEY}]")
             continue
         if step == "rules:default":
@@ -448,31 +433,13 @@ try:
             user_input()
             print("[點滑鼠]")
             continue
-        if step == "dblbusy":   # a double tap whose second release reaches the main thread 0.5s late (busy)
-            down(), pump(0.05), up(), pump(0.05), down(), pump(0.1)
-            A.hotkeys._held.discard(KEY)
-            t_up = time.monotonic()
-            pump(0.5)
-            A.on_key_up(KEY, t_up)
-            pump(1.0)
-            print(f"[{step}] → 文字框：{box.text[:box.caret] + '|' + box.text[box.caret:]!r}")
-            continue
-        if step.startswith("press:"):   # one press lasting MS milliseconds
-            down(), pump(int(step[6:]) / 1000), up(), pump(1.0)
-            print(f"[{step}] 聽寫中：{A._listening} → 文字框：{box.text[:box.caret] + '|' + box.text[box.caret:]!r}")
-            continue
-        if step.startswith("dbl:"):   # a double tap whose presses last MS milliseconds each
-            ms = int(step[4:]) / 1000
-            down(), pump(ms), up(), pump(0.05), down(), pump(ms), up(), pump(1.0)
-            print(f"[{step}] → 文字框：{box.text[:box.caret] + '|' + box.text[box.caret:]!r}")
-            continue
         if step.startswith("logshot:"):   # logshot:NAME, or logshot:NAME:all (a tall window)
             name, _, every = step[8:].partition(":")
             if every:
                 A.settings.resize(A.settings.width(), 1500)   # tall enough to see them
             step = "logshot:" + name
             A.settings.set_log(A.book.sessions)
-            A.settings.tabs.setCurrentIndex(1)
+            A.settings.tabs.setCurrentIndex(2)   # 辨識紀錄
             A.settings.show()
             pump(0.3)
             A.settings.grab().save(f"{S}/{step[8:]}.png")
@@ -491,11 +458,11 @@ try:
                 user_input()
             print(f"[按 Backspace ×{n}]")
             continue
-        down()
-        pump(A.cfg.gesture_time + 0.2)
+        tap()
+        pump(0.2)
         if A._listening:
             feed(load(step))
-        up()
+        tap()
         pump(2.5)
         shown = box.text[:box.caret] + "|" + box.text[box.caret:]
         print(f"[{step}] {_last_row()!r:32} → 文字框：{shown!r}{menu()}")

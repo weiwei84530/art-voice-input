@@ -204,6 +204,14 @@ class OrbButton(QWidget):
         c = self.width() / 2
         p.translate(c, c)
         p.scale(self.k, self.k)
+        # a disc of alpha 1/255 under the look: fully clear pixels of a translucent window let clicks through, so
+        # the open middle of 光環 / 虹膜 did not take them (2026-10-17, the user's report)
+        p.save()
+        p.setOpacity(1.0)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(0, 0, 0, 1))
+        p.drawEllipse(QPointF(0, 0), self.bsize / 2, self.bsize / 2)
+        p.restore()
         if self.orb.look == "mic":
             p.scale(self.bsize / _SIZE, self.bsize / _SIZE)
             p.translate(-_SIZE / 2, -_SIZE / 2)

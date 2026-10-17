@@ -18,10 +18,39 @@
       $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
       $procs | ForEach-Object { Wait-Process -Id $_.ProcessId -Timeout 10 -ErrorAction SilentlyContinue }
   }
-  Start-Process "$root\.venv\Scripts\pythonw.exe" -ArgumentList "`"$root\run.pyw`"" -WorkingDirectory $root
+  Start-Process "$root\.venv\Scripts\pythonw.exe" -ArgumentList "`"$root\run.pyw`" --debug" -WorkingDirectory $root
   ```
 
   Then check the tail of `%LOCALAPPDATA%\VoiceInput\voiceinput.log` for "就緒" / errors.
+- `--debug` (2026-10-17, the user's request): shows the 一般 tab's 開發測試 rows (保存錄音, 短停頓就執行指令) and lets
+  them work; without it (a release) they are hidden and forced off (`config.DEBUG`, set by `app.main`). Autostart
+  registers the launch the way this run was launched. Always restart the user's app with it.
+
+## Settings rework (2026-10-17, the user's requests)
+
+Sentences elsewhere in this file that say otherwise are history.
+- 一般: 點進輸入框時 is one drop-down (不使用 / 語音氣泡 (default) / 自動開麥克風，離開時關閉), stored as `show_bubble` /
+  `auto_listen`, at most one on; the 外觀 checkboxes and 一般's auto_listen checkbox were removed. Both keep their own
+  triggers (bubble: a left click into a text box; auto: the focus entering a new box); new: with auto, a left click
+  in a box where listening was turned off by hand turns it on again (`App._clicked` clears `_box_quiet`).
+  顯示浮動按鈕 (`show_float`) moved from 外觀 to 一般 with its two options under it (greyed out while off). 外觀 keeps
+  only the 44px floating-button example, next to 按鈕樣式.
+- 麥克風快捷鍵 is captured: click, then press any key (modifiers allowed: `ctrl+shift+vk:20`) or mouse button but the
+  left one; Esc or a left click cancels (`hotkey.Hotkeys.capture`, `keys.parse_hotkey` / `hotkey_label`; old names
+  such as `caps_lock` are upgraded by `keys.upgrade_hotkey`). A press is always a tap: the key is fully taken (down
+  and up suppressed), no hold / double tap given back, no `gesture_time` (removed with the rule engine's gestures and
+  the old key-rule upgrades). A modifier alone (右 Ctrl) fires on release when nothing else was pressed and is not
+  suppressed; with Alt / Win an unassigned key 0xE8 is sent so no menu opens.
+- 一般's 設定與詞庫 row: 還原預設 (every setting of the window, 自訂操作 included, but the 詞庫 tab's: packs ticked,
+  orders, open section; 自訂操作 lost its own 還原預設), 匯出詞庫 / 匯入詞庫 / 清空詞庫 (`wordbank.py`: word list with
+  aliases, 選字記憶, packs ticked, the user's pack files; import merges, the file wins on a word both have; clearing
+  restores the shipped packs and ticks none). No pack is ticked by default any more.
+- 選字 moves a word's 優先度 by 25% (was 30%); stored values are left as they are.
+- A pack hint (`_suggest_pack`) shows every time, not once per pack (`pack_hints` removed).
+- 辨識紀錄: a row whose text the 詞庫 may have shaped (weighted words in it, 英文拼寫, 選字記憶; `logbook.bank_of`)
+  gets a yellow ! after what was heard; its tooltip lists them.
+- 光環 / 虹膜: their open middle takes clicks (a disc of alpha 1/255 under every look: fully clear pixels of a
+  translucent window let clicks through). 液態金屬's outer light is held closer to the drop.
 
 ## Lean branch (2026-10-10)
 

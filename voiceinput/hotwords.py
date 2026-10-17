@@ -3,8 +3,8 @@
 One list (DATA_DIR/hotword-list.json, shown on the 詞庫 tab; the UI calls hotwords 詞庫 since 2026-10-13). 100% leaves recognition alone, 200% pulls hardest
 toward the word, 0% pushes hardest away from it; the scores behind the percentages are not shown.
 - typed (source "manual"): a word typed on the 詞庫 tab (in the 選字 menu until 2026-10-16); 200%, never changed by picks.
-- 選字: picking a word of two or more characters (or English) in the menu raises it by 30% and lowers the word it
-  replaced by 30%, so swapping 程式 and 城市 back and forth returns both to 100% (where they leave the list).
+- 選字: picking a word of two or more characters (or English) in the menu raises it by 25% and lowers the word it
+  replaced by 25% (30% until 2026-10-17; the user's request: steps that add up to 100%), so swapping 程式 and 城市 back and forth returns both to 100% (where they leave the list).
 - ✕ on the 詞庫 tab puts a word back where it would be unlisted; the −/+ buttons that moved a word by 10% were
   removed 2026-10-14 (the user's choice: priority comes from picks and typing only).
 - words of ticked term packs (packs.py) count as being at the pack's percentage without being listed; a pick or a
@@ -35,7 +35,7 @@ MANUAL, PICKED = "manual", "picked"
 _CJK = re.compile(r"[㐀-䶿一-鿿]")
 _LATIN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 .'+#&_-]*$")
 NEUTRAL, TOP = 100, 200
-PICK_STEP = 30
+PICK_STEP = 25
 _TOP_ZH, _TOP_EN, _BOTTOM = 5.0, 3.0, -3.0
 
 
@@ -105,6 +105,35 @@ class Hotwords:
         except (OSError, ValueError, TypeError, KeyError):
             pass
 
+    def export(self) -> list[dict]:
+        with self._lock:
+            return [asdict(h) for h in self.items]
+
+    def merge(self, rows: list[dict]) -> int:
+        """匯入詞庫 (2026-10-17): entries of an exported list added; a word both have takes the imported entry.
+        Returns how many came in."""
+        n = 0
+        for d in rows:
+            word = d.get("word", "") if isinstance(d, dict) else ""
+            if not eligible(word):
+                continue
+            h = Hotword(word, int(d.get("pct", TOP)), d.get("source", MANUAL), d.get("added") or _now(),
+                        list(d.get("aliases", [])), dict(d.get("alias_added", {})))
+            with self._lock:
+                old = self.find(word)
+                if old is not None:
+                    self.items[self.items.index(old)] = h
+                else:
+                    self.items.append(h)
+            n += 1
+        self.save()
+        return n
+
+    def clear(self):
+        with self._lock:
+            self.items = []
+        self.save()
+
     def save(self):
         with self._lock:
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -160,7 +189,7 @@ class Hotwords:
             self.items.remove(h)
 
     def picked(self, old: str, new: str):
-        """A pick in 選字 replaced old with new: new gains 30%, old loses 30%."""
+        """A pick in 選字 replaced old with new: new gains 25%, old loses 25%."""
         new, old = new.strip(), old.strip()
         if old == new:
             return
