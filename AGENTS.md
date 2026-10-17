@@ -41,10 +41,12 @@ Sentences elsewhere in this file that say otherwise are history.
   and up suppressed), no hold / double tap given back, no `gesture_time` (removed with the rule engine's gestures and
   the old key-rule upgrades). A modifier alone (右 Ctrl) fires on release when nothing else was pressed and is not
   suppressed; with Alt / Win an unassigned key 0xE8 is sent so no menu opens.
-- 一般's 設定與詞庫 row: 還原預設 (every setting of the window, 自訂操作 included, but the 詞庫 tab's: packs ticked,
-  orders, open section; 自訂操作 lost its own 還原預設), 匯出詞庫 / 匯入詞庫 / 清空詞庫 (`wordbank.py`: word list with
-  aliases, 選字記憶, packs ticked, the user's pack files; import merges, the file wins on a word both have; clearing
-  restores the shipped packs and ticks none). No pack is ticked by default any more.
+- 一般's 設定檔 row (`userdata.py`; the user's design, the 詞庫 is part of the user's data): 匯出 writes every setting
+  (自訂操作 included) and the 詞庫 (word list with aliases, 選字記憶, the user's pack files) to one JSON file; 匯入
+  replaces the settings but the microphone, autostart and the floating button's place (`userdata.LOCAL`) and merges
+  the 詞庫 (the file wins on a word both have, packs ticked on either side stay ticked); 還原預設 puts everything
+  back as installed, the 詞庫 emptied too (packs as shipped, none ticked). 自訂操作 has no 還原預設 of its own. No pack
+  is ticked by default any more.
 - 選字 moves a word's 優先度 by 25% (was 30%); stored values are left as they are.
 - A pack hint (`_suggest_pack`) shows every time, not once per pack (`pack_hints` removed).
 - 辨識紀錄: a row whose text the 詞庫 may have shaped (weighted words in it, 英文拼寫, 選字記憶; `logbook.bank_of`)

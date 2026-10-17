@@ -1813,6 +1813,8 @@ class App(QObject):
 
     def apply_settings(self):
         self.hotkeys.set_hotkey(self.cfg.hotkey)
+        self._pack_stamp = None   # packs ticked may have changed (an import, 還原預設)
+        self._load_packs()
         style = style_for(self.cfg.glow, self.cfg.glow_edits)
         if self.glow.style != style or self.glow.edges != self.cfg.glow_edges                 or self.glow.motion != self.cfg.glow_motion:
             self.glow.set_style(style)

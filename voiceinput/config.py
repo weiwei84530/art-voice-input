@@ -86,6 +86,11 @@ class Config:
             data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return cls()
+        return cls.from_data(data)
+
+    @classmethod
+    def from_data(cls, data: dict) -> "Config":
+        """A config from saved data (config.json, or an exported file: userdata.py), older formats migrated."""
         known = {k: v for k, v in data.items() if k in cls.__dataclass_fields__ and k not in ("rules", "rules_version")}
         cfg = cls(**known)
         if "show_bubble" not in data and "show_float" not in data:

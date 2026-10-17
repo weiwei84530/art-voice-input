@@ -6,7 +6,6 @@ sortable, and its entries removable. Every change is applied and saved immediate
 import html
 import os
 import time
-from dataclasses import fields
 from pathlib import Path
 
 from pypinyin import lazy_pinyin
@@ -18,9 +17,9 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QColorDial
                                QToolButton,
                                QToolTip, QVBoxLayout, QWidget)
 
-from . import audio, config, cues, hotwords, packs, recordings, rules, wordbank
+from . import audio, config, cues, hotwords, packs, recordings, rules, userdata
 from . import glow as glowmod
-from .config import BUTTON_SCALE_RANGE, Config
+from .config import BUTTON_SCALE_RANGE
 from .floatbtn import OrbButton
 from .highlight import COLORS as MARK_COLORS
 from .orbs import LOOKS, palette
@@ -491,22 +490,21 @@ class SettingsDialog(QDialog):
                                                "下次開麥克風時生效"))
         for i in range(dev, form.rowCount()):
             form.setRowVisible(i, config.DEBUG)
-        # 設定與詞庫 (2026-10-17, the user's design)
+        # 設定檔 (2026-10-17, the user's design: the 詞庫 is part of the user's data, userdata.py)
         reset = QPushButton("還原預設", clicked=self._reset_all)
-        export = QPushButton("匯出詞庫…", clicked=self._export_words)
-        import_ = QPushButton("匯入詞庫…", clicked=self._import_words)
-        clear = QPushButton("清空詞庫", clicked=self._clear_words)
+        export = QPushButton("匯出…", clicked=self._export_data)
+        import_ = QPushButton("匯入…", clicked=self._import_data)
         file_row = QHBoxLayout()
-        file_row.addWidget(_with_info(reset, "把這個設定視窗裡的所有設定（一般、外觀、自訂操作）還原成預設，"
-                                             "不包含詞庫（詞包、詞庫列表、選字記憶、英文強制替換）", stretch=False))
-        file_row.addSpacing(16)
         file_row.addWidget(export)
-        file_row.addWidget(import_)
-        file_row.addWidget(_with_info(clear, "匯出、匯入、清空的都是詞庫頁的全部內容：勾選的詞包和你改過的詞包內容、"
-                                             "詞庫列表、選字記憶、英文強制替換。匯入會合併到現有的詞庫，兩邊都有的以匯入檔為準；"
-                                             "想整個換掉就先清空再匯入", stretch=False))
+        file_row.addWidget(_with_info(import_, "匯出的檔案包含 VoiceInput 的所有設定（一般、外觀、自訂操作）和詞庫"
+                                               "（詞包、詞庫列表、選字記憶、英文強制替換），可以搬到另一台電腦。匯入時設定換成"
+                                               "檔案裡的，麥克風、開機啟動和浮動按鈕位置維持這台電腦的；詞庫合併到現有的，"
+                                               "兩邊都有的以匯入檔為準", stretch=False))
+        file_row.addSpacing(16)
+        file_row.addWidget(_with_info(reset, "回到剛安裝的樣子：所有設定還原成預設，詞庫也會清空"
+                                             "（詞包恢復原始內容並取消勾選）。需要的話先匯出", stretch=False))
         file_row.addStretch()
-        form.addRow("設定與詞庫", file_row)
+        form.addRow("設定檔", file_row)
         page = QWidget()
         v = QVBoxLayout(page)
         v.addLayout(form)
@@ -559,57 +557,48 @@ class SettingsDialog(QDialog):
         super().hideEvent(e)
 
     def _reset_all(self):
-        """還原預設: every setting of this window as it comes, but the 詞庫 tab's (its packs ticked, orders, open
-        section)."""
-        if QMessageBox.question(self, "還原預設", "把這個設定視窗裡的所有設定（一般、外觀、自訂操作）還原成預設？\n"
-                                               "詞庫不受影響。") != QMessageBox.Yes:
+        """還原預設: everything as installed, the 詞庫 too (userdata.reset)."""
+        if QMessageBox.question(self, "還原預設", "把所有設定還原成預設，並清空詞庫（詞庫列表、選字記憶、英文強制替換，"
+                                               "詞包恢復原始內容並取消勾選）？\n這個動作無法復原，需要的話先匯出。"
+                                ) != QMessageBox.Yes:
             return
-        fresh = Config()
-        keep = {"packs", "hotword_sort", "pick_sort", "alias_sort", "hotword_section"}
-        for f in fields(Config):
-            if f.name not in keep:
-                setattr(self.cfg, f.name, getattr(fresh, f.name))
-        self._save()
-        self.load_values()
+        userdata.reset(self.cfg, self.hotwords, self.memory)
+        self._data_changed()
+        self.set_status("已還原預設")
 
-    def _export_words(self):
-        name = f"VoiceInput 詞庫 {time.strftime('%Y-%m-%d')}.json"
-        path, _ = QFileDialog.getSaveFileName(self, "匯出詞庫", str(Path.home() / "Documents" / name), "詞庫 (*.json)")
+    def _export_data(self):
+        name = f"VoiceInput 設定 {time.strftime('%Y-%m-%d')}.json"
+        path, _ = QFileDialog.getSaveFileName(self, "匯出設定", str(Path.home() / "Documents" / name),
+                                              "VoiceInput 設定檔 (*.json)")
         if not path:
             return
         try:
-            wordbank.export(Path(path), self.cfg, self.hotwords, self.memory)
+            userdata.export(Path(path), self.cfg, self.hotwords, self.memory)
         except OSError as e:
-            QMessageBox.warning(self, "匯出詞庫", f"無法寫入檔案：{e}")
+            QMessageBox.warning(self, "匯出設定", f"無法寫入檔案：{e}")
             return
-        self.set_status(f"已匯出詞庫到 {path}")
+        self.set_status(f"已匯出到 {path}")
 
-    def _import_words(self):
-        path, _ = QFileDialog.getOpenFileName(self, "匯入詞庫", str(Path.home() / "Documents"), "詞庫 (*.json)")
+    def _import_data(self):
+        path, _ = QFileDialog.getOpenFileName(self, "匯入設定", str(Path.home() / "Documents"),
+                                              "VoiceInput 設定檔 (*.json)")
         if not path:
             return
         try:
-            data = wordbank.load(Path(path))
-            n = wordbank.merge(data, self.cfg, self.hotwords, self.memory)
-        except (OSError, ValueError) as e:
-            QMessageBox.warning(self, "匯入詞庫", f"無法匯入：{e}")
+            data = userdata.load(Path(path))
+            n = userdata.import_into(data, self.cfg, self.hotwords, self.memory)
+        except (OSError, ValueError, TypeError) as e:
+            QMessageBox.warning(self, "匯入設定", f"無法匯入：{e}")
             return
-        self._words_changed()
-        QMessageBox.information(self, "匯入詞庫", f"已合併：詞庫列表 {n['words']} 個詞、選字記憶 {n['picks']} 筆、"
-                                              f"詞包新增 {n['pack_terms']} 個詞")
+        self._data_changed()
+        QMessageBox.information(self, "匯入設定", f"已套用設定，並合併詞庫：詞庫列表 {n['words']} 個詞、"
+                                              f"選字記憶 {n['picks']} 筆、詞包新增 {n['pack_terms']} 個詞")
 
-    def _clear_words(self):
-        if QMessageBox.question(self, "清空詞庫", "清空詞庫列表、選字記憶、英文強制替換，詞包恢復成原始內容並取消勾選？\n"
-                                              "這個動作無法復原，需要的話先匯出詞庫。") != QMessageBox.Yes:
-            return
-        wordbank.clear(self.cfg, self.hotwords, self.memory)
-        self._words_changed()
-        self.set_status("已清空詞庫")
-
-    def _words_changed(self):
+    def _data_changed(self):
+        """Settings and 詞庫 replaced at once: saved, the window shown again, the app applies them."""
         self.cfg.save()
         self.hotwords.set_packs(packs.words_for(self.cfg.packs), packs.PCT)
-        self.refresh_hotwords()
+        self.load_values()
         self.applied.emit()
 
     # --- 外觀 (2026-10-16, the user's request: what is seen and heard) ---
