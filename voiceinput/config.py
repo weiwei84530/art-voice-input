@@ -38,11 +38,13 @@ class Config:
     # the floating microphone button's place (show_float), as fractions of the screen's free range
     float_pos: list = field(default_factory=lambda: [0.98, 0.88])
     # the floating button only while text can be typed where the focus is and listening is off; False: always, while
-    # listening too, a click turning it off (2026-10-16, the user's request)
-    float_text_only: bool = True
-    # 按下後不隱藏: the floating button stays while listening (a click jumps it and turns listening off) instead of
-    # growing and fading out with the glow (2026-10-16, the user's request)
-    float_keep: bool = False
+    # listening too, a click turning it off (2026-10-16, the user's request). The 一般 tab calls it
+    # 未偵測到輸入區域時隱藏, unticked by default (2026-10-17)
+    float_text_only: bool = False
+    # float_keep: the floating button stays while listening (a click jumps it and turns listening off) instead of
+    # growing and fading out with the glow (2026-10-16, the user's request). Shown inverted as 錄音時隱藏按鈕,
+    # unticked by default (2026-10-17)
+    float_keep: bool = True
     # when the focus comes into a text box (2026-10-16, the user's requests): "" nothing, "bubble" a small microphone
     # bubble by the caret (a click listens), "float" the draggable floating button, shown only while text can be
     # typed where the focus is, "listen" listening turns on, and off when the focus leaves for a place where nothing

@@ -88,7 +88,8 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
 - **Bubble** (`show_bubble`, default): fades in just right of a left click (not a drag) that put the focus in a text
   box (focus read 120ms after the click); goes on typing / wheel (at once) or focus leaving (fade). Keyboard focus
   shows nothing. Placed at the click because UIA caret positions are wrong in Notion, LINE, web pages.
-- **Floating button** (`show_float`; `float_text_only`, `float_keep`, `float_pos`): never takes focus, draggable.
+- **Floating button** (`show_float`; 未偵測到輸入區域時隱藏 `float_text_only` and 錄音時隱藏按鈕
+  = not `float_keep`, both unticked by default; `float_pos`): never takes focus, draggable.
   Starting to listen grows it to 1.5 and fades it out in `glow.FADE_MS`; ending reverses it.
 - **Pieces**: the microphone opens unseen; silero VAD ends a piece at 0.3s silence (0.5s lead-in, 0.25s tail kept).
   Sample numbers continue across sessions (a reset made queued jobs read the new session's audio: text typed twice);

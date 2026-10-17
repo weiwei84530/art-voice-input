@@ -8,11 +8,11 @@ colors), animated only while shown.
 Motions (`OrbButton`, 2026-10-16, the user's design): one look at rest, no hover color. The pointer over it shrinks it
 a little, springing (the user's pick of smooth, bouncing and springy, compared on the 外觀 tab for a few hours). When listening starts it grows quickly
 and fades out as the glow fades in (`glow.FADE_MS`); when listening ends it shrinks back from that size and fades in
-as the glow fades out. With 按下後不隱藏 (`float_keep`) the floating button stays: a click makes it jump a little and
+as the glow fades out. With `float_keep` (錄音時隱藏按鈕 unticked) the floating button stays: a click makes it jump a little and
 come back, and while listening a click turns listening off. Its window has room around the button (`_ROOM`) for the
 orb's light and for growing; the room is transparent, so clicks there go through. The button's place is the middle
 of it.
-With 只在可以打字的地方顯示 unticked (`float_text_only`, the 外觀 tab, 2026-10-16, the user's request) the floating
+With 未偵測到輸入區域時隱藏 unticked (`float_text_only`, the 一般 tab) the floating
 button shows wherever the focus is. 按鈕大小 (`button_scale`, 75-125%) scales both buttons.
 """
 import ctypes

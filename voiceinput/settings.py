@@ -417,8 +417,9 @@ class SettingsDialog(QDialog):
         self.near_box.addItem("自動開麥克風，離開時關閉", "listen")
         # 浮動按鈕 (moved from 外觀 the same day), its two options under it, greyed out while it is off
         self.show_float = QCheckBox("顯示浮動按鈕")
-        self.float_text_only = QCheckBox("只在可以打字的地方顯示")
-        self.float_keep = QCheckBox("按下後不隱藏")
+        # the user's wording (2026-10-17): both say when the button hides; 錄音時隱藏按鈕 is float_keep inverted
+        self.float_text_only = QCheckBox("未偵測到輸入區域時隱藏")
+        self.float_keep = QCheckBox("錄音時隱藏按鈕")
         float_box = QWidget()
         float_v = QVBoxLayout(float_box)
         float_v.setContentsMargins(0, 0, 0, 0)
@@ -427,11 +428,11 @@ class SettingsDialog(QDialog):
                                                       "樣子和大小在外觀頁設定"))
         float_opts = QHBoxLayout()
         float_opts.setContentsMargins(22, 0, 0, 0)
-        float_opts.addWidget(_with_info(self.float_text_only, "勾選時，浮動按鈕只在游標停在可以打字的地方時出現；"
+        float_opts.addWidget(_with_info(self.float_text_only, "勾選時，游標不在可以打字的地方就隱藏浮動按鈕；"
                                                               "不勾就到處都顯示", stretch=False))
         float_opts.addSpacing(16)
-        float_opts.addWidget(_with_info(self.float_keep, "不勾時，開麥克風時按鈕放大淡出，關掉後縮回來；"
-                                                         "勾了按鈕會留著，按下時彈一下，麥克風開著時再點一下就關掉",
+        float_opts.addWidget(_with_info(self.float_keep, "勾選時，開麥克風時按鈕放大淡出，關掉後縮回來；"
+                                                         "不勾按鈕會留著，按下時彈一下，麥克風開著時再點一下就關掉",
                                         stretch=False))
         float_opts.addStretch()
         float_v.addLayout(float_opts)
@@ -927,7 +928,7 @@ class SettingsDialog(QDialog):
         self.button_scale.setValue(self.cfg.button_scale)
         self._button_scale_moved(self.cfg.button_scale)
         self.float_text_only.setChecked(self.cfg.float_text_only)
-        self.float_keep.setChecked(self.cfg.float_keep)
+        self.float_keep.setChecked(not self.cfg.float_keep)
         self._show_glow()
         self._show_samples()
         i = self.auto_off.findData(self.cfg.auto_off_minutes)
@@ -971,7 +972,7 @@ class SettingsDialog(QDialog):
         self.cfg.orb_lite = self.orb_lite.isChecked()
         self.cfg.button_scale = self.button_scale.value()
         self.cfg.float_text_only = self.float_text_only.isChecked()
-        self.cfg.float_keep = self.float_keep.isChecked()
+        self.cfg.float_keep = not self.float_keep.isChecked()
         if config.DEBUG:
             self.cfg.save_recordings = self.keep_audio.isChecked()
             self.cfg.early_commands = self.early.isChecked()
