@@ -153,6 +153,14 @@ class OrbButton(QWidget):
         self._scale_to(1.0, ms, QEasingCurve(QEasingCurve.OutCubic))
         self._fade_to(1.0, ms)
 
+    def fade_out(self, ms: int = 160):
+        """Out where it is (the focus went where nothing can be typed), then hidden."""
+        if not self.isVisible() or self.leaving:
+            return
+        self.leaving = True
+        self._grow.stop()
+        self._fade_to(0.0, ms)
+
     def burst(self):
         """Listening started: it grows quickly and fades out as the glow fades in, then hides."""
         if not self.isVisible():
@@ -272,14 +280,6 @@ class Bubble(_OnTop):
         self._place()
         self.fade_in(160)
 
-    def fade_out(self, ms: int = 160):
-        """Out where it is (the focus went where nothing can be typed), then hidden."""
-        if not self.isVisible() or self.leaving:
-            return
-        self.leaving = True
-        self._grow.stop()
-        self._fade_to(0.0, ms)
-
     def _place(self):
         if self._at is None:
             return
@@ -336,8 +336,7 @@ class FloatButton(_OnTop):
         self.fade_in()   # fades in (the user's request: it shows when text can be typed)
 
     def vanish(self):
-        if not self.leaving:   # a burst hides it when it ends
-            self.hide()
+        self.fade_out()   # (the user's request, 2026-10-17); a burst already leaving hides it when it ends
 
     def _follow_pointer(self):
         if self._press is not None:
