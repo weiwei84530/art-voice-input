@@ -1,15 +1,18 @@
 # VoiceInput — notes for coding agents
 
+Windows dictation app: sherpa-onnx speech recognition, typed into whatever has the focus, with spoken commands and
+mouse-driven fixes. This file holds the working rules, the current design and the lessons worth keeping. Why things
+are the way they are, removed features and old measurements: `docs/history.md` (the archived AGENTS.md, not loaded
+automatically; read it before reviving or redesigning something). Module docstrings carry the details.
+
 ## Working with the user
 
-- Whenever you can infer what the user is really after and see a better approach or a missing detail,
-  stop and ask before building, as many rounds as needed, with the recommended option first.
-- Don't guess between materially different designs; asking is cheaper than rebuilding.
-- Ask clarifying questions with the AskUserQuestion tool (when available); use it freely.
-- Direction (the user, 2026-10-16): turning listening on and off should move to the interface as much as possible
-  (the floating button, the bubble, the focus) rather than being bound to keys and mouse buttons.
-- After every commit (each new feature or change), restart VoiceInput so the user is testing the new code; start it
-  even if it isn't running (the user's request, 2026-10-10). PowerShell:
+- When you can infer what the user is really after and see a better approach or a missing detail, stop and ask
+  before building (AskUserQuestion, recommended option first), as many rounds as needed. Don't guess between
+  materially different designs.
+- Direction (2026-10-16): turning listening on and off belongs in the interface (floating button, bubble, focus),
+  not on keys and mouse buttons.
+- After every commit, restart VoiceInput (start it even if it isn't running), always with `--debug`:
 
   ```powershell
   $root = 'E:\Projects\voice-input'
@@ -22,833 +25,257 @@
   ```
 
   Then check the tail of `%LOCALAPPDATA%\VoiceInput\voiceinput.log` for "就緒" / errors.
-- `--debug` (2026-10-17, the user's request): shows the 一般 tab's 開發測試 rows (保存錄音, 短停頓就執行指令) and lets
-  them work; without it (a release) they are hidden and forced off (`config.DEBUG`, set by `app.main`). Autostart
-  registers the launch the way this run was launched. Always restart the user's app with it.
+- `--debug` (`config.DEBUG`, set by `app.main`) shows and enables the 一般 tab's 開發測試 rows (保存錄音,
+  短停頓就執行指令); a release hides them and forces them off. Autostart registers the launch as this run was made.
+- When the user decides something, record it here briefly as the current design (one line of why when it is not
+  obvious); don't append dated narrative. Replace what it supersedes; move nothing back from history unless needed.
 
-## Settings rework (2026-10-17, the user's requests)
+## Platform, layout, models
 
-Sentences elsewhere in this file that say otherwise are history.
-- 一般: 點進輸入框時 is one drop-down (不使用 / 語音氣泡 (default) / 自動開麥克風，離開時關閉), stored as `show_bubble` /
-  `auto_listen`, at most one on; the 外觀 checkboxes and 一般's auto_listen checkbox were removed. Both keep their own
-  triggers (bubble: a left click into a text box; auto: the focus entering a new box); new: with auto, a left click
-  in a box where listening was turned off by hand turns it on again (`App._clicked` clears `_box_quiet`).
-  顯示浮動按鈕 (`show_float`) moved from 外觀 to 一般 with its two options under it (greyed out while off). 外觀 keeps
-  only the 44px floating-button example, next to 按鈕樣式.
-- 麥克風快捷鍵 is captured: click, then press any key (modifiers allowed: `ctrl+shift+vk:20`) or mouse button but the
-  left one; Esc or a left click cancels (`hotkey.Hotkeys.capture`, `keys.parse_hotkey` / `hotkey_label`; old names
-  such as `caps_lock` are upgraded by `keys.upgrade_hotkey`). A press is always a tap: the key is fully taken (down
-  and up suppressed), no hold / double tap given back, no `gesture_time` (removed with the rule engine's gestures and
-  the old key-rule upgrades). A modifier alone (右 Ctrl) fires on release when nothing else was pressed and is not
-  suppressed; with Alt / Win an unassigned key 0xE8 is sent so no menu opens.
-- 一般's 設定檔 row (`userdata.py`; the user's design, the 詞庫 is part of the user's data): 匯出 writes every setting
-  (自訂操作 included) and the 詞庫 (word list with aliases, 選字記憶, the user's pack files) to one JSON file; 匯入
-  replaces the settings but the microphone, autostart and the floating button's place (`userdata.LOCAL`) and merges
-  the 詞庫 (the file wins on a word both have, packs ticked on either side stay ticked); 還原預設 puts everything
-  back as installed, the 詞庫 emptied too (packs as shipped, none ticked). 自訂操作 has no 還原預設 of its own. No pack
-  is ticked by default any more.
-- 選字 moves a word's 優先度 by 25% (was 30%); stored values are left as they are.
-- A pack hint (`_suggest_pack`) shows every time, not once per pack (`pack_hints` removed).
-- 辨識紀錄: a row whose text the 詞庫 may have shaped (weighted words in it, 英文拼寫, 選字記憶; `logbook.bank_of`)
-  gets a yellow ! after what was heard; its tooltip lists them.
-- 光環 / 虹膜: their open middle takes clicks (a disc of alpha 1/255 under every look: fully clear pixels of a
-  translucent window let clicks through). 液態金屬's outer light is held closer to the drop.
-- 按鈕樣式 has a tenth look, 蝕光 (`eclipse`, `orbs._eclipse`; the user's pick of three mockups of a more abstract
-  呼吸光核, https://claude.ai/artifact/JusBdNnhtKkniSnjoqzYc9): three crescents of light (radial gradients with an
-  off-centre focal circle) turning at different speeds, added with CompositionMode_Plus, a white core; 12s loop.
+- Windows only (2026-10-03, macOS failed: no hotkey worked). Don't add `sys.platform` branches;
+  `docs/macos-port.md` lists what a port needs.
+- Code, `.tools/`, `.venv/` stay in the app folder; user data in `paths.DATA_DIR` (`%LOCALAPPDATA%\VoiceInput`):
+  `config.json`, logs, lock, `models/`, `hotword-list.json`, `smart-picks.json`, `packs/`, `cache/`.
+  `paths.migrate_legacy()` moves old in-folder data. Autostart is re-registered each launch. Planned, not started:
+  exe + installer (PyInstaller + Inno Setup).
+- Fixed models, no model choice, no LLM (`models.py`; URL
+  `https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/<dir>.tar.bz2`):
+  recognition X-ASR int8 `sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03` (130MB, ~0.75s per
+  18s, punctuation, good English); VAD silero (`models.vad_path()`). SenseVoice Small (second opinion,
+  `suspects.py`) is not loaded: its code in `app.py` is commented out. Memory ~1.1GB, much of it the word index.
 
-## Lean branch (2026-10-10)
+## Module map
 
-On the `lean` branch every popup was removed (選字 candidate menu, suspected-mishearing menu, context hotword
-question, the hotword ✓ box) together with hotwords (`hotwords.py`, the hotwords page, 自動判斷 / 一律取代, learned
-biasing), `picker.py`, `picks.py`, re-dictation and hand-made-edit detection, and the settings that only served
-menus (fix menu, fuzzy readings, menu timeout). The user plans to redesign popups from scratch. The second opinion is
-off: SenseVoice is not loaded and the suspects code in `app.py` is commented out (`suspects.py` and
-`candidates.homophones`, which it needs, are kept). Tray error notices (model not ready, mic failure, terminal
-selection lost) stay. Sections below describe
-the branch; history of the removed features is in git (main, up to 726cde3). Brought back 2026-10-11 in a new form:
-the 選字 menu (old look, `picker.py`), hotwords (a weighted word list) and pick memory (`memory.py`); see below.
+| Module | Role |
+|---|---|
+| `app.py` | `App`: hotkey/focus/click events, listening sessions, drafts, commands, 復原, 選字, workers |
+| `listen.py` | `Listener`: microphone + VAD, pieces, quick pieces, audio kept for drafts / 復原 (`hold`) |
+| `asr.py` | `Recognizer`: X-ASR, hotword biasing, `recognize_timed` (token times), `_pieces` (>30s audio) |
+| `textfmt.py` | `format_text` pipeline (below), `changes` for the log |
+| `session.py` | text VoiceInput typed before the caret, `history` of `Step`s for 復原 |
+| `output.py` | Win32 clipboard paste, key sending, clipboard restore and watch |
+| `selection.py` | UIA: selection, caret line, `focus_info`, `TermWatcher` (terminal mouse selections) |
+| `highlight.py` | draft mark rectangles (`draft_rects`) and `DraftMarks` windows |
+| `rules.py` | spoken operations (自訂操作), `defaults`, `upgrade` / `simplify` (rules_version 14) |
+| `edit.py` | punctuation names (`symbol`), described characters (`described`), spelled letters (`spelled`) |
+| `candidates.py` | McBopomofo dictionary: `is_word`, `frequency`, `ranked`, `sounds_alike`, fuzzy pairs |
+| `sounds.py` | English near-sounding words (CMUdict + wordfreq, `dict/english.tsv.gz`) |
+| `hotwords.py` / `memory.py` / `spelling.py` / `packs.py` | 詞庫 list, 選字記憶, English spelling/aliases, 詞包 |
+| `picker.py` | the 選字 menu |
+| `floatbtn.py` / `orbs.py` | floating button and bubble (`OrbButton`), the ten 按鈕樣式 looks |
+| `glow.py` | screen-edge glow while listening |
+| `settings.py` | settings window (5 tabs) |
+| `logbook.py` | 辨識紀錄 rows |
+| `config.py` / `userdata.py` | `Config` (load migrates old keys) / settings file export, import, reset |
+| `hotkey.py` / `keys.py` | low-level hooks, hotkey capture, key names |
+| `cues.py`, `mute.py`, `recordings.py`, `autostart.py` | sounds, speaker mute (`recover`), dev recordings, autostart |
 
-## Platform
+## Listening (continuous)
 
-Windows only (decided 2026-10-03, after the macOS paths failed on the user's Mac: no hotkey worked). The partial
-macOS code was removed; don't add `sys.platform` branches back. What a port would need: `docs/macos-port.md`.
+Listening is a switch: on, it takes text, spoken commands and mouse edits until turned off.
+- **On / off**: 麥克風快捷鍵 (`config.hotkey`, captured from any key, combination or mouse button but the left; a
+  press is always a tap, fully suppressed; a modifier alone fires on release, with Alt/Win an unassigned 0xE8 is sent
+  so no menu opens), the floating button, the bubble, 點進輸入框時 = 自動開麥克風 (`auto_listen`), spoken 結束,
+  送出訊息後自動關閉麥克風 (`stop_on_enter`: Enter / Ctrl+Enter or an operation's Enter step), 自動關閉麥克風 (no
+  speech for `auto_off_minutes`, default 5; tray notice). Red warning on 一般 when nothing can turn it on.
+- **Focus** (`App._watch_focus`, every 0.3s, `selection.focus_info`: editable?, identity, rect; a terminal always
+  counts as editable). With auto_listen a text box turns listening on, leaving for a non-editable place turns it off;
+  turned off by hand it stays off in that box (`_box_quiet`) until the focus leaves or a left click into the box
+  (`App._clicked`). VoiceInput's own windows and unknown controls change nothing.
+- **Bubble** (`show_bubble`, default): fades in just right of a left click (not a drag) that put the focus in a text
+  box (focus read 120ms after the click); goes on typing / wheel (at once) or focus leaving (fade). Keyboard focus
+  shows nothing. Placed at the click because UIA caret positions are wrong in Notion, LINE, web pages.
+- **Floating button** (`show_float`; `float_text_only`, `float_keep`, `float_pos`): never takes focus, draggable.
+  Starting to listen grows it to 1.5 and fades it out in `glow.FADE_MS`; ending reverses it.
+- **Pieces**: the microphone opens unseen; silero VAD ends a piece at 0.3s silence (0.5s lead-in, 0.25s tail kept).
+  Sample numbers continue across sessions (a reset made queued jobs read the new session's audio: text typed twice);
+  the new session's state is reset by a worker job queued after the old ones. Audio is kept as chunks and trimmed
+  while nobody speaks.
+- **Draft** (`_Draft`): text since the last commit, typed in the document (Backspace to the change + paste). At each
+  pause the open sentence is decoded again and retyped (`_refine_job`). Text up to a ，/。 the recognizer put in a
+  pause is settled; only the open sentence is re-decoded, from its pieces only (`App._speech`: gaps cut, 0.5s more
+  of each pause kept, `_GAP_KEEP`) — beyond 30s the recognizer gives no timestamps, so nothing would settle. A draft
+  shows the recognizer's 。？！ at its end; the next pause turns it into ， when the sentence goes on.
+- **Commit**: on a command or the end of listening (a draft over 60s commits at a pause). It keeps the recognizer's
+  。？！ or adds 。 (？ after 嗎, . after English), not when the caret has text on both sides; a spoken mark replaces
+  that. A commit reuses the last pause's decode when its last piece is the spans' last (`App._live`).
+- **Caret moved** (click, key, selection; `_caret_left` from the hooks): the draft stays as typed, the next speech
+  starts a new one; a late update is redone at the new caret (`_redo_job`). A draft started over a selection
+  replaces it.
+- **Draft mark** (`highlight.py`, color `highlight_color`, default yellow because blue read as a selection): only the
+  open sentence, read every 0.15s on a thread, hidden while the wheel turns, on caret moves or another window in
+  front. Windows Terminal reports a wide character 3 cells wide (it takes 2).
+- **Pastes** (`output.paste_text`): Win32 clipboard owned by a hidden window (Qt's lazy clipboard let a following
+  paste replace the data before Windows Terminal read it); wait 0.15s after the last Ctrl+V; clipboard (all formats)
+  restored 0.4s after a run's last paste, or at once before a copy (`output.restore_now`).
+- **Mute** (`mute_while_recording`, Core Audio): only a mute we set is undone; a `.muted` marker lets the next launch
+  unmute after a kill (`mute.recover`).
 
-## File layout
+## Commands said alone
 
-Decided 2026-09-26 (the user plans to share the app with other users): code and runtime tools (`.tools/`, `.venv/`)
-stay in the app folder; user data lives in `paths.DATA_DIR` (`%LOCALAPPDATA%\VoiceInput`): `config.json`, logs, lock
-and `models/`. The models folder is fixed (the setting to move it was removed 2026-09-29). `paths.migrate_legacy()` moves the old in-app-folder data on first launch. Autostart is
-re-registered on every launch so it follows the app if its folder moves. Next step, not started: package as an exe
-with an installer (PyInstaller + Inno Setup).
-
-## Models (fixed)
-
-Decided 2026-09-29: the app stays light, with a fixed set of sherpa-onnx models and no model choice or LLM
-(`models.py`). Download URL: `https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/<dir>.tar.bz2`.
-
-| Role | Model (archive dir) | Size | Notes |
-|---|---|---|---|
-| Recognition | X-ASR int8 `sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03` | 130MB | ~0.75s for 18s audio; punctuation, good English |
-| Second opinion (off on lean) | SenseVoice Small `sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17` | 155MB | ~0.1s per sentence; emits tags like `<\|zh\|>` that are stripped |
-
-Live captions (streaming X-ASR 480ms, 134MB) were removed 2026-09-29: they appeared too slowly to help; the pill
-shows only the level. Qwen3-ASR 0.6B (840MB, ~4.4s per 18s) and Fun-ASR-Nano (1GB, ~7.5s) were selectable before and
-were removed with the picker. As a second opinion Qwen3-ASR gave better alternatives but took ~1.2GB of the user's 8GB machine.
-Memory with everything on: ~1.1GB (was ~3GB with the LLM). The word index held as Python objects is a large part.
+An utterance that is exactly an operation's phrase, a punctuation name or a described character commits the draft
+and runs (nothing decoded when nothing was said since the last commit).
+- Decoding (`App._command_first`): a piece with at most 1.2s of speech is decoded first with commands boosted
+  (score 5, commands alone: hotwords and packs competed) and padded with 0.3s of zeros at both ends, then plainly if
+  that is no command. A piece that, decoded with the speech before it, ends exactly in a command runs as one
+  (`_split_at`, `_ran_tail`). Repeats the boost made (結束結束結束) count once (`_one_command`).
+- Sound-alike (`_alike`, `candidates.sounds_alike`): same tones required, fuzzy pairs, dictionary readings of the
+  command (any reading of a 多音字 only where the dictionary lacks the word). 金嘆號 → 驚嘆號; 都好, 問好, 放心 are not
+  commands. Still taken: 封號 → 分號, 據點 → 句點.
+- Quick test (`early_commands`, debug only, off): a second VAD at `QUICK_SILENCE` 0.15s runs short pieces after a
+  pause at once when a command (`_quick_ok`, all commands for now), the following piece cut (`_quick_done`).
+- Spoken operations (`rules.py`, 自訂操作 tab): phrase(s) separated by 、 → one step: keys, text, 左右輸入文字
+  (`WRAP`, caret put back between), or a command: 復原, 結束錄音, 全選 / 複製 / 剪下 / 貼上. Defaults
+  (`rules.defaults`, rows fixed but the phrase; empty turns off): 換行 Shift+Enter, 空白, 標點 "- ", 括號 （）,
+  引號 「」, 刪除 Backspace, 復原 / 撤銷, clipboard four, 送出 Enter (listening goes on), 結束. 自訂 rows can't take
+  a command a default row has. Problems shown in red when the tab comes into view. The engine still has situations,
+  multi-step and key rules (old configs only).
+- Edit commands: ordinary apps get Ctrl+A/C/X/V. Terminals: 複製 puts our read selection on the clipboard (Ctrl+C
+  clears Claude Code's input), 剪下 also deletes, 貼上 replaces the selection (if the terminal copied the selection
+  itself on select, the clipboard text before it is pasted: `output.watch_clipboard` / `text_before`), 全選 a
+  notice. Backspace / Delete / text steps act on a terminal selection, not the cursor.
+- Punctuation names (`punctuation_names`): 逗號 句號 句點 問號 驚嘆號 感嘆號 頓號 分號 冒號 點點點 刪節號 省略號;
+  appended after existing punctuation; replace a selection; a mark said right after an added one replaces it.
+  點點點 is not boosted (it ran away).
+- Described characters (`describe_char`): everything before 的 exactly one dictionary word, no lead-in (節日的節 →
+  節; 顯示的是 → 示). Spelled letters over a selected English word type that word (`edit.spelled`, counts as a pick).
+- `period_to_comma`: speaking on a selected 。 gives ，+ utterance + 。.
+- **復原** (`Session.history`, unlimited while the caret hasn't moved): takes back VoiceInput's last change while it
+  is right before the caret: typed text, a pause's update of the draft (one each), a mark, a new line, Space, text
+  over a selection (selection comes back), a deleted selection, 剪下 / 貼上 (ordinary apps; paste of one line ≤300
+  chars), a Backspace after the caret moved (`Session.known`; only if the caret's line still reads as expected,
+  `_still_reads`, else a notice). The draft comes back as it was, marked and re-decodable (`Step.restore`,
+  `_Draft.restored`, audio held up to 180s by `Listener.hold`), else as fixed text. Operations starting with
+  Backspace / 復原 add no sentence end (`_no_mark_first`). Typing or clicking ends the history; nothing to take back
+  → tray notice with the reason.
 
 ## Text pipeline
 
-`asr.py` (raw text, biased toward hotwords and on-screen terms) → `textfmt.format_text` → smart picks
-(`memory.apply`, single characters) → paste. Order inside `format_text` matters: s2tw → filler
-removal → disfluencies → 百分之 → numerals → spelled letters → 點 → percent → number+letter → English punctuation →
-CJK/ASCII spacing → English sentence end → 嗎 questions → trailing punctuation.
+`asr.py` (biased toward 詞庫, ticked packs, on-screen terms) → `textfmt.format_text` → English spelling
+(`spelling.py`) → 選字記憶 (`memory.apply`) → paste. Each changing step is logged (`format <step>: before -> after`)
+and shown in 辨識紀錄. Order inside `format_text` matters: s2tw → filler removal → disfluencies → 百分之 →
+numerals → spelled letters → 點 → percent → number+letter → English punctuation → CJK/ASCII spacing → English
+sentence end → 嗎 questions → trailing punctuation.
+- OpenCC `s2tw` only (`s2twp` rewrites vocabulary: 程序 → 程式); then 臺 → 台, 熒幕/熒光 → 螢幕/螢光. 嗯 / 呃 removed.
+- Disfluencies (`remove_disfluencies`): repeated 2-4 char chunks, restarts, stutters; kept: dictionary ABAB
+  (研究研究, `_ABAB`), counting (一個一個), laughter, 好的好的, words sharing a character (開關關掉), 剛剛 etc. A-not-A
+  is a repeat only when A comes a third time (是不是不會 must keep its meaning). 在 is not a stutter character.
+- Numerals: single-character numbers stay Chinese (一個, 第二種) unless decimal / percent / before a single letter;
+  multi-character become digits (十五 → 15); `_KEEP_WORDS` (統一, 星期三 …), ranges (三四), 幾, fractions skipped.
+  Number+letter join (二 B → 2B); after English a single numeral becomes a digit unless a classifier follows
+  (GPT 四 → GPT 4, Python 三個月 stays); decimals digit by digit (零點零五 → 0.05). 點 → `.` only between digits or
+  letters. 百分之X / X percent → X%.
+- English sentence end: . ? ! after English → 。？！ when the sentence has Chinese. 嗎。 → 嗎？ (only 嗎: 呢 / 吧 end
+  statements too).
+- Trailing punctuation: kept, except when the caret's line has text on both sides (`selection.read_caret`; in
+  terminals the input box row under the cursor). Unknown → kept.
+- X-ASR fails on >40.05s audio (encoder Reshape error): `asr._pieces` cuts ≤30s pieces at the quietest 0.2s.
 
-- Trailing punctuation (2026-10-07, replacing the "strip trailing punctuation" setting): the model's sentence-final
-  。，,. is kept, except when the caret's line has non-blank text on both sides of it (the user is inserting).
-  `selection.read_caret` reads that at key-down with the selection probe: UIA in normal apps, the input box row the
-  Windows Terminal cursor is on in terminals (same behaviour everywhere, the user's requirement). Unknown → kept.
+## 選字, 詞庫, picks
 
-- English sentence end (2026-10-14, the user's request): . ? ! right after English become 。？！ when their sentence
-  (since the previous 。？！ or . ? ! before a space) has Chinese: 幫我 push. → 幫我 push。; 今天很好。I love it. stays.
-- 嗎 questions (2026-10-15, the user's request): 嗎。 → 嗎？, and a commit that adds the sentence end adds ？ after 嗎.
-  Only 嗎 (the user's choice): all 36 of their recorded sentences ending in it were questions (17 had no mark and got
-  。); 呢 / 吧 end statements too (希望如此吧。).
-- Every step that changes the text is logged (`format <step>: before -> after`, the changed fragments) and shown
-  on the 辨識紀錄 tab (`format_text(..., steps)`, `textfmt.changes`).
-- OpenCC `s2tw` only (glyph conversion). `s2twp` was dropped because it rewrites vocabulary (程序 → 程式).
-- After s2tw, 臺 is mapped back to 台 (s2tw turns 台北 into 臺北; the user wants 台), and 熒幕 / 熒光 to 螢幕 / 螢光
-  (X-ASR writes 荧幕, which s2tw turns into 熒幕; 2026-10-11).
-- 嗯 / 呃 are removed by regex.
-- Disfluencies (`remove_disfluencies`, 2026-09-29): repeated 2-4 character chunks (我們我們, 你可不可不可以, 今天今天),
-  restarts (先打開那個，先打開設定頁 → 先打開設定頁) and stutters of a few characters (我我, 先先). ABAB reduplication is
-  kept when the dictionary lists it (研究研究) or the word is in `_ABAB` (討論, 休息 …), as are counting (一個一個,
-  一個字一個字), laughter and 好的好的. A-not-A is a repeat only when A comes a third time (可不可不可以 → 可不可以;
-  是不是不會, 能不能不用 stay: before 2026-10-02 they lost 是不 / 能不 and flipped the meaning). 在 is not a stutter
-  character (現在在猶豫). Single repeated characters (2026-10-02, `_dedupe_chars`): one is dropped when the pair is
-  not inside a dictionary word (選選字, 預預期, 很很, 以以及, 不不要); kept: 剛剛, 框框, 渾渾噩噩, 試試看, AA的 (髒髒的),
-  two words sharing the character (開關關掉, 勾選選項), numerals. Each drop is logged as `stutter:`. On the 1204
-  logged sentences 34 change; the only doubtful one is 摸貓貓 → 摸貓 (baby talk not in the dictionary).
-- Numerals: single-character numbers stay Chinese (一個, 兩個計劃, 第二種, 十個) unless part of a decimal,
-  percentage or followed by a single letter; multi-character ones become digits (十五 → 15, 七百二十八 → 728).
-  Also skipped: `_KEEP_WORDS` (統一, 星期三, 十分 …), ranges like 三四, anything with 幾, fractions.
-- A number directly followed by a single letter is joined, case kept: 二 B → 2B, 五 h → 5h.
-- After an English letter or word a single numeral becomes a digit unless a classifier follows (M 三 → M3,
-  GPT 四 → GPT 4, but Python 三個月, LM 一次 stay); a single letter is joined to the number (V 四點一 → V4.1,
-  Opus 4.8 keeps its space). Decimals are read digit by digit (零點一五 → 0.15, 零點零五 → 0.05), stopping at a kept
-  word (三點八一樣 → 3.8 一樣) and leaving the last digit to a following letter (三點五二 B → 3.5 2B). 2026-09-30.
-- `百分之X` and `<number> percent` → `X%`. English number words (eighty) are not converted.
-- 點 becomes `.` only when both sides are digits or both are letters (三點 meeting stays).
+- **選字 menu** (`picker.py`): opens by itself while listening (`App._auto_pick`) after a mouse drag or double click
+  that selects ≤4 Chinese characters or ≤3 English words (read 80ms after release). Tabs by closeness of sound
+  (pointer over a tab opens it), on the side away from the selection; grid 4x4 (one character) or 2x5; no timeout,
+  any click or key closes it. Chinese (`candidates.ranked`): 同音, 不同聲調, 模糊音 (ㄩㄣ/ㄧㄣ, ㄈ/ㄏㄨ, ㄋ/ㄌ; fuzzy-only
+  words from frequency 3, `app._FUZZY_MIN`; 詞庫 words matched by sound too). English: 近音字 (`sounds.near`, weighted
+  phoneme edit distance), 詞庫 (`sounds.alike`), 大小寫 (`memory.variants`).
+- **詞庫 list** (`hotwords.py`, `hotword-list.json`; code says hotwords, UI says 詞庫 / 優先度): 優先度 shown as
+  stored − 100 (0% nothing, +100% top, negative red). A pick of 2+ characters or English moves the picked word +25%
+  and the replaced one −25%. Typed words are top. English never below 0%. Single characters never listed. ✕ puts a
+  word back to unlisted level. Biasing scores: +5 Chinese / +3 English at the top, −3 at the bottom. A Chinese word
+  another one starts with is not sent (剪貼 made 剪貼簿 into 剪貼布).
+- **詞包** (`packs.py`, shipped `voiceinput/packs/<id>.txt`, user copies in DATA_DIR/packs read instead, edits apply at
+  the next dictation; an update appends new shipped terms under a dated comment, `packs/shipped` keeps the last
+  shipped copy). Seven packs, 723 words, none ticked by default; ticked words bias at 150% unlisted. No version
+  numbers, no common words as products, nothing the hotword encoding can't hold (UI/UX, 4K). A pick or typed word an
+  unticked pack lists brings a tray hint (`_suggest_pack`) every time.
+- **English spelling** (`spelling.py`): a run of English words whose letters equal a known term's (詞庫, packs,
+  on-screen terms) is written as the term (case only when it adds inner capitals). Aliases (Dipsick → DeepSeek, from
+  picks or spelling) are always rewritten; 英文強制替換 lists them.
+- **選字記憶** (`memory.py`, `smart-picks.json`): single Chinese characters only; key = toned reading + two
+  characters on each side; applies only when the characters right before and right after both agree (text edge
+  counts) and no dictionary word around is broken (`_breaks_word`); never breaks a raised 詞庫 word or makes a lowered
+  one (`Hotwords.levels`). Picking back a changed character learns "keep it here" under the heard reading.
+- **On-screen terms**: at the start UIA reads the focused control's text; CamelCase / acronyms / digits, and 5+
+  letter words seen twice, bias at 1.5.
+- Dictionary: McBopomofo word list (MIT, `dict/words.tsv.gz`, `dev/build_dict.py`), cached as
+  `cache/word_index.pkl`. English: `dict/english.tsv.gz` (`dev/build_english.py`, wordfreq CC BY-SA + CMUdict BSD).
 
-## Settings window (tabs since 2026-10-11)
+## Selections and terminals
 
-Since 2026-10-16 (the user's requests) there are five tabs: 一般 (microphone, 麥克風快捷鍵, 游標進到輸入框時,
-自動關閉麥克風, mute, punctuation names, described characters, autostart, recordings), 外觀 (new: 螢幕邊緣光暈 with
-its edges, 草稿反白顏色, 提示音 and 結束音在), 辨識紀錄, 自訂操作 (spoken operations only) and 詞庫. Removed the same
-day with everything behind them (the user's choice, what they had unticked): 用按鍵關閉麥克風時自動送出
-(`send_on_stop`), 說「送出」時關閉麥克風 (`stop_on_send`), 錄音時顯示指示器 and the whole indicator (`overlay.py`, the
-pill at the bottom, its red dot spinning while decoding, `spin_while_decoding`); the draft's mark is always on (its
-checkbox `highlight_draft` removed). Paragraphs below that describe these are history.
-Later the same day (the user's requests): the 結束音在 choice was removed (`stop_sound_at`; the end sound marks the
-microphone going off, nothing about the text); tooltips over the controls were replaced by an ⓘ after each setting's
-name (`settings._Info`, its text shows only while the pointer is on it: tooltips popped up whenever the pointer
-rested on a control; one ⓘ per 詞庫 list instead of tooltips on its rows; ✕ has none); the glow has a 預覽 button
-and a 自訂 style (`glow.CUSTOM`, `config.glow_custom`: 2-4 colors, 旋轉速度, 呼吸, 寬度 (depth), 亮度 (bright),
-started from the style shown before, applied when a slider is let go and shown for 3s). A launch after a run was
-killed while listening unmutes the speakers (`mute.recover`, a marker file `.muted` while our mute is on: the
-agents' restarts with Stop-Process left the user's computer muted).
-The glow's parameters are always shown under it, a preset's greyed out, 自訂's to change (the user's design,
-2026-10-16 evening). 動態 (`glow_motion`, `glow.MOTIONS`, the user's request for three, one with waves): 柔光 (as
-before: masks made once per level), 波浪 (the inner edge rolls along the edges, waves growing with the voice), 流星
-(two heads with tails run around the screen over a faint glow), 漣漪 (rings move inward from the edges). Those
-compute their mask every frame (`motion_mask`) on parts of the strips near each edge, the falloff from a table and
-along-edge values in one row or column: 2-3ms a frame for four strips at 1920x1080 (12ms as first written), so
-about 5-8% of a core more than 柔光 at 24 fps; their strips are deeper (`_REACH`) so waves are not cut off.
-按鈕樣式 (`button_look`, `orbs.py`, the 外觀 tab with animated examples at 44px and 28px; 2026-10-16, the user kept
-all nine mockups of https://claude.ai/artifact/NJDviDDkxkjnLWkoQTNGgD and the microphone): the floating button and
-the bubble as an energy orb in the glow's colors (彩虹 without a glow). Each look draws a frame at a phase of its
-loop with whole cycles per loop, frames drawn as they first play and then copied, only while shown. Later the same
-evening (the user's requests): an orb is drawn on a canvas 1.4 times the microphone's size (`orbs.SCALE`; every look
-had looked smaller than the microphone), 光環 / 虹膜 / 電漿 / 星雲 sized to match it; 節流模式 (`orb_lite`, off by
-default: looks first) keeps the first version (15 fps, glows blurred from a quarter size, fewer specks and
-filaments), without it 30 fps, glows as smooth gradients (流光's outer light looked coarse), 28 filaments, 24 specks
-with 5-dot trails; 光環、虹膜拿掉黑色（實驗） (`orb_dark` False) leaves out their dark disc and pupil. One look at rest
-(no hover color; `floatbtn.OrbButton`): the pointer over it shrinks it to 0.88 (游標移上去時, `hover_motion`: 平滑
-OutCubic, 彈跳 OutBack, 彈簧 OutElastic, to compare); when listening starts it grows to 1.5 and fades out in the
-glow's fade-in time (`glow.FADE_MS`, 220ms), and when listening ends it shrinks back and fades in as the glow fades
-out; the bubble comes back by the caret then (`App._caret_rect`). The 外觀 tab's examples do the same (a click plays
-both). The windows have room around the button (2.2 times, transparent, click-through). 浮動按鈕: 只在可以打字的地方
-顯示 (`float_text_only`, on by default; off: wherever the focus is) and 按下後不隱藏 (`float_keep`: it stays while
-listening, a click jumps it and turns listening off; the user chose that over fading out). Measured offscreen
-(the button kept shown; noisy, Windows' process clock ticks at 15.6ms): 節流 ~0-1.5% of a core after the first loop,
-精緻 ~0.6-2.8%, the first loop up to ~4% / ~6%. The figures measured before (0.2-0.4%) were wrong: Qt 6's
-`app.quit()` closes every window, so the test measured hidden buttons after the first loop; wait with a
-`QEventLoop` in such tests. The 自訂 glow's sliders show each value while dragged (at most every 0.08s), saved when
-let go.
-Late the same night (the user's requests; sentences above that say otherwise are history): no 自訂 style: every
-style's parameters are editable under it (`config.glow_edits`, style id -> the parameters that differ;
-`glow.style_for(id, edits)`, `glow.edited`), a changed style reads 名稱（已編輯） in the drop-down and 恢復預設 (next to
-預覽, enabled only then) drops its changes; a config with glow "custom" becomes 彩虹 with those changes. Two styles
-added: 草本 (`herb`, herbal greens) and 紫金 (`violet`, purple with orange-yellow). ▶ 預覽 and ▶ 試聽 are disabled
-while the glow shows (`settings.PREVIEW_MS`) or the sounds play, also when a pick played them. 流星 ran too fast and
-leapt about while speaking: the heads' place was time × a speed that grows with the voice, so a change of voice moved
-them by all the time so far; now the laps are summed per frame (`EdgeGlow._lap`, `glow.comet_speed`, 1 + 0.6 × the
-level). 光環 / 虹膜 have no dark disc or pupil (the experiment's checkbox and `orb_dark` removed), 光環's ring is a
-little smaller and thicker (radius 0.29 of the canvas, line 0.075). The hover shrink is always the spring (the
-游標移上去時 drop-down and `hover_motion` removed). 按鈕大小 (`button_scale`, a slider 75-125%, 5% steps, shown as
-「100%（標準）」 / 「90%」) scales the floating button, the bubble and the tab's examples (`OrbButton.set_look(...,
-scale)`; the examples keep room for 125% so the row does not move). 一般's 定稿時機 (`commit_at`) was removed: a draft
-is committed on a command or the end of listening, or at a pause once longer than 60s.
-Later still (the user's requests): 液態金屬's light is in the colors of the drop's edge next to it, turning with it,
-like 流光's (it was one color at a time); measured offscreen, the same steady CPU (frames are cached, ~2-2.7% of a
-core either way), the first loop ~0.2ms more per frame. 草本 became quiet Japanese greens (青磁, 抹茶, 苔, a pale
-washi green; slower turn 0.05, pulse 0.25) and 紫金 purple flowing into orange-yellow and back. A style may have up
-to 6 colors (`glow.MAX_COLORS`; cut to 4 before, so changing any slider of 彩虹 dropped its fifth). The edge glow's
-colors are looked up with numpy (`glow.angles`, `colors_lut`, `render`; Qt's conical gradient painted each frame
-cost ~4ms; the result differs by at most 2/255) and the masks are float32 arrays. 節流模式 moved to a row of its own
-(效能) and covers the glow: without it 波浪 / 流星 / 漣漪 run at 48 fps (`glow.FINE_FPS`; 流星 looked choppy at 24),
-柔光 stays at 24. Measured on the user's screen (1920x1080, i5-8500 with 6 cores, this process only; dwm.exe could
-not be read): 柔光 ~17% of one core at 24 fps, 流星 ~32% at 24 (~44% before the numpy colors) and ~50-59% at 48;
-most of it is painting the strips at full size and handing them to Windows, which grows with the frame rate. The
-CPU slows down between frames, so a frame there costs ~4x what a busy benchmark loop measures: measure such things
-on the real screen at the real frame rate (scratchpad scripts: glow_fps.py, glow_prof.py).
-Then (the user's requests): the bubble fades in at each click (one showing by an earlier click goes at once) and
-fades out when the focus goes where nothing can be typed (`Bubble.fade_out`; typing and the wheel still hide it at
-once); ▶ 預覽 / ▶ 試聽 read 播放中… while disabled; 一般 has 送出訊息後自動關閉麥克風 (`stop_on_enter`, off by
-default): Enter or Ctrl+Enter pressed (not Shift / Alt, not in VoiceInput's own windows; `App._on_other_key`) or a
-spoken operation's Enter step (送出; `_steps_job`) turns listening off. It brings back, for Enter in any form, what
-`stop_on_send` (removed the same day) did for 送出 alone.
-Then (the user's design) 游標進到輸入框時 (`on_focus`, one choice of 不做事 / bubble / float / listen) was split, as they
-may go together: 外觀's 輸入框旁的按鈕 has two checkboxes, 語音氣泡 (`show_bubble`) and 浮動按鈕 (`show_float`), each
-with its animated example after it (28px / 44px; 按鈕樣式 keeps only its drop-down), both may be on (浮動按鈕 with
-按下後不隱藏 is a fixed place to turn listening off); 一般's 點進輸入框時自動開麥克風 (`auto_listen`, above 送出訊息後自動關閉
-麥克風) may go with either. `Config.load` migrates on_focus. The red 沒有任何方式能開麥克風 shows when none of the hotkey,
-auto_listen and the two buttons is on. Still open (asked, not decided): with auto_listen, listening turned off by
-送出 / the idle timeout stays off in that box until the focus leaves it. 自訂操作's 括號 / 引號 rows read 加上 （），
-游標在中間；有選取時包住選取文字 (one line, the user's request).
-選字's 模糊音 (2026-10-16 evening, the user's requests): ㄩㄣ with ㄧㄣ, ㄈ with ㄏㄨ (飛 / 灰, 發 / 花), ㄋ with ㄌ
-(`candidates._FUZZY`); a word only fuzzy-alike is listed from dictionary frequency 3 (`app._FUZZY_MIN`: 官癮, 灌嬰
-were offered for 光陰); the user's hotwords are matched by sound too (`candidates.rank_of`), so words McBopomofo
-lacks (光暈) can be offered once they are in 詞庫.
-On 自訂操作 the default operations' rows (`settings._BUILT_IN`, the steps of `rules.defaults`) are always listed
-with their action and value fixed (the user's choice): only the phrase is edited, empty turns one off (no warning;
-an empty phrase is no trigger in `rules._same_trigger`). Every other row is listed under 自訂, the last group, next
-to ＋ 新增口說操作.
+- Selection read via UIA TextPattern on a thread; speaking replaces it.
+- Terminals (Claude Code / Codex / agy in Windows Terminal inside herdr) hide mouse selections from UIA:
+  `selection.TermWatcher` maps drag ends with `RangeFromPoint`, narrows to cells herdr highlighted (inverted colors),
+  handles double / triple clicks; no clipboard (herdr `copy_on_select` off). Only one line of the input box (row
+  starting with ❯ / › / > plus indented rows under it; Claude Code's "❯ 3. …" counts) and the cursor must be in it.
+  Edits move the cursor with arrow keys until it sits after the selection (re-read after each burst; Codex needs one
+  Left first), then Backspace 20ms apart (a burst lost one) and paste; can't get there → nothing deleted, notice.
+  In the background WT reports the cursor one character left.
+- Our own windows over the target block UIA `ElementFromPoint` while they animate: hide them at once before a
+  terminal edit.
 
-Four tabs, sized for the log: 一般 (microphone, "mute the speakers while recording", punctuation names, "selected 。 →
-，", "節日的節" (described characters), autostart; the menu timeout was removed
-2026-10-11), 辨識紀錄 (the transcript log; since 2026-10-14, the user's design, each entry
-starts with what happened in normal size: 【輸入】 the typed text, 【操作】 a spoken operation, 【取代】 old → new,
-【選字】, 【刪除】; then smaller: ASR time and text, and every step that changed the text as its changed fragments,
-those of `format_text` and the app's: 英文拼寫, 標點名稱, 指定字, 選字記憶, 拼字, 取代標點, 選取句號, 刪除後重講; the
-same evening the user picked, among three mockups, a framed block per entry: a darker first row with the kind in its
-color, the main text at 14px (15px felt loose) wrapping indented right of the kind and the time on the right, the
-details at 12px below with the ASR time next to its label; a 複製 link by the time copies what the entry typed:
-the text, a replacement's new text, a pick's word), 自訂操作 (custom operations, below) and 詞庫 (hotwords; the UI
-says 詞庫 and 優先度 instead of 熱詞 and weight since 2026-10-13, the code keeps "hotwords"). Since 2026-10-14 the
-詞庫 tab has four collapsible sections, one open at a time (the user's design): the open one fills the tab and
-scrolls inside, the other headers stay in view; the open one is remembered (`hotword_section`). 詞包: one row per
-pack: check box with the count, its first 5 terms, 編輯 (opens the user's copy of the file; see Term packs). 詞庫列表: date added, the 優先度 (shown as stored − 100: 0% does nothing, −30% in red is lowered, +100%
-is the top; the user found 70% did not read as lowered, 2026-10-13), ✕; the source is not shown. Since 2026-10-14
-the 優先度 is read only (the −/+ buttons were removed, the user's choice) and ✕ puts a word back where it would be
-unlisted (100%, or its ticked pack's), keeping its aliases; only words away from that level are listed. 選字記憶 (the
-UI name of the smart picks since 2026-10-14; 智慧選字 did not fit something this mechanical): each example as
-這個ying3片是 → 這個影片是 (context with the reading, then with the pick; the user's design), date, ✕ (it replaced the
-一般 tab's button that opened smart-picks.json; editing the character was there for a few hours). 英文強制替換: the
-aliases (Dipsick → DeepSeek), date (`alias_added`; older ones show the word's date), ✕. Entries record when they were added to
-the second since 2026-10-14 (older ones the date alone, sorting before same-day ones with a time); the tab shows
-the date, the time is in its tooltip. Every list has its own 排序
-drop-down, remembered (`hotword_sort`: 優先度, name A→Z / Z→A by pinyin, date; `pick_sort`: date, reading;
-`alias_sort`: date, name). Mute (2026-10-06, `mute.py`): Core Audio via
-comtypes; muted when the recording indicator shows, unmuted once the text is pasted or the press ends in nothing; a
-mute the user set is left alone. Selection edits and on-screen terms are always on.
+## Settings window and looks
 
-Later the same night the user switched to design B (what was heard next to the screen's change as a diff, one row
-per event, one group per listening session, the why and details as a row's tooltip; `logbook.py`, `set_log`;
-rows newest first too, no small print under them (the kind of change is in the tooltip), a copy icon at the right
-end of a row that finished a sentence: the user's requests, 2026-10-15; only settled text has it, not 選字 or a lone
-mark, and such a row shows the settled text as its start … its end in about two lines, a command's 換行 after it in
-the same row; events in the heard column, （游標移到別處）, （關掉麥克風）…, are plain gray text without a word's
-cell);
-design A, described next, is history. On the continuous-mic branch the 辨識紀錄 tab shows one card per sentence instead (`logbook.py`, rendered by
-`SettingsDialog.set_log`; the user's pick of three mockups, 2026-10-15, design A, so the workings can be seen): the
-sentence as it ended on the darker row with its kind, time, counts (pieces, pauses decoded again, 復原) and how it
-ended; below, a timeline of what happened, in plain words: what was heard and typed, each pause's new reading
-(added text green, removed struck through red, long unchanged stretches cut to …), the part settled, the command or
-the end of listening with the mark added, 復原, the caret moving away. A gray line says why where it is not obvious;
-seconds, the recognizer's own text and the formatting steps only with 顯示技術細節. Only the newest card is open.
-選字, deleting a selection and the like are cards of their own (the `record` signal still carries them).
+Tabs: 一般 (microphone, 麥克風快捷鍵, 點進輸入框時 drop-down 不使用 / 語音氣泡 / 自動開麥克風 (`show_bubble` /
+`auto_listen`, at most one), 顯示浮動按鈕 + its two options, 自動關閉麥克風, stop_on_enter, mute, punctuation names,
+period_to_comma, described characters, autostart, 設定檔 row, 開發測試 with --debug), 外觀 (glow, draft mark color,
+提示音, 按鈕樣式 + 44px example, 按鈕大小 `button_scale` 75-125%, 效能 節流模式 `orb_lite`), 辨識紀錄, 自訂操作, 詞庫.
+- Each setting's help is an ⓘ after its name (`settings._Info`), not tooltips.
+- 設定檔 (`userdata.py`): 匯出 writes all settings and the 詞庫 (list, aliases, 選字記憶, pack files) to one JSON; 匯入
+  replaces settings except `userdata.LOCAL` (mic, autostart, float place) and merges the 詞庫 (file wins); 還原預設
+  resets everything including the 詞庫.
+- 辨識紀錄 (`logbook.py`, `set_log`): one row per event, grouped per listening session, newest first, heard vs the
+  screen's change as a diff, details in the tooltip; copy icon on rows that settled text; yellow ! when the 詞庫 may
+  have shaped the text (`logbook.bank_of`).
+- 詞庫 tab: four collapsible sections, one open (`hotword_section`): 詞包, 詞庫列表, 選字記憶 (shown as
+  這個ying3片是 → 這個影片是), 英文強制替換; each with its own remembered 排序.
+- Glow (`glow.py`, off by default): styles with editable parameters (`glow_edits`, 已編輯 + 恢復預設), up to 6 colors,
+  edges (`glow_edges`), motions 柔光 / 波浪 / 流星 / 漣漪 (`glow_motion`); four click-through strips; colors by numpy LUT;
+  moving motions at 48 fps unless 節流模式 (柔光 24). 流星's position is summed per frame (`EdgeGlow._lap`).
+- 按鈕樣式 (`orbs.py`, `button_look`): mic + ten orb looks in the glow's colors (蝕光 the latest), drawn on a canvas
+  1.4x the mic (`orbs.SCALE`), frames cached per loop phase, only while shown; 30 fps (15 with 節流模式). Hover
+  shrinks to 0.88 with a spring. 光環 / 虹膜 middles take clicks (alpha 1/255 disc: fully clear pixels pass clicks).
+- Sounds (`cues.py`, `voiceinput/cues/*.wav`, built by `dev/build_cues.py`): 12 sets, 無, 自定義; Blip default; the
+  start sound's length is silenced for the VAD. Played from the wav file (winsound can't play memory async).
+- ▶ 預覽 / ▶ 試聽 read 播放中… and are disabled while playing.
 
-## Custom operations (自訂操作, 2026-10-11)
+## Lessons and experiment results
 
-Since the evening of 2026-10-16 the tab has spoken operations only (the user's request: turning listening on and
-off moves to the interface): the key rows below and what only they did (double tap = 復原, double tap on a selection
-deletes it, the hold / double tap gesture time setting) were removed. One hotkey is left, 麥克風快捷鍵 on the 一般 tab
-(`config.hotkey`, a mouse button or key or 不使用, migrated from the key that recorded): a tap turns listening on or
-off; a hold or a double tap is given back to the key or button (`App._rules_for` builds the tap's one rule; a tap
-waits `gesture_time`, 0.15s, for a second press, the audio is kept from key-down). With 麥克風快捷鍵 不使用 and
-游標進到輸入框時 不做事 nothing turns listening on: the 一般 tab says so in red under them (`no_way`; the user's
-choice over a tray notice, which the key rows' days had). The spoken rows are listed by
-what they do (`settings._GROUPS` / `_ORDER`, the user's choice, also for rows they add): 輸入 (換行, 空白, text,
-左右輸入文字: 括號 （ ）, 引號 「」, rules_version 14), 修改 (Backspace, Delete, 復原), 剪貼簿 (全選 / 複製 / 剪下 /
-貼上), 其他 (other keys), 結束 (Enter, 結束錄音).
-Late on 2026-10-16 (the user's requests): a row reads 說 [phrase] 就會 … (no 「」); a default row says what it does in
-words (`settings._does`: 換行（按 Shift+Enter）, 左右加上 （）…) instead of its greyed-out action; a 自訂 row is not
-offered the commands a default row already does (復原, 結束錄音, 全選 / 複製 / 剪下 / 貼上: a phrase goes in that row
-instead). The red problems under the rows are those found when the tab came into view (switching to it, or the
-window shown on it; `_warn_rules`): one fixed goes at once, a new one (a row just added) waits until the tab is
-opened again, so ＋ 新增口說操作 brings no warning.
-Since 2026-10-16 the tab is a simple editor (the user's design; the card editor with steps, situations and any
-command was removed): 按鍵, three rows of [key or 不使用] [按一下 / 連按兩下 / 按住] + what it does: 開關麥克風,
-復原, 刪除選取的文字（有選取時） (`rules.KEY_ROWS`); 口說, rows 說「…」就會 [按鍵 / 輸入文字 / 復原 / 結束錄音] [value],
-every one editable and removable (no built-in rows since the same evening, the user's choice: 換行 / 送出 / 刪除 are
-just Shift+Enter / Enter / Backspace; 復原 stays VoiceInput's own, not Ctrl+Z); a phrase box takes several phrases
-separated by 、 (one rule each; rules with the same step share a row), and ＋ 新增口說操作. The spoken 結束 turns
-listening off (rules_version 11 adds it; the user's request). A first decode that is already exactly a command is not
-decoded again with commands boosted, and a command the boost repeated (結束結束結束) counts once (`_one_command`). Clashes are
-listed in red under each part. The rules format is unchanged; `rules.simplify` (on every load, rules_version 10)
-keeps only what the editor can show: the spoken 括號 (two steps) and hold on a selection = 選字 (the menu opens by
-itself while listening) were dropped, the user's choice. The rest of this section describes the rule engine,
-which still supports more than the editor offers.
+- **Hotword biasing** (sherpa-onnx modified beam search adds the boost after the top `max_active_paths` cut): 12
+  paths, Chinese score 5: 16/16, no false hits; 6 made 城市 → 程式; 8 broke English. Encoding: Simplified,
+  characters space-separated; one unencodable word drops the whole list (check against tokens.txt; `bpe.vocab`
+  exported from `bpe.model` by a small protobuf reader). 20k+ words: 熱詞 → 熱刺 (accuracy hurts before speed).
+  English boosts: +4 little help, +5 breaks (DeepSeek → Deep) → spelling replacement after recognition instead.
+- **Command lab** (`dev/cmdlab`, 929 commands + 571 text pieces from the user's recordings): plain path 96.7%,
+  padded boosted-first 98.7% (misses 31 → 10), 0 false triggers. X-ASR turns a command into English when the audio
+  starts or ends without silence. Rejected: second X-ASR scoring (+260MB, confuses 換行/問號), keyword spotters
+  (65-82%, false triggers on text mentioning commands), pinyin/CMUdict matching of decoded text, boost ≥8.
+- **Punctuation at pauses**: 0.75s of a pause kept made the recognizer's marks a coin toss; 0.5s more fixed it.
+- **CPU measurement**: measure on the real screen at the real frame rate (frames cost ~4x a busy benchmark loop;
+  most glow cost is painting/compositing strips). Qt 6's `app.quit()` closes every window: wait with a `QEventLoop`.
+  Measured: 柔光 ~17% of a core, 流星 ~50-59% at 48 fps; orbs ~1-3% steady.
+- **Tried and dropped**: streaming X-ASR captions / typing as said (too slow, not better); preview box for drafts;
+  following the caret by UIA (apps report it wrong); Bopomofo spelling (X-ASR hears symbol names as letters);
+  「X改成Y」 (d59596c); jieba (mainland frequencies, missing words; 7593a98); SenseVoice / Qwen3-ASR second opinion
+  (shared errors; Qwen 1.2GB); dictionary-only mishearing guesses (all wrong on 80 utterances); start-sound
+  cut-out by cross-correlation (press-and-talk era).
+- **Popups**: the lean redesign removed every popup but the 選字 menu and tray error notices; new popups get
+  designed from scratch with the user.
 
-`rules.py`, stored as `rules` in config.json; they replaced the single hotkey setting and the 換行 / 送出 switches
-(migrated by `Config.load`). A rule: trigger (滑鼠鍵: middle / upper / lower side button; 鍵盤鍵: CapsLock, right Alt,
-right Ctrl, Insert, ScrollLock, Pause, F1-F24; 說出: an utterance that is exactly the phrase) → 按法 (按一下 / 連按兩下
-/ 按住; not for speech) → 情境 (不限 / 剛輸入完 / 有選取文字; the most specific wins) → steps run in order: 命令 (錄音,
-選字, 刪除選取的文字, 刪除剛輸入的文字; 加入熱詞 was removed 2026-10-11 and `rules.migrate` drops it), 按鍵 (a captured combination such as Ctrl+Z, sent with SendInput), 輸入文字 (pasted, counts as a dictation),
-等待 (ms). Steps before 錄音 run at the start, those after it once the text is pasted (skipped if nothing was said).
-Hold + 錄音 records while held; tap / double tap + 錄音 starts there and the next press of any bound key stops it.
-刪除選取的文字 works in terminals too (why it is a command, not the Delete key); 刪除剛輸入的文字 deletes the last
-dictation. They were one 刪除 command until the user had them split (2026-10-11; `rules.migrate` converts old rules).
-When a key's double tap is a non-recording rule and its hold records, a held second press records after the double
-tap's steps (delete and say it again; the user's choice). 復原 is not a command: the user adds Ctrl+Z if wanted.
-Defaults: hold middle = 錄音; double middle on a selection = 刪除選取的文字, right after a dictation = 刪除剛輸入的文字
-(in neither situation the double click goes back to the button); tap middle on a selection = 選字 (added
-2026-10-11; `rules.upgrade` appends it to configs saved before, rules_version 2); 說出 換行 = Shift+Enter, 說出
-送出 = Enter. On the continuous-mic branch the defaults are the user's setup (see Continuous listening).
-Gestures (`app.py`, `hotkey.Hotkeys`; `gesture_time`, 0.3s by default, is both how long a press makes a hold and
-how soon after a tap a press makes a double tap: one setting on the 自訂操作 tab, 0.15-0.8s, the user's request
-2026-10-13; constants of 0.3 / 0.35s before): bound keys are suppressed by the hooks; the microphone starts at key-down when
-the press may record; a single tap waits `gesture_time` only when that key has a double-tap rule; a gesture no rule
-takes is given back (keyboard key replayed, mouse button clicked: the user's choice, so an unbound middle click
-still works, `gesture_time` late when a double tap is bound; a hold is given back as one click). Invalid rules (two 錄音,
-錄音 in a speech rule, empty combination, a duplicate of an earlier rule) are flagged in red and skipped. When no
-rule records any more, a tray notice warns that dictation is impossible (the user's request).
+## Testing
 
-## Continuous listening (`continuous-mic` branch, 2026-10-14)
+- `dev/headless.py` runs the real App against a simulated text box (feed:WAV, op:PHRASE, clip:TEXT): default for
+  tests. Audio: Windows TTS (zh-TW Hanhan, `dev/tts.ps1`) or the user's saved recordings (`recordings.py`,
+  DATA_DIR/recordings with index.jsonl; development only, to be removed before release, keep it inside that module,
+  `App._keep`, the 開發測試 row and `save_recordings`). Saved recordings were decoded with that moment's 詞庫.
+- Never let a test write the user's real data files while their VoiceInput runs.
+- `dev/e2e.py` types into real Notepad / Windows Terminal: only when the user is away (it once typed into their
+  Notepad document).
+- Other probes: `dev/term_probe.py`, `dev/highlight_spike.py` / `.html`, `dev/pack_candidates.py`.
 
-The user's goal: open the microphone once for a whole line of input, mixing text and spoken commands, while still
-selecting and fixing text with the mouse. On this branch it is the only way to record (the user's choice: "the same
-recording, but no cutting it to say a command"): the 錄音 command turns `listen.Listener` on. Tap / double tap +
-錄音 listens until the next tap or double tap that records; hold + 錄音 listens while held. Other gestures work
-while listening (選字, double-tap deletes; unbound ones are given back). The microphone opens at key-down whenever
-the press may turn listening on, unseen (`_start_listen`); once the gesture is known `_show_listen` plays the start
-sound (its length is silenced for the VAD) and pieces heard before are handled, or `_discard_listen` drops it all.
-A rule's steps after 錄音 run when listening stops. Removed with the old path: one-shot recordings, cutting the
-start sound out of the audio (`cues.remove` / `cancel` and `audio.Recorder`, deleted 2026-10-15), any press stopping a tap's recording, and the held second
-press of a double tap recording again. Sections below that describe press-and-talk (start sound cut out, hold check,
-recording from key-down) are main's history.
-A draft (`_Draft`) holds the text since the last commit, typed in the document (Backspace to the change + paste,
-`Session.retyped`). silero VAD (`models.vad_path()`) ends a piece at 0.3s of silence; each piece (0.5s of lead-in,
-0.25s after) is decoded by the offline model, with commands boosted when short (counting a Chinese character or an
-English word as one: by letters the user's 換行 heard as "Hangan" was too long, stayed in the draft as 換行 and was
-typed as text at the next command); a short piece that starts a draft and is no command alone is decoded again with
-the draft's audio before it. Said alone, an operation's phrase, a punctuation name or a described character commits
-the draft (its audio before the command decoded again as a whole; nothing is decoded when nothing was said since the
-last commit: a breath between 句號 and 送出 was typed as "Shh") and then runs or is typed; otherwise the draft's open
-sentence is decoded again and its text, punctuation included, typed in place (`_refine_job`). Only the open
-sentence: text up to the last ， or 。 that the recognizer put in a pause between pieces (token timestamps,
-`Recognizer.recognize_timed`) is settled and not decoded again, so a pause or a commit costs one sentence (the
-user's request after a commit of a long draft took 3.25s; ~0.2-0.35s per pause on TTS). The open sentence is decoded
-from its pieces only (`App._speech`: the silence between them cut to their own 0.5s lead-in and 0.25s tail, token
-times mapped back): with the user's real thinking pauses (15s) a draft passed 30s, beyond which the recognizer gives
-no timestamps, so nothing settled and every pause took 1.2-2.8s (2026-10-15; on that recording now 0.2-0.8s per pause,
-the commit 2.92s -> 0.25s). 0.5s more of each pause is kept (`_GAP_KEEP`): with 0.75s the recognizer's marks
-there were a coin toss (the user's 難道這樣沒有問題嗎 [3.7s] 還是說… lost its ？ in 7 of 10 decodes with inaudible
-noise added, 0 of 10 with 0.5s more; their text came out run together). A draft is committed on a command or the
-end of listening (the user's choice; 定稿時機 `commit_at`, which could commit at every pause, was removed 2026-10-16);
-a draft longer than 60s is committed at a pause. A draft shows the recognizer's 。？！ at its end while
-speaking, and the next pause turns it into ， when the sentence goes on (the user's request, 2026-10-15; before, drafts
-had none while speaking, as a pause is not a sentence end); a commit by an operation (換行, 送出 …) or by the end of listening
-keeps the recognizer's 。？！, or gets 。 when it gave none (？ after 嗎, . after English only; the user's choice,
-2026-10-14/15), unless the caret had text on both sides; a commit by a
-spoken punctuation mark gets that mark instead, and a mark said right after an added one replaces it (not 。。).
-A spoken mark (or described character) with text selected when it was said replaces the selection (it was typed at
-the caret until 2026-10-15: a selected 。 said 冒號 over stayed, ： went to the end).
-「X改成Y」 said alone changed the last X typed before the caret to Y (same characters, then the same toneless
-reading) for a few hours on 2026-10-14/15; removed at the user's request (git: d59596c adds it).
-A piece that is no command alone but, decoded at the pause with the speech before it, is exactly a command (its
-tokens from where the piece began, `_split_at`) runs as one, the speech before it committed (`_ran_tail`; the user's
-換行 came out as "Hang Hung," alone and 送出 as "Contral.", as themselves in the sentence, and were typed as text,
-2026-10-15; until then only when a mark had settled the sentence before it). A short piece is decoded that way with
-the commands boosted first, then plainly if that finds no command: plain, 換行 at the end of the audio was often left
-out and turned up inside the sentence at the next pause (TTS + the user's 換行: 7/7 new lines, 3 by this path). While listening, the pointer over the indicator sends it to the other end of the screen
-(`Overlay._tick`; the user's request, 2026-10-15), sliding there in 0.2s with an ease-out curve so the eye
-can follow it. The pointer on another screen takes the indicator and the glow there (the user's request the same
-night; they have three screens). Where it was sent is remembered per screen while the app runs (it came back to the
-bottom at the next listening or screen change; the user's request, 2026-10-15). Following the caret through UIA (read after each update of the
-draft) was tried the same evening and missed: the user typed under it and it stayed. An underline under the open sentence like an IME's composition (an
-overlay drawn at its UIA rectangles) was offered and declined.
-用按鍵關閉麥克風時自動送出 (`send_on_stop`, on by default, the user's request 2026-10-14 so 送出 need not be said):
-the key that turns listening off presses Enter once the text is in; not when 送出 / 結束錄音 turned it off, nor
-when nothing was typed or run while listening, nor (2026-10-15) when another window is in front than the one the
-text went to, or everything typed was taken back. A ✕ on the indicator to stop without sending was asked for and
-dropped the same minute in favour of this checkbox.
-說「送出」時關閉麥克風 (`stop_on_send`, a 一般 checkbox, off by default; the user's request, 2026-10-15): a spoken
-operation with an Enter step turns listening off after its steps.
-自動關閉麥克風 (`auto_off_minutes`, the 一般 tab, 2026-10-15, the user's request so a microphone left on by mistake
-does not listen for ever; 5 minutes by default, their choice; 不自動關閉 / 1 / 3 / 5 / 10 / 30): no speech (the VAD's
-start of speech) for that long turns listening off with the end sound, a tray notice and no Enter (`_check_idle`,
-every 5s, not while decoding). The user sees listening as a switch now: on, it takes text, commands and the
-mouse's edits until turned off.
-錄音時顯示指示器 (`show_indicator`, a 一般 checkbox, on by default; the user's request, 2026-10-15): off, the pill is
-not shown (the glow, the sounds and the tray icon still are).
-游標進到輸入框時 (`on_focus`, a 一般 drop-down, 2026-10-16, the user's requests; it replaced the same evening's
-"turn listening off when another window comes to the front / a click leaves the text box" checkbox): 不做事,
-點進輸入框時顯示語音氣泡 (`floatbtn.Bubble`; a click on it listens. Since late 2026-10-16, the user's design: it
-shows just right of a left click (not a drag) that put the focus in a text box (`App._clicked`: the focus is read
-120ms later; a read begun before the click says nothing of it), goes when the user types, turns the wheel, the
-focus leaves or listening starts, and comes back in its place when listening it was shown for ends. Keyboard focus
-(Tab) shows nothing. Until then it sat by the caret (UIA: the right edge of the character before it, else the text
-box's corner) and followed it: Notion, LINE and web pages reported the caret's place wrong), 顯示可拖動的浮動按鈕
-(`floatbtn.FloatButton`, the floating button's checkbox of a few hours before, migrated: a round button on top,
-fading in only while the focus is where text can be typed and listening is off, hidden elsewhere (the user's
-request: listening is for editing text; both can be changed on the 外觀 tab since the same evening, see 按鈕樣式); a
-click listens like a tap of the key; it never takes focus and clicks on it
-are not caret moves; dragged, it stays where it was dropped (`float_pos`, fractions of the screen's free range) on the
-screen the pointer is on), or 自動開麥克風（離開時關閉）. Every 0.3s
-(`App._watch_focus`, one thread for UI Automation) `selection.focus_info` reads the focused control: whether text can
-be typed there (`focus_editable`, measured in Chrome: a textarea or search box is a writable Edit, a contenteditable
-box such as ChatGPT's or Claude.ai's a focusable Group with a TextPattern and no ValuePattern, blank page the
-read-only RootWebArea document; a terminal always), its identity (window + runtime id) and rectangle. In "listen" mode
-a text box turns listening on (sounds and muting as with the key: the user's choices) and leaving it for a place where
-nothing can be typed turns it off without Enter; turned off any other way (key, 結束, the idle timeout), it stays off
-in that box until the focus has been elsewhere (the user's choice). Listening turned on by hand where nothing can be
-typed is left alone until the focus has been in a text box. VoiceInput's own windows and unknown controls change
-nothing. In a terminal the microphone stays on while it has the focus.
-The draft's mark (`highlight.py`, the user's request 2026-10-16, after an underline was declined on 10-15; an
-experiment behind a checkbox for a few hours, always on since; its color `highlight_color` on the 外觀 tab: 螢光黃
-(default), 淡綠, 粉紅, 淡橘, 選取藍, or 自訂… with alpha. Yellow by default, the user's choice: in selection blue they
-took a draft typed over a selection for a selection, spoke again to replace it, and the speech went after it): while listening, every 0.15s (`App._mark_draft`) the
-draft's place is read on a thread (`highlight.draft_rects`: the characters before the caret, checked to be the draft's
-text; in Windows Terminal the input box rows walked back from the cursor, borders and row-end padding left out) and
-click-through boxes are drawn there (`DraftMarks`); hidden when the draft is committed or left, the
-caret moves, or another window is in front. Only the open sentence is marked, the part a later pause may still
-change; the settled text before it is not (the user's expectation, 2026-10-16). While the mouse wheel turns the marks
-hide, and come back 0.35s after it stops (following the scroll they trailed by up to 0.15s). Windows Terminal reports
-a wide character 3 cells wide (it takes 2; not herdr): a row's box ends at the next cell's left edge. Measured with `dev/highlight_spike.py` / `.html` (no typing: a page with
-a textarea and a contenteditable box, the caret placed by UIA): exact in Chrome (two wrapped rows, ~13ms a read) and
-in a Windows Terminal prompt laid out like Claude Code's (three indented rows, 10-30ms); a wrong text draws nothing.
-Not tried: Notepad (the user's was open; a new file would be a tab in it), LINE, Electron apps, scrolling while
-drafting, and with the user's real voice.
-An operation starting with Backspace (the spoken 刪除) or 復原 (撤銷) gets no added sentence end when the draft showed
-none: Backspace deleted that mark and seemed to do nothing; 復原 showed the 。 for a moment before taking back the
-last update (2026-10-16, `_no_mark_first`).
-螢幕邊緣光暈 (`glow`, `glow.py`, the 外觀 tab since 2026-10-16, off by default; the user's request, 2026-10-15, like
-Siri's): a glow around the edges of the screen the pointer is on while listening (it follows the pointer to another
-screen; with the indicator until that was removed 2026-10-16), on the edges picked next to the style (`glow_edges`:
-all, top and bottom, left and right, top, bottom; the user's request 2026-10-16: the masks count only those edges,
-the side strips reach the corners when top and bottom are off; 彩虹 was Siri 彩虹 until then), brightening and reaching further in with the voice (their choice). Five styles in a drop-down
-(Siri 彩虹, 極光, 暖陽, 冰藍, 錄音紅); picking one shows it for 2.5s. Four click-through windows along the edges, each
-drawn at a third of its size (a conical gradient cut by a falloff mask made once per level) and scaled up: drawn as
-wide gradient strokes it took more than a CPU core; now ~10-17% of one core quiet (12 fps), ~21% talking (24 fps),
-most of it Windows compositing the strips. UI Automation looks through them (same elements under the edges with
-and without), so terminal selections near the edges still work. Not seen on the user's screen by an agent: the
-preview images were rendered offscreen.
-Pastes (`output.paste_text`, 2026-10-14): the text is put on the clipboard with Win32 (owned by a hidden window),
-and a paste or key waits 0.15s after the last Ctrl+V. Qt's clipboard hands data over lazily through our main
-thread, so a commit's paste followed 84ms later by the spoken 句號's replaced it before Windows Terminal read it:
-the whole draft was typed as 。. The clipboard is put back 0.4s after the last paste of a run. A draft placed where text was selected when its speech began replaces it; moving the caret (click,
-selection, typing) leaves a draft as typed, and the next speech starts a new one (`_moved`, `_freeze`; since
-2026-10-15 at the click or key itself, `_caret_left` from the hooks, so the log shows it then: 「（游標移到別處）」
-next to the draft's start … end, copyable; the user's request); a pause's
-update that arrives after the caret moved is not lost: the speech after what is typed (`_Draft.shown`) is decoded
-again as a new draft at the caret and selection now (`_redo_job`, 2026-10-15). A pause that decodes to nothing starts
-no draft, and a draft with nothing typed yet takes the latest speech's caret and selection. The text going into a
-selection with text on both sides of it on its line gets no added 。, like the caret (it did until 2026-10-15). Tried and
-dropped the same day (the user's verdict after comparing them with settings): the streaming X-ASR model (480ms) typing
-the text as it was said, corrected at each pause, and a preview box above the indicator holding the draft until the
-commit. Not carried over from press-and-talk yet: 選取句號 -> ，…。 (its checkbox is hidden on this branch), punctuation
-trimmed when replacing a selection. Letters spelled over a selected English word came back 2026-10-16 (a piece said
-alone, `App._command`, typed over the selection like a punctuation mark). Why VAD + the offline model:
-`listen.py` and the experiment in `dev/streaming` (not committed; report "連續麥克風實驗報告" in the user's Claude
-docs). `dev/headless.py` feed:WAV prints the document as the audio arrives.
-Listener internals (2026-10-15, from a review): sample numbers go on from one listening session to the next (they
-started at 0 each time, and the last session's pieces and commit still queued on the worker read the new session's
-audio at their old numbers: a quick stop and start typed a sentence twice); the new session's draft state is reset by
-a worker job queued after them (`_start_listen`), not at key-down. The audio is kept as the microphone's chunks
-(appending to one array copied it all every 30ms) and trimmed while nobody speaks to the draft's audio, or only the
-next piece's lead-in when nothing was said since the last commit (a silent half hour was kept). Removing every
-operation that records turns listening off; quitting no longer waits up to 10s for a worker job asking the main
-thread.
+## Open questions
 
-復原 (the command; a double tap and the spoken 復原 by default, the user's request 2026-10-14, replacing the
-double-tap deletes: rules_version 6 turns them into it) takes back VoiceInput's last change, all of them while the
-caret has not moved (`Session.history`, unlimited since 2026-10-16, the user's request; three before), one per use, while they are still right before the caret: typed text or a
-draft (dropped, so it is not typed again at the commit), a punctuation mark, a new line (Shift+Enter is recorded as
-"\n"), text spoken over a selection (the selection comes back), a deleted selection. A double tap on a
-selection still deletes it (rules_version 7 adds that rule back, the user's request). A draft's changes are its pauses'
-updates, one each (the user's request, 2026-10-15: a whole draft at once took back what was said long before); a
-commit belongs to the update before it. After one is taken back, what is left of the draft, or of the draft the
-last commit typed (a 換行 taken back), is a draft again with its text fixed (decoded again, the audio taken back
-would return): speech goes on after it, behind a ， (？ after 嗎) when it ends in none, and a command or the end of
-listening gives it its sentence end (the user's choice, 2026-10-15: 換行 misheard and taken back left 細節 without
-its 。; the draft used to be dropped). The last commit's draft comes back only when the change taken back is the commit's own or the one right after it
-(compared as history steps: comparing texts matched by chance, and undoing a mark typed over a selection elsewhere
-brought an old sentence back). Until something is said after it, the next piece counts as said alone and
-the silence since 復原 is not decoded (it came out as "So," before a 換行).
-Since late 2026-10-16 (the user's choice: a real step back, so the marked text shows what may still change) the draft
-comes back as it was, not fixed: each pause's update keeps on its history step the draft before it and its open
-sentence's pieces (`Step.restore`, from `_refine` / `_refine_job`'s `prior`), and a commit keeps the draft as it was
-committed (`_committed[3:5]`, for 復原 of the change after it, a 換行). 復原 puts that state back (`_Draft.restored`;
-the pieces reach the worker through `_restored_spans` / `_take_restored`): its open sentence is marked again and is
-decoded again with what is said next (TTS: 今天天氣很好，我們去公園散步。| 明天要記得帶雨傘。 撤銷 然後再去吃晚餐 ->
-今天天氣很好，我們去公園散步，然後再去吃晚餐。); the speech taken back is not among the pieces. Its audio is held for
-this (`Listener.hold`, at most 180s back, released at a new session or when the caret moves); when it is gone the
-fixed-text draft above is the fallback.
-While listening, the indicator's red dot gets a spinning arc while speech is being decoded (`App._decoding` counts
-the worker's jobs; `spin_while_decoding`, a 一般 checkbox, on by default; the user's request, 2026-10-15). Typing or clicking ends the
-history: what the user changed is unknown. When nothing can be taken back, a tray notice says so, and why: the caret moved, or nothing
-is left (the user's request, 2026-10-15). Logged as 復原 on the 辨識紀錄 tab.
-
-Defaults are the user's own setup (their request, 2026-10-14): the rules in `rules.defaults` (tap middle = 錄音,
-double middle = 復原 (on a selection 刪除選取的文字), hold middle on a selection = 選字, spoken 撤銷 = 復原 and
-刪除 = Backspace (rules_version 8; a Backspace step is a change 復原 takes back), spoken 換行 / 送出 / 復原 / 標點 / 括號 / 貼上 / 空白;
-送出 presses Enter and listening goes on, the key turns it off (the user's request, 2026-10-15, rules_version 9 removes
-the 結束錄音 step that rules_version 5 had added on 2026-10-14; an Enter step leaves nothing for send_on_stop)), `gesture_time` 0.15s, mute while listening, the AI pack ticked, word list by date.
-
-## Command recognition lab (2026-10-17, `dev/cmdlab`)
-
-The user's goal: commands said alone recognized more reliably (換行 most of all) and faster, without heavy resources;
-the solution must work for other users too (no per-user acoustic training). Measured on the saved recordings of
-continuous listening (929 commands, 571 text pieces cut by the VAD as the app cuts them; doubtful ones labeled by the
-user). Press-and-talk recordings are left out: their files keep the start sound the app cut out before recognizing.
-- Current path (plain decode, commands boosted again when short): 96.7% of commands, 0 false triggers; 31 missed,
-  21 of them 換行 (heard as 換好, 換他們, One home, Well um, Hang Hung). 23% of commands need the second decode.
-- Rejected: a second X-ASR in onnxruntime scoring each command (RNN-T log-likelihood vs the free decode): best
-  recall with the current path (99.4%) but +260MB RAM and no faster, and it confuses the user's 換行 with 問號.
-  sherpa-onnx keyword spotters (zh-en 3M, wenetspeech 3.3M; +23MB, 2% of a core): 65-82% alone, and with the
-  current path 11 false triggers on text that mentions a command (如果說送出, 標點符號). Phonetic matching of the
-  decoded text (pinyin or English via CMUdict): cannot tell 你好 from 句號. Higher boost scores: 6-7 gain 2-3, 8+
-  lose more.
-- Works: a piece with at most 1.2s of speech (the VAD's start/end) decoded first with the commands boosted, the audio
-  padded with 0.3s of zeros at both ends, then the current path if that is no command: 98.7%, misses 31 -> 10
-  (換行 21 -> 8), 0 false triggers, 2 wrong commands (one a mislabel). Padding alone fixed 23 of the 31 misses: X-ASR
-  turns a command into English when the audio starts or ends without silence (cutting 0.1s of tail lost 7%). The
-  padded decode takes ~126ms against ~90ms, but most commands then need one decode instead of up to two.
-- Speed (median, from the log): VAD wait 0.3s, piece decode 0.16s (0.25s with the second decode), and when a draft
-  is before the command its commit decode 0.24s (p90 0.50s), whose text equals the draft shown in 91% of cases: run
-  it alongside the piece's decode. Acting after 0.15s of silence: as a try only (fallback to 0.3s), for commands whose
-  false trigger costs little; at 0.15s about 5 new false triggers in 616 utterances (自行刪除, 新增一個引號).
-- Built the same day (the user's go-ahead, in this order): `App._command_first` (the padded boosted-first decode);
-  a commit reuses the last pause's decode of the open sentence when its last piece is the spans' last
-  (`App._live`; after 復原 the spans differ and it decodes again); and, behind 一般's 開發測試 checkbox
-  短停頓就執行指令（測試） (`early_commands`, off by default, applies at the next listening), a second VAD in
-  `listen.Listener` ending pieces at `QUICK_SILENCE` (0.15s): speech of at most `QUICK_MAX` after a pause of at
-  least `SILENCE` is a quick piece, run at once when it is a command `_quick_ok` allows (typing text or a new line:
-  換行, 空白, 括號, 引號, 標點, punctuation names; not 送出, 刪除, 復原, 結束, clipboard). The piece that follows
-  is dropped when it ends with it, or cut to the speech after it (`_quick_done`). Checked with `dev/headless.py`
-  and the user's recordings (換個號吧 / 半行 now 換行, a sentence 0.2s after a quick 換行 typed on the new line).
-- Later the same night (the user's requests): the quick test applies to every command (`_quick_ok`), so they can see
-  where it fires wrongly; a short decode that sounds like a command is that command (`_alike`,
-  `candidates.sounds_alike`: no tones, the 選字 fuzzy pairs, any reading of a 多音字 in the command but the decode
-  only as read in its words, so 還行 is not 換行; spellings of one punctuation name count as one): the user's
-  驚嘆號 said jin came out as 金嘆號 and the boost made it 金看號 (checked before boosting); no false trigger on the
-  571 labeled text pieces. Their 換一行 was never a command: 自訂操作 had 下一行.
-  A review the same night: a command the dictionary lists is compared in the readings it lists (換行 huan hang), any
-  reading of a 多音字 only in one it lacks (下一行): any reading let 放心 / 反省 / 喚醒 / 換新 said alone be 換行 (行
-  as xing) and 夠好 句號 (句 as gou). Still alike in the dictionary (frequency 5+, toneless or the fuzzy pairs, so
-  "exact text only" for punctuation names below no longer holds): 都好 逗號, 問好 / 文豪 問號, 分好 / 封號 分號, 據點
-  句點, 掛號 括號 (Taiwan reads 括 gua), 鬍子 / 父子 / 福祉 複製, 閃出 刪除, 降下 剪下, 圈選 全選, 借書 結束.
-- 復原 takes back the spoken 空白 (Space; when it or 換行 replaced a selection in an ordinary app, the selection
-  comes back: recorded as typed at the caret, 復原 took back the space alone), 剪下 / 貼上 in ordinary apps (the selection read when it was said; a
-  paste only for one line of at most 300 characters, `_plain`: Claude Code turns a block into [Pasted text]) and a
-  Backspace after the caret moved (the line before the caret read when it was said, `Session.known`); after a move
-  the history starts from there. `dev/headless.py` has op:PHRASE and clip:TEXT for testing these.
-- 貼上 in a terminal over a selection: Claude Code copies a mouse selection as it is made, so selecting 世界 to paste
-  over replaced the 好 that 複製 had copied, and 世界 was pasted back (the user's report; the clipboard held the last
-  selection). `output.watch_clipboard` keeps the clipboard's last texts (not a paste's borrowing); when the clipboard
-  equals the selection, the text before it is pasted (`output.text_before`).
-- Since the same night `candidates.sounds_alike` needs the same tones (the user's choice after seeing the list of
-  words it took for commands: 都好, 問好, 分好, 福祉, 閃出, 借書, 圈選, 掛號 differ only in tones). Still taken: 封號
-  -> 分號 (ㄥ/ㄣ), 據點 -> 句點 (same reading); 金嘆號, 換一航 still work; lab numbers unchanged (918/929, 0 of 571).
-- A change made while the text before the caret was only known by reading it (`Session.known`, `Step.read`: a
-  Backspace after the caret moved) is taken back by 復原 only when the caret's line read as 復原 was said still ends
-  with what VoiceInput expects (`_still_reads`); otherwise, or when it cannot be read, a tray notice says so and
-  nothing changes (the user's request: rather nothing than the wrong character typed back).
-
-## Spoken edit commands (2026-10-16)
-
-全選 / 複製 / 剪下 / 貼上 are commands (rules.EDIT_COMMANDS; defaults, rules_version 12, which also drops the user's
-貼上 = Alt+V), not keys, because a terminal differs (the user's request: make them their own operations where Claude
-Code and other apps disagree). In an ordinary app they press Ctrl+A / C / X / V. In a terminal: 複製 puts the
-selection we read (TermWatcher) on the clipboard (Ctrl+C would clear Claude Code's input), 剪下 also deletes it, 貼上
-replaces it with the clipboard's text (Ctrl+V with nothing selected), 全選 shows a notice. The clipboard a paste
-borrowed is put back first (`output.restore_now`), or its restore 0.4s later would undo a copy. Also a spoken
-operation's Backspace / Delete or text step acts on a terminal selection instead of the cursor (the user's request:
-in Claude Code a mouse selection leaves the cursor where it was, so 刪除 deleted there; Claude Code's question box
-row "❯ 3. …" counts as an input box). Not yet tried in a real terminal.
-
-左右輸入文字 (`rules.WRAP`, a spoken action with two boxes, 2026-10-16, the user's design; the default 括號 = （ ）,
-rules_version 13): left and right typed around the caret, which is moved back between them (Left keys), one change
-for 復原 (`Session.wrapped`; `Step.tail` counts the characters after the caret it deletes with Delete); with text
-selected (any app) they go around the selection. Dictating between them gets no added 。 (the caret has text on
-both sides).
-
-## 選字, smart picks and hotwords (2026-10-11, reworked the same day)
-
-The one popup is the 選字 menu (`picker.py`, the pre-lean look; a redesign is planned). The 加入熱詞 notice with 撤銷
-lived a few hours: the user wants hotwords added quietly (they come from deliberate picks and typing).
-- **The menu** (`picker.py`, redesigned 2026-10-16, the user's design): no input box (words are typed on the 詞庫
-  tab's 詞庫列表 instead, 200% as before); candidates in tabs by how close they sound, the pointer over a tab opens
-  it, empty tabs left out. The tabs sit on the side away from the selection (under the menu when it opens below,
-  on top when it flips above near the screen bottom), so the pointer coming from the selection reaches the
-  candidates first. A grid filled top to bottom, then left to right: 4x4 per tab for one Chinese character, 2x5 for
-  words and English; the grid keeps the tallest tab's size so hovering tabs does not resize it. No timeout: any
-  click outside the menu or key closes it.
-- **選字** (command; `App._menu_tabs`): Chinese (`candidates.ranked`): 同音 (the same reading with tones), 不同聲調,
-  模糊音; a single character's smart pick here and earlier picks first in their tab, then common before rare; a
-  word's hotwords first by weight. English: 近音字 (one word only; `sounds.near`: common English words that sound
-  alike, and the known terms ranked with them a little ahead: the user's choice), 詞庫 (known terms by
-  `sounds.alike`: the user's list, ticked packs, terms on screen: clock code → Claude Code, Deepsec → DeepSeek), 大小寫
-  (`memory.variants`, the most picked style first, hotwords among them first). Near sounds (2026-10-16):
-  `voiceinput/dict/english.tsv.gz` (`dev/build_english.py`): the 30k most frequent English words (wordfreq, data CC
-  BY-SA 4.0) that CMUdict (BSD) lists, with their ARPAbet pronunciations, plus the rest of CMUdict with frequency 0
-  (only to know how a selected word is said). Scored mostly by a weighted phoneme edit distance (vowels, voicing
-  pairs, m/n, l/r cost half) when the selection is in CMUdict, else by the consonant skeleton and letters; a
-  frequent word goes first among near equals; written in the selection's case. Bleep → Blip, Sleep, Bleed …;
-  ~0.2-0.35s per menu. A short blocklist keeps insults out.
-- **The menu opens by itself while listening** (`App._auto_pick`, 2026-10-16, the user's request: no key needed):
-  a left-button drag or double click (mouse only: a keyboard selection may be editing) that selects up to 4
-  Chinese characters or 3 English words, read 80ms after the button comes up (UIA, or the terminal watcher). A
-  longer selection is left for speech to replace. Speech typed over the selection closes the menu.
-- **English spelling after recognition** (`spelling.py`, 2026-10-13, the user's choice): X-ASR often hears a term
-  right and spells it its own way (Deep Seek, Notebook LM, fine tune). After `format_text`, a run of English words
-  whose letters equal a known term's (user list, ticked packs, on-screen terms) is written as the term; case alone
-  only when it adds inner capitals (deepseek → DeepSeek; cursor, Open Source stay). Aliases: an English spelling with
-  other letters replaced in 選字 or by typing (Dipsick → DeepSeek) is stored on the word (`aliases` in
-  hotword-list.json, listed under 英文強制替換 on the 詞庫 tab, ✕ removes one; picking it back removes it) and always
-  rewritten. This is replacement after recognition, for English only. Why not more: the user's real DeepSeek at
-  200% still came out as Dipsick / Dipsi / deep sick; TTS showed +4 helps a little (Ollama alone), +5 breaks
-  (DeepSeek → Deep, queue → que), and negative scores for misheard spellings made it worse (Deep Seek → Deepsec). (Single characters still
-  use `candidates.homophones`: common first, then the reading tiers.) English: spellings (`memory.variants`: Claude / claude / CLAUDE; voiceInput /
-  VoiceInput / Voice Input / voice input / VOICE INPUT / voice_input / voice-input / voiceinput, the styles picked
-  most first, counted apart for one word and for several), hotwords among them first by weight. 8 rows.
-- **Smart picks** (`memory.py`, DATA_DIR/smart-picks.json, one example per line, listed on the 詞庫 tab): single
-  Chinese characters only (the user's choice). Since late 2026-10-16 (the user's rule) the characters right before
-  and right after must both agree (the start or end of the text counts), the ones further out only choose among
-  examples that do, and no change breaks a dictionary word around the character into no word (`_breaks_word`):
-  one agreeing character on either side was enough before, and 這個景片是 -> 影 (learned under 景's reading jing3)
-  turned 那個警告 into 那個影告. Modelled on art-shuangpin's core/user_preferences (spec §7): key
-  (toned pinyin) + left (two characters, `^` boundary) + right (two characters; toneless readings until 2026-10-14, when the user chose
-  characters on both sides: both are recognized text here, unlike an input method's unconverted pinyin, and the
-  examples learned before were dropped) + value; applied after
-  formatting when at least one token agrees, most agreement wins, left alone on a tie. Since 2026-10-14 a change that breaks
-  a raised hotword or makes a lowered one is not made (`Hotwords.levels`; 一 -> 依 learned in 右的依序 turned
-  一瞬間 into 依瞬間 through the agreeing shun, though the user had 依瞬間 at −100%), and a pick that puts back
-  characters a smart pick changed (依瞬間 -> 一瞬間, or 景 -> 影) learns "keep it here" under the reading the
-  recognizer wrote (an example with the heard character as value), so the example that changed it stays for its own
-  context. Until the same evening such a pick deleted every example agreeing by a token: the user's 這段影片是 -> 景
-  and 這個影片是 -> 影 kept deleting each other, and the second was learned under 景's reading, which never applies
-  since X-ASR writes 影. Phrases and English were
-  learned for a few hours the same day and are ignored on load.
-- **Hotwords** (`hotwords.py`, DATA_DIR/hotword-list.json, one list on the 熱詞 tab; the old key -> value
-  hotwords.json is not read). Percentages since 2026-10-13 (the user's design; the scores behind them are not
-  shown): 100% does nothing, 200% pulls hardest (score +5 Chinese, +3 English), 0% pushes away (−3). A word typed in
-  the menu (source "manual") is 200% and picks never move it; a 選字 pick (2+ characters or English) raises the
-  picked word 30% and lowers the replaced one 30%, so swapping 程式 / 城市 back and forth returns both to 100%, where
-  they leave the list. The −/+ buttons that moved a word 10% were removed 2026-10-14. English never goes below 100%: a negative English word only
-  changed its case (clock -> Clock). Measured with TTS: 程式 130% / 城市 70% already turns 寫了一個新的城市 into 程式;
-  up to 200% / 0% 台北是一個美麗的城市 is left alone; −5 made it 城池, and lowering 城市 alone gave 程序, not 程式. Old
-  weights were converted (typed 200%, picked 100% + weight / cap). Single characters never become hotwords. No
-  replacement after recognition: words are left to X-ASR biasing. A biasing word that another one starts with is not
-  sent (剪貼 next to 剪貼簿 made X-ASR write 剪貼布), and a lowered word sharing a start with another is dropped.
-- **Hotword volume** (TTS, 2026-10-13): random dictionary words at score 2 cost nothing up to 5k (0.50s → 0.54s for
-  9.5s of audio), 20k 0.73s, 50k 1.12s (the hotword graph is rebuilt per stream), but from 20k on 熱詞 came out as
-  熱刺: large term lists hurt accuracy before speed.
-- **Term packs** (詞包, `packs.py`, `voiceinput/packs/<id>.txt`, ticked on the 詞庫 tab, `packs` in
-  config.json; 2026-10-13): seven curated lists in `packs.ORDER` (AI 工具與模型, 辦公與協作, 程式開發, 雲端服務,
-  設計與影音, 行銷與數據, 硬體與系統; 723 words), no version numbers (textfmt writes spoken numbers), no common words
-  as capitalized products (Box, Go, Pages, Numbers, Render, Railway, Linear were dropped), nothing hotword_spec cannot
-  encode (UI/UX, 4K, CI/CD). Wikidata is only a cross-check (`dev/pack_candidates.py`): it misses tools (Cursor,
-  Ollama) and is noisy (DeviantArt). Words of ticked packs bias at 150% (+50% on screen) without being listed; a pick
-  or replacement lists a word, moved from there. Strength: see `packs.py` (the user's recordings: Gemini 8/14 at
-  120%, 10/14 at 150%, 12/14 at 170% but Cloud → Claude). Until 2026-10-13 evening `_bias` dropped any word another
-  one starts with, English too, so pack words like Gemini (Gemini CLI) and Claude (Claude Code) were never boosted;
-  now only Chinese (剪貼 / 剪貼簿).
-  User copies (2026-10-14, the user's request): each launch copies shipped packs missing from DATA_DIR/packs there
-  (`packs.install`; the installer should do it once there is one) and only those are read; the user edits them
-  (one file per pack, the best known terms first since the tab shows the first five) and an edit applies at the
-  next dictation (`packs.stamp`). An app update merges (the user's choice): DATA_DIR/packs/shipped keeps each pack
-  as last shipped, and terms a new version adds are appended to the user's copy under a dated comment; the user's
-  additions stay, deletions are not undone (unless a new version adds the term again), dropped terms stay. Curate
-  the shipped files in `voiceinput/packs`; `dev/pack_candidates.py` compares against those.
-- **Why Chinese biasing works now** (dev experiment by a subagent, 2026-10-11, Windows TTS, 16 target words + 4
-  counter-examples; the scripts were deleted): sherpa-onnx's modified beam search keeps the top max_active_paths
-  tokens by the model's own score and only then adds the hotword boost (offline-transducer-modified-beam-search-
-  decoder.cc), so at 4 a word that missed the first cut was never boosted (程式 failed at any score). At 12 with
-  score 5: 16/16, no false hits; score 6: 台北是一個美麗的城市 → 程式; score 8: English broke (a long sentence came out
-  as "VoiceIn。"). Encoding stays as it was: Simplified, characters space-separated (every CJK token is "▁X"; ▁ in
-  the hotword does nothing, the whole word in one piece encodes wrongly, Traditional works only where the glyphs are
-  the same). 14s of audio 0.62s → 0.80s. Not yet checked with real recordings.
-
-## Voice edits on selected text
-
-Plan agreed 2026-09-27, cut down 2026-09-29, spoken triggers replaced by the hotkey 2026-09-30. The selection is
-read when a bound key goes down (`selection.py`, UI Automation TextPattern, on a background thread). Speaking with
-text selected replaces it; 刪除選取的文字 deletes it; with the default operations a double tap held deletes it and the
-dictation is pasted there.
-UIA probe (2026-09-27): Chrome/Edge inputs, Win11 Notepad, LINE give selection + line context; LINE's first read ~1.2s.
-Terminals: Claude Code / Codex / agy in Windows Terminal (inside herdr) hide their mouse selection from UIA,
-Shift+arrow does not select, and a paste goes to the caret. Since 2026-10-01 a mouse drag there works like a
-selection anywhere else (`selection.TermWatcher`, probed with `dev/term_probe.py`): UIA `RangeFromPoint` maps the
-press and release points to characters and the text between them is read from the screen (no clipboard since
-2026-10-02: the user keeps herdr's `copy_on_select` off), so a repeated word is told apart. herdr selects up to the cell edge nearest the pointer, so the
-character under an end point is often not selected: the ends are narrowed to the cells herdr highlighted (inverted
-colors, read as UIA cell attributes; 2026-10-03). Codex keeps a drag as its own selection, and a left-to-right drag
-leaves the cursor right after it, so a Backspace there would delete the whole selection and the next one a
-character more: when the cursor already sits there, one Left key clears it first. A double or triple click
-(2026-10-03) is a selection too: the run of highlighted cells around the click (background unlike the cells on both
-sides). Claude Code / agy select a line up to punctuation or a space on a double click; Codex a word (one CJK
-character) on a double click and the whole line on a triple click. Used only on one line
-(the user's choice) of the input box: a row starting with ❯ / › / > at the pane's left edge plus the rows below it
-indented under the prompt (blank rows from Shift+Enter included since 2026-10-04, except between the cursor
-and a selection below it: that is how Codex's status line sits under its box), and the terminal cursor must be in
-that box (a past prompt in the transcript and status
-lines are rejected). Keyboard only since 2026-10-02 (clicks misplaced Codex's cursor, agy ignores them):
-WT reports its cursor as an empty UIA selection, so arrow keys move it (Up/Down to the row, then Left/Right),
-re-reading it after each burst, until it sits right after the selection; then Backspace 20ms apart (a burst lost
-one in Codex) and paste. If the cursor cannot get there nothing is deleted and a notice says so. Tested with
-herdr-driven panes in all three tools: soft-wrapped rows, other lines, cursor starting anywhere. In the background
-WT reported the cursor one character left; in front it is exact. Forgotten on any key, click or window switch.
-
-The dictionary (`candidates.py`, since 2026-10-02): McBopomofo's word list (MIT, `voiceinput/dict/words.tsv.gz`,
-built by `dev/build_dict.py` from a pinned commit): ~146k Taiwanese phrases + Big5 single characters with Bopomofo
-readings and Taiwanese-corpus frequencies, cached in DATA_DIR/cache/word_index.pkl (build ~10s, load ~0.4s). It
-answers `is_word` / `frequency` for disfluencies and `homophones` for 選字 (and the commented-out suspects). jieba was
-used until 2026-10-02 (commit 7593a98) and dropped for missing Taiwanese words and mainland frequencies.
-
-## After a dictation (2026-09-29)
-
-Voice commands on what was just dictated (復原, 送出, 換行, 刪掉上一句, X改成Y, 刪掉X, symbol names, trailing 送出) were
-removed the same day they were built: the user corrects by selecting with the mouse instead. What remains:
-
-- **Punctuation names** (restored 2026-09-30, `edit.symbol`; a setting on the 一般 tab since 2026-10-11, on by
-  default, so they need no custom operations): an utterance that is exactly 逗號 / 句號 / 句點 / 問號 /
-  驚嘆號 / 感嘆號 / 頓號 / 分號 / 冒號 / 點點點 / 刪節號 / 省略號 types the mark, appended after any existing
-  punctuation (the user chose not to replace it). Exact text only: 都好 is not 逗號. On a selection it replaces it.
-  換行 / 送出 are custom operations since 2026-10-11 (speech rules, checked before punctuation names).
-  Spoken commands are boosted (2026-10-11, the user's request: 換行 was often misheard): when the first decode is
-  short (at most the longest command + 2 characters) it runs again with every speech operation's phrase and the
-  punctuation names (when on) at score 5. Not by audio length: TTS 換行 alone was 1.7s with its silences. Fixed
-  據點 -> 句點, 珊姐好 -> 刪節號; cost: 問好 / 分好 said alone become 問號 / 分號. Words of one repeated character
-  (點點點) are not boosted: they ran away (點點點點點點點點點). Since 2026-10-15 that second decode has the commands
-  alone, without hotwords, packs and on-screen terms (they competed: the user felt 換行 had gone dull, and their
-  換行 heard as "One home." came out as 換行 without them; on their short recordings since 10-14, 363/374 commands
-  against 362, and of 211 short texts the only new "commands" were two misheard 換行). No code change had made
-  it worse: the misses were borderline decodes.
-- **Described characters** (`edit.described`, 2026-10-11, the user picked it among ideas for exact text by voice;
-  a 一般 checkbox, on by default). Since 2026-10-16 (the user's rule, tightened the same evening) everything before 的 must
-  be exactly one dictionary word (`candidates.is_word`), no lead-in (這個字是教育的育, 偉是偉大的偉 no longer
-  count: the user wants a narrow spell people know they are saying, and the checkbox to turn it off); their
-  只是顯示的是 and 不過顯示的是 typed 是; 顯示的是 still types 示, 張雨薇的薇 (a name) does not work. Before: an utterance that is exactly <words>的<character> types only that character when
-  the last 4 characters before 的 contain it, or one that sounds like it (X-ASR wrote 一張的章: 張 is typed). Also
-  這個字是教育的育, 偉是偉大的偉 (said that way in the log before the feature existed). Typed as is, like a
-  punctuation mark (replaces a selection, no smart picks). A character that only sounds like it counts only when
-  at most 4 characters come before 的 (2026-10-14: 我這邊想要顯示的是 typed 示); on 3931 logged results that was the
-  only false hit; TTS 節日的節,
-  薔薇的薇, 這個字是教育的育 right (程式的程 was heard as 城市的城 and typed 城).
-- **Bopomofo spelling** (拼讀: ㄔ ㄤ 昌 types 昌) was built and reverted on 2026-10-11 (c342c21, a41dab5): with a real
-  voice X-ASR heard most symbol names as English letters (ㄐ ㄧ ㄝ → "G E A"), and there is no way to force Chinese,
-  so it missed too often for a feature meant for frequent use (the user's verdict).
-- **Selected 。** (setting, 2026-10-07): speaking on a selected 。 replaces it with ， + the utterance + 。
-  (今天很好。明天見 → 今天很好，我們去公園。明天見).
-
-- **Dictated-text buffer (`session.py`)**: the text we pasted is known to sit right before the caret until the user
-  presses a key (keyboard hook, injected keys ignored), clicks (mouse hook) or another
-  window comes to the front. Changes to it are Backspace up to the edit point (one `SendInput` burst) + paste of
-  the new tail; works in terminals too.
-- **刪除剛輸入的文字** deletes the last dictation while it is still the last change and the caret has not
-  moved; only that one (2026-10-04: the user had undo of picked suggestions and repeated undo removed). Text spoken
-  over a selection counts as a dictation (2026-10-07, the user's model: like typing over it): it removes it, the
-  selected text stays gone (a selected 。 turned into ，…。 gets its 。 back). Recording starts at key-down, but the
-  indicator (overlay, tray icon) only once the press is known to record, with the start sound (see Sounds). It was
-  0.3s, then 0.2s and 0.1s (felt slow); on 2026-10-13 the user chose to show it with the sound at the decision.
-- **Long dictations** (`asr._pieces`, 2026-10-14): X-ASR fails on more than 40.05s of audio (onnxruntime Reshape
-  error in the encoder; a 43s dictation was lost). Longer audio is decoded in pieces of at most 30s, each cut at the
-  quietest 0.2s after 15s, and the texts joined (a space between English words). A piece may end in 。 where the
-  user only paused (TTS-free check on the user's recordings: 最常用的。術語); 150s took 8s.
-- **X-ASR biasing** (`asr.py`, used for on-screen terms): modified beam search + per-stream hotwords, same speed as greedy (0.11-0.22s
-  on 3s clips). The model's vocab is pure BPE with CJK as "▁X" pieces: `modeling_unit="bpe"`, CJK hotwords
-  space-separated and converted to Simplified, and a `bpe.vocab` exported from `bpe.model` by a tiny protobuf reader
-  (sentencepiece is not installed). One unencodable word makes sherpa-onnx drop the whole list, so words are
-  checked against tokens.txt. Results: L M → LLM, work tree → worktree at 2.0; cloud code → Claude Code needs 3.0;
-  Chinese biasing barely works (張雨薇 → 張玉薇 at 3.0, 城市 never → 程式).
-- **On-screen terms**: at key-down UIA reads the focused control's visible text (0.12s in WT) and English terms bias
-  X-ASR at 1.5: CamelCase / acronyms / digits always, other 5+ letter words if seen twice, dotted names skipped.
-- **Suspects** (`suspects.py`, commented out on lean): SenseVoice re-decodes each dictation in the background; where
-  it heard other Chinese characters and its version is the likelier word (a dictionary word where ours is not, or
-  ≥20× as frequent), a menu offered it. Rare, because both models often share an error (主機版, 剪貼布). Guessing
-  from the dictionary alone was rejected: every flag on 80 real utterances was wrong.
-- **Terminal edits and the overlay** (2026-10-11): a terminal edit runs on the main thread, which waits up to 4s
-  for the arrow keys to bring the cursor there (UI Automation on a thread). The overlay's 140ms fade-out was still
-  running over Claude Code's input box (both sit at the bottom of the screen), so UIA's ElementFromPoint waited for
-  our own frozen window until the timeout: the three dots stood still and 找不到選取的文字 appeared. The overlay is
-  now hidden at once (`Overlay.hide_now`) before a terminal edit, delete or pick.
-- **Clipboard**: every format is restored after a paste (images copied before dictating used to be lost).
-- **Sounds** (`cues.py`, `voiceinput/cues/*.wav`, 2026-10-13): the 一般 tab's 提示音 row: a set drop-down (12 sets,
-  無, 自定義; the user's design), a 試聽 button (start sound, 0.8s, end sound; picking a set plays it too), and only
-  for 自定義 the 開始 / 結束 drop-downs (a sound picked there plays). Below it 結束音在 [停止錄音時 / 文字輸入完成時]
-  播放 (`stop_sound_at`, the user's request): at stop, muted speakers are unmuted then (the microphone is off). Blip
-  by default. The 簡潔 UI and 柔和木質 sets of ElevenLabs effects
-another agent made in `dev/sound-preview` (untracked), converted by `dev/build_cues.py` (loudness matched like the
-  preview page; an end sound's tail cut at -40 dB, a start sound's at -20 dB plus a 50ms fade, 0.07s (Pop) to 0.45s
-  (Triad), since it is cut out of the recording). The indicator fades in and the start sound plays together once the press is known to record
-  (`_show_recording`, the user's design, 2026-10-13): a hold at `gesture_time` (0.3s), a tap at its release
-  (`gesture_time` later when the key has a double tap), at key-down when the key's only operations are recording taps. The
-  indicator at 0.1s with the sound beeped on double taps; at 0.1s after the microphone opened, the user's double
-  taps (first press ~0.12s) rarely flashed it. Muting and the end sound follow. `cues.remove` looks for it from when it played (`_Press.cue_at`). For its length plus `_CUE_LATENCY` (0.25s; PlaySound to microphone measured 0.17s
-  on the user's machine) the level bars stay still (`Recorder.still`) and the speakers on; muting starts after.
-  Recording still runs from key-down: dropping the audio while the sound played (tried the same day, the user's
-  idea) cut the first syllable, as the user starts speaking 0.25-0.98s after the press (median 0.45s; 換行 15/18 →
-  1-2/18 on their recordings). The end sound plays only for a recording that goes to recognition (a tap that flashed the indicator played it before). A double tap's second press shows no indicator
-  until it records (it flashed with a second start sound). Each press and gesture is logged (`press ...`,
-  `gesture ...`).
-- **Start sound cut out before recognition** (`cues.remove`, 2026-10-13, the user's choice: the recording counts from
-  the end of the start sound): with nothing said, X-ASR heard the sound the microphone picked up as text (Bubble /
-  Mallet / Kalimba "Yeah.", Triad "One" / "Four.", Blip "Blip."). It is found by cross-correlation in the 0.5s after it
-  played and that stretch spliced out (10ms crossfade), keeping the room noise before it: dropping everything before its end, or
-  silencing it, made X-ASR hear short commands wrong (送出 -> Somehow). The start sounds were shortened for this
-  (their -40 dB tails reached 0.36-0.60s and the user's first word, ASR timestamps: 0.80s after the press, median,
-  vs 0.48s before sounds existed, often came while the tail still played). User's recordings: silent presses with
-  text 13/95 -> 2/95 (probably said); 換行 with the sound before the speech 204/216 (subtracting it: 210/216), but
-  spoken over the sound 99/216 (subtracting: 186/216): words said before it ends are lost, the cost the user chose.
-  A weak match (below `cues.MATCH` 0.6: headphones, or speech over it) falls back to `cues.cancel`, a least-squares
-  FIR (256 taps, ~10 dB) subtracted. Saved recordings keep the raw audio.
-- **Hold check uses the hook's key state** (`Hotkeys.is_down`, 2026-10-13): the 0.3s hold timer runs on the main
-  thread, which a double tap's delete in a terminal keeps busy; the release was still queued, the second press
-  counted as held, recorded (delete and say it again) and played the end sound. Now the timer asks the hook whether
-  the key is still down, and `on_key_up` decides from the hook's times. The microphone hears the start
-  sound: mixed into 91 of the user's recordings (not played through speakers), Woodblock, Kalimba and Marimba
-  changed long sentences no more than inaudible noise (~2%), Blip, Glass, Triad, Xylophone, Mallet and Music Box
-  ~5-7%, commands barely; the user kept all 12 until real recordings (with the sound picked up) can be checked.
-  A 試聽 button follows each drop-down. Played from the wav file: winsound cannot play asynchronously from memory
-  (RuntimeError), so the first version made no sound at all.
-- **Pack hints** (`App._suggest_pack`, 2026-10-13): a word picked, typed in the menu or spelled that an unticked
-  term pack lists brings a tray notice suggesting the pack, once per pack (`pack_hints` in config.json).
-- **Spelling over a selection** (`edit.spelled`, 2026-10-13, the user's request): letters spoken over a selected
-  English word (X-ASR writes "B L I P.") type that word in the selection's case: Bleep → Blip, API → APP, doggy →
-  dog. It counts like a 選字 pick (priority +30%, and the old word becomes an alias: the user chose that knowing
-  doggy would then always become dog).
-- **Saved recordings** (`recordings.py`, 2026-10-13, DEVELOPMENT ONLY: the user will remove it before release so
-  users never keep recordings locally; keep it in that module plus `App._keep`, the 一般 tab's 開發測試 row and
-  `save_recordings` in config): when ticked, every utterance is saved to DATA_DIR/recordings/<time>.wav with an
-  index.jsonl line (raw ASR, formatted, typed result or operation) and later picks / typed replacements /
-  刪除剛輸入的文字 as lines pointing at the last saved id. Not deleted automatically (the user's choice). Use these
-  for spot checks with the user's real voice instead of TTS; note the app decoded them with the hotwords and packs
-  of that moment. `dev/headless.py` redirects them to its test folder.
-- Tests without a microphone, with Windows TTS audio (zh-TW Hanhan voice via `dev/tts.ps1`):
-  `dev/headless.py` runs the real App against a simulated text box; use it by default. Never let a test write the
-  user's real data files while their VoiceInput is running.
-  `dev/e2e.py` types into a real Notepad / Windows Terminal window: only when the user is away from the machine
-  (Win11 Notepad opens new windows as tabs, and a run once typed into the user's own Notepad document).
+- With auto_listen, listening turned off by 送出 / the idle timeout stays off in that box until the focus leaves
+  (asked, not decided).
+- Not yet tried in a real terminal: the spoken edit commands. Not tried with the draft mark: Notepad, LINE,
+  Electron apps, scrolling while drafting.
