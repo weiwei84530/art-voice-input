@@ -81,7 +81,7 @@ def alike(heard: str, terms, limit: int = 4) -> list[str]:
 # near sounds, not only known terms) ---
 _ENGLISH = Path(__file__).resolve().parent / "dict" / "english.tsv.gz"
 _VOWELS = set("AA AE AH AO AW AY EH ER EY IH IY OW OY UH UW".split())
-_PAIRS = {frozenset(p) for p in ("B P", "D T", "G K", "V F", "Z S", "ZH SH", "DH TH", "JH CH", "M N", "N NG",
+_PAIRS = {frozenset(p.split()) for p in ("B P", "D T", "G K", "V F", "Z S", "ZH SH", "DH TH", "JH CH", "M N", "N NG",
                                  "TH F", "DH D", "L R", "W V", "S SH", "Z ZH")}
 _english: list | None = None   # [(word, zipf, pronunciations, key)]
 _by_word: dict = {}

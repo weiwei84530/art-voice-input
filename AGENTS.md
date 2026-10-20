@@ -70,6 +70,7 @@ automatically; read it before reviving or redesigning something). Module docstri
 | `edit.py` | punctuation names (`symbol`), described characters (`described`), spelled letters (`spelled`) |
 | `candidates.py` | McBopomofo dictionary: `is_word`, `frequency`, `ranked`, `sounds_alike`, fuzzy pairs |
 | `sounds.py` | English near-sounding words (CMUdict + wordfreq, `dict/english.tsv.gz`) |
+| `syllables.py` | the Chinese characters an English syllable may have been (好 -> how): pinyin spelling or CMUdict phonemes |
 | `hotwords.py` / `memory.py` / `spelling.py` / `packs.py` | 詞庫 list, 選字記憶, English spelling/aliases, 詞包 |
 | `picker.py` | the 選字 menu |
 | `floatbtn.py` / `orbs.py` | floating button and bubble (`OrbButton`), the ten 按鈕樣式 looks |
@@ -204,7 +205,9 @@ sentence end → 嗎 questions → trailing punctuation.
   on it keeps it; counts leave it out); no timeout, any click or key closes it. Chinese (`candidates.ranked`): 同音, 不同聲調, 模糊音 (`candidates._FUZZY`: zh/z,
   sh/s, an/ang, en/eng, r/l, ㄩㄣ/ㄧㄣ, ㄈ/ㄏㄨ, ㄋ/ㄌ …; fuzzy-only words from frequency 3, `app._FUZZY_MIN`; 詞庫
   words by sound too). English: 近音字 (`sounds.near`, weighted phoneme edit distance), 詞庫 (`sounds.alike`), 大小寫
-  (`memory.variants`).
+  (`memory.variants`), 中文 (2026-10-21: one spoken character X-ASR wrote as an English word of up to 6 letters,
+  `syllables.chinese_for`; first when Chinese is on both sides, a character making a word with a neighbour first;
+  the spaces to Chinese go with the pick). A character 選字記憶 made from English gets an 英文 tab to pick it back.
 - **詞庫 list** (`hotwords.py`, `hotword-list.json`; code says hotwords, UI says 詞庫 / 優先度): 優先度 shown as
   stored − 100 (0% nothing, +100% top, negative red). A pick of 2+ characters or English moves the picked word +25%
   and the replaced one −25%. Typed words are top. English replaced by English goes down too, to −50% at most (2026-10-21, TTS-measured: `hotwords` docstring); English for Chinese or back lowers no English; case forms are separate hotwords. Single characters never listed. ✕ puts a
@@ -218,7 +221,8 @@ sentence end → 嗎 questions → trailing punctuation.
 - **English spelling** (`spelling.py`): a run of English words whose letters equal a known term's (詞庫, packs,
   on-screen terms) is written as the term (case only when it adds inner capitals). Aliases (Dipsick → DeepSeek, from
   picks or spelling) are always rewritten; 英文強制替換 lists them.
-- **選字記憶** (`memory.py`, `smart-picks.json`): single Chinese characters only; key = toned reading + two
+- **選字記憶** (`memory.py`, `smart-picks.json`): single Chinese characters only (also from an English syllable,
+  key the casefolded word, sides past the spaces: 你 how 嗎 -> 你好嗎, 2026-10-21); key = toned reading + two
   characters on each side; applies only when the characters right before and right after both agree (text edge
   counts) and no dictionary word around is broken (`_breaks_word`); never breaks a raised 詞庫 word or makes a lowered
   one (`Hotwords.levels`). Picking back a changed character learns "keep it here" under the heard reading.

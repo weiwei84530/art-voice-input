@@ -42,7 +42,8 @@ from PySide6.QtCore import QLockFile, QObject, QPointF, QRectF, Qt, QTimer, Sign
 from PySide6.QtGui import QAction, QColor, QCursor, QGuiApplication, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from . import autostart, candidates, config, cues, edit, models, packs, paths, recordings, rules, sounds, spelling
+from . import (autostart, candidates, config, cues, edit, models, packs, paths, recordings, rules, sounds, spelling,
+               syllables)
 from .asr import SAMPLE_RATE, Recognizer
 from .config import Config
 from .floatbtn import Bubble, FloatButton
@@ -274,6 +275,7 @@ class App(QObject):
         # self.bg.submit(self._load_second_job)
         candidates.preload()   # the disfluency pass uses the dictionary
         sounds.preload_english()   # 選字's near sounds for English
+        syllables.preload()   # 選字: the characters an English syllable may have been
         if self.cfg.autostart:
             self._set_autostart()   # re-register so the entry follows the app if its folder was moved
         self._update_float()
@@ -1697,6 +1699,13 @@ class App(QObject):
         try:
             if is_latin(text):
                 known = self._known_terms(terms)
+                # one spoken character written as an English syllable (好 -> how): its characters, first when
+                # Chinese is on both sides (2026-10-21, the user's request)
+                before, after = sel.before.rstrip(" "), sel.after.lstrip(" ")
+                left, right = before[-1:] if _is_cjk(before[-1:]) else "", after[:1] if _is_cjk(after[:1]) else ""
+                zh = syllables.chinese_for(text, left, right, picker_mod.WORDS[0] * picker_mod.WORDS[1])
+                if zh and left and right:
+                    tabs.append(("中文", zh))
                 if len(text.split()) == 1:
                     tabs.append(("近音字", sounds.near(text, known, picker_mod.WORDS[0] * picker_mod.WORDS[1])))
                 tabs.append(("詞庫", sounds.alike(text, known, limit=10)))
@@ -1704,6 +1713,8 @@ class App(QObject):
                 weights = self.hotwords.weights_for(forms)
                 forms.sort(key=lambda w: -weights.get(w, 0))   # stable: the rest keep their order
                 tabs.append(("大小寫", forms))
+                if zh and not (left and right):
+                    tabs.append(("中文", zh))
             else:
                 found = candidates.ranked(text)
                 if len(text) == 1:
@@ -1730,6 +1741,10 @@ class App(QObject):
                     words = sorted((w for w in found if found[w][0] == rank), key=order)
                     mine = [w for w in first if w and (found.get(w, (0,))[0] == rank)]
                     tabs.append((name, mine + words))
+                if len(text) == 1:   # an English syllable 選字記憶 turned into this character: it can be picked back
+                    english = self.memory.english_for(line, start)
+                    if english:
+                        tabs.insert(0, ("英文", english))
         except Exception:
             log.exception("candidates failed")
             tabs = []
@@ -1779,6 +1794,15 @@ class App(QObject):
         if not pasted:
             self._notify(_SEL_LOST)
             return
+        before = sel.before
+        if is_latin(text) and _is_cjk(word):   # 你 how 嗎 -> 你好嗎: the spaces to Chinese go too
+            if sel.after[:1] == " " and _is_cjk(sel.after.lstrip(" ")[:1]) and not sel.text.endswith(" "):
+                press_key(0x2E, 1)   # VK_DELETE: the space after
+            if before.endswith(" ") and _is_cjk(before.rstrip(" ")[-1:]) and not sel.text.startswith(" "):
+                press_key(0x25, 1)   # Left, Backspace, Right: the space before
+                press_key(0x08, 1)
+                press_key(0x27, 1)
+                before = before[:-1]
         line = sel.before + sel.text + sel.after
         start = len(sel.before) + lead
         self.memory.record(line, start, start + len(text), word)
@@ -1787,7 +1811,7 @@ class App(QObject):
         self.hotwords.picked(text, word)
         self._suggest_pack(word)
         self.settings.refresh_hotwords()
-        self.session.replaced_selection(sel.before, word, foreground())
+        self.session.replaced_selection(before, word, foreground())
         self.record.emit({"time": time.strftime("%H:%M:%S"), "kind": "選字", "main": f"{text} → {word}", "copy": word,
                           "steps": []})
 
@@ -2039,6 +2063,10 @@ def _delete_selection(sel) -> bool:
         return False
     backspace(len(sel.text), gap=0.02)
     return True
+
+
+def _is_cjk(text: str) -> bool:
+    return bool(text) and bool(re.match(r"[㐀-䶿一-鿿]", text))
 
 
 def _paste_over(sel, text: str) -> bool:
