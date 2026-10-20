@@ -79,11 +79,8 @@ class Config:
     packs: list = field(default_factory=list)
     start_sound: str = "blip"     # cues.py id played when the recording indicator shows, "" for none
     stop_sound: str = "blip"      # cues.py id played when the recording ends, "" for none
-    # development only, to be removed before release (recordings.py); on by default with --debug
+    # development only, to be removed before release (recordings.py): on exactly when launched with --debug
     save_recordings: bool = field(default_factory=lambda: DEBUG)
-    # development test (2026-10-17, dev/cmdlab): a short piece that is a command (app._quick_ok) runs after 0.15s of
-    # silence, before the VAD's 0.3s ends the piece
-    early_commands: bool = field(default_factory=lambda: DEBUG)   # on by default with --debug
     rules: list = field(default_factory=lambda: rules.defaults(dev=DEBUG))   # custom operations (rules.Rule)
     rules_version: int = RULES_VERSION
 
@@ -112,8 +109,7 @@ class Config:
             cfg.glow = "siri"
             cfg.glow_edits = {"siri": data.get("glow_custom") or {}}
         cfg.button_scale = min(max(int(cfg.button_scale), BUTTON_SCALE_RANGE[0]), BUTTON_SCALE_RANGE[1])
-        if not DEBUG:   # development only: off without --debug
-            cfg.save_recordings = cfg.early_commands = False
+        cfg.save_recordings = DEBUG   # no setting (2026-10-20): recordings are kept exactly in debug mode
         if "rules" in data:
             old = rules.upgrade([rules.Rule.from_dict(d) for d in data["rules"]], data.get("rules_version", 1))
             if "hotkey" not in data:   # the key that recorded (the 自訂操作 key rows, until 2026-10-16)

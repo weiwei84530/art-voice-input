@@ -1,13 +1,13 @@
-"""系統: 外觀模式 (light, dark, Windows'), autostart, the settings file, developer options (--debug), about."""
+"""系統: 外觀模式 (light, dark, Windows'), autostart, the settings file, about."""
 import os
 import time
 from pathlib import Path
 
 from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QPainter, QPen
-from PySide6.QtWidgets import QFileDialog, QFrame, QHBoxLayout, QMessageBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QMessageBox, QVBoxLayout, QWidget
 
-from .. import __version__, config, paths, recordings, userdata
+from .. import __version__, paths, userdata
 from . import theme
 from .kit import Choice, Switch, T, button, card, dim, draw_icon, hbox, icon, label, sep, titled, vbox
 
@@ -117,35 +117,6 @@ class SysPage(QWidget):
         reset = button("還原成預設值", self._reset, link=True)
         row("設定檔", "所有設定與詞庫存成一個檔案，換電腦時帶走",
             vbox(drop, 10, hbox(export, None, reset, spacing=8), spacing=0))
-        self.dev_row = QWidget()
-        if config.DEBUG:
-            dev = vbox(spacing=0)
-            self.dev_toggle = button("", self._toggle_dev)
-            self.dev_toggle.setStyleSheet("QPushButton { background: transparent; border: none; padding: 4px 0; "
-                                          "text-align: left; font-size: 13.5px; }")
-            badge = label("--debug")
-            badge.setFont(theme.font(11, 700, num=True))
-            badge.setStyleSheet("background: #15171A; color: #FFC23D; border-radius: 4px; padding: 2px 7px;")
-            badge.setFixedHeight(20)
-            dev.addLayout(hbox(self.dev_toggle, badge, None, spacing=8))
-            self.dev_box = QFrame(objectName="card")
-            self.dev_box.setAttribute(Qt.WA_StyledBackground)
-            box = QVBoxLayout(self.dev_box)
-            box.setContentsMargins(14, 12, 14, 12)
-            box.setSpacing(12)
-            self.rec = Switch(name="保存錄音")
-            self.rec.toggled.connect(self._rec)
-            folder = button("開啟錄音資料夾", self._open_recordings)
-            box.addLayout(hbox(titled("保存錄音", "每段錄音存成檔案，方便重播測試；不會自動刪除", 13.5), None, folder,
-                               self.rec))
-            self.quick = Switch(name="短停頓就執行指令")
-            self.quick.toggled.connect(self._quick)
-            box.addLayout(hbox(titled("短停頓就執行指令", "單獨說出的指令停 0.15 秒就執行，不等 0.3 秒；下次開麥克風時"
-                                                    "生效", 13.5), None, self.quick))
-            self.dev_box.hide()
-            dev.addSpacing(10)
-            dev.addWidget(self.dev_box)
-            row("開發者選項", "只有用 --debug 啟動時才看得到", dev)
         about = hbox(spacing=24)
         for k, val in (("版本", __version__), ("辨識引擎", "X-ASR · 本機")):
             about.addLayout(self._kv(k, val))
@@ -175,10 +146,6 @@ class SysPage(QWidget):
         self._mode_note()
         self.auto.set_quiet(self.cfg.autostart)
         self._auto_note()
-        if config.DEBUG:
-            self.rec.set_quiet(self.cfg.save_recordings)
-            self.quick.set_quiet(self.cfg.early_commands)
-            self._dev_label()
 
     def summary(self) -> str:
         return f"{dict(theme.MODES)[self.cfg.theme]}模式、開機" + ("自動啟動" if self.cfg.autostart else "不啟動") + "、設定檔"
@@ -250,24 +217,3 @@ class SysPage(QWidget):
         userdata.reset(self.cfg, self.win.hotwords, self.win.memory)
         self.win.data_changed()
         self.notice("已還原預設")
-
-    # --- developer options ---
-    def _toggle_dev(self):
-        self.dev_box.setVisible(not self.dev_box.isVisible())
-        self._dev_label()
-
-    def _dev_label(self):
-        open_ = self.dev_box.isVisible()
-        self.dev_toggle.setText(("▾ 收起" if open_ else "▸ 展開") + " 2 個選項")
-
-    def _rec(self, on: bool):
-        self.cfg.save_recordings = on
-        self.win.save()
-
-    def _quick(self, on: bool):
-        self.cfg.early_commands = on
-        self.win.save()
-
-    def _open_recordings(self):
-        recordings.DIR.mkdir(parents=True, exist_ok=True)
-        os.startfile(recordings.DIR)

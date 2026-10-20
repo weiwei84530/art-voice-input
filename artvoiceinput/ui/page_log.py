@@ -2,13 +2,13 @@
 it was off) is a node with its time and length; each event under it shows its time, a colored dot and tag for its kind,
 what changed on the screen (new text green, removed struck through red), a yellow ! when the 詞庫 may have shaped it
 and a copy button for a finished sentence. What was heard and why are the row's tooltip. Filters by kind."""
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QPainter
-from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QToolTip, QVBoxLayout, QWidget
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QCursor, QPainter
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from .. import logbook
 from . import theme
-from .kit import Choice, T, button, dim, icon, label
+from .kit import Choice, T, Tip, button, dim, icon, label
 
 FILTERS = [("all", "全部"), ("text", "文字"), ("cmd", "指令"), ("fix", "選字與復原")]
 KIND_COLORS = {"text": "#FF453A", "cmd": "#3D7BFF", "pick": "#A259FF", "undo": "#8A9099"}
@@ -121,14 +121,17 @@ class Entry(QWidget):
             bang.setFont(theme.font(12, 700, num=True))
             bang.setStyleSheet("background: #FFC23D; color: #3A2A00; border-radius: 9px;")
             bang.setToolTip("\n".join(["詞庫可能影響了這句："] + r["bank"]))
+            bang.setProperty("quick_tip", True)
             h.addWidget(bang, 0, Qt.AlignTop)
         if r["copy"]:
             b = button("", lambda: self.copy.emit(r["copy"]), ib=True)
             b.setIcon(icon("copy", T("muted"), 15, 1.9))
             b.setToolTip("複製這句")
+            b.setProperty("quick_tip", True)
             h.addWidget(b, 0, Qt.AlignTop)
         tip = [x for x in (f"聽到：{r['heard']}" if r["heard"] else "", r["tag"], r["tip"]) if x]
         self.setToolTip("\n".join(tip))
+        self.setProperty("quick_tip", True)   # shown at Qt's usual time, not after kit.TipRouter's second
 
     def enterEvent(self, e):
         self.update()
@@ -245,4 +248,4 @@ class LogPage(QWidget):
 
     def _copy(self, text: str):
         QApplication.clipboard().setText(text)
-        QToolTip.showText(self.cursor().pos(), "已複製", self)
+        Tip.flash(QCursor.pos() + QPoint(12, 18), "已複製", self, 1200)

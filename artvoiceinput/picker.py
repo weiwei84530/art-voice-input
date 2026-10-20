@@ -4,8 +4,8 @@ Design G2 (2026-10-20, the user's pick of the redesign's menus, made compact): t
 tabs (by how close they sound: 同音 / 不同聲調 / 模糊音 for Chinese, 近音字 / 詞庫 / 大小寫 for English) in a rail on
 the right, each a name over its count, the open one marked by an orange bar on its left. The pointer over a tab opens
 it. Candidates fill a grid top to bottom,
-then left to right: 4 columns for a single character, 2 for words; the word that is there now (the first of the first
-tab) is bold with an orange mark. Light or dark with the settings window (config.theme, ui/theme.py). Rows are answered
+then left to right: 4 columns for a single character, 2 for words. The word that is there now leads the first tab,
+bold with an orange mark, so the user sees what is chosen (a click on it keeps it); tab counts leave it out. Light or dark with the settings window (config.theme, ui/theme.py). Rows are answered
 with the mouse only (decided 2026-09-29: short spoken answers like 對 / 第二個 were often misheard). There is no
 timeout: the app closes the menu when the user's next click or key is somewhere else.
 """
@@ -62,8 +62,8 @@ class Picker(QWidget):
 
     @property
     def candidates(self) -> list[str]:
-        """Every candidate, tab after tab."""
-        return [w for _, words in self.tabs for w in words]
+        """Every candidate, tab after tab (not the word that is there now)."""
+        return [w for i, (_, words) in enumerate(self.tabs) for w in (words[1:] if i == 0 else words)]
 
     def show_loading(self, word: str, rect):
         self._answered = False
@@ -72,6 +72,8 @@ class Picker(QWidget):
 
     def show_candidates(self, word: str, tabs: list[tuple[str, list[str]]]):
         """tabs: (name, words) with words, in order; the first is opened."""
+        if tabs:
+            tabs = [(tabs[0][0], [word] + tabs[0][1])] + list(tabs[1:])
         self._fill(tabs, single=len(word) == 1 and not word.isascii(), message="沒有候選字")
         if self.isVisible():
             QTimer.singleShot(0, self._clamp)
@@ -211,7 +213,7 @@ class Picker(QWidget):
             p.setFont(themes.font(10.5, 600, num=True))
             p.setPen(self._c("acct") if on else self._c("muted"))
             p.drawText(QRectF(r.x() + 10, r.y() + 20, r.width() - 12, 14), Qt.AlignLeft | Qt.AlignVCenter,
-                       f"{len(words)} 個")
+                       f"{len(words) - (i == 0)} 個")
 
     # --- the mouse ---
     def _hit(self, pos):

@@ -202,13 +202,13 @@ class MicPage(QWidget):
         c.addWidget(self.float_sample)
         c.addWidget(dim("停在螢幕上，點一下開麥克風，拖到哪就留在哪", wrap=True))
         self.float_text_only = QCheckBox("未偵測到輸入區域時隱藏")
-        self.float_text_only.setToolTip("勾選時，游標不在可以打字的地方就隱藏浮動按鈕；不勾就到處都顯示")
         self.float_hide = QCheckBox("錄音時隱藏按鈕")
-        self.float_hide.setToolTip("勾選時，開麥克風時按鈕放大淡出，關掉後縮回來；不勾按鈕會留著，麥克風開著時再點一下就關掉")
-        for b in (self.float_text_only, self.float_hide):
+        for b, tip in ((self.float_text_only, "勾選時，游標不在可以打字的地方就隱藏浮動按鈕；不勾就到處都顯示"),
+                       (self.float_hide, "勾選時，開麥克風時按鈕放大淡出，關掉後縮回來；不勾按鈕會留著，麥克風開著時再點一下"
+                                         "就關掉")):
             b.setCursor(Qt.PointingHandCursor)
             b.toggled.connect(self._float_opts)
-            c.addWidget(b)
+            c.addLayout(hbox(b, Info(tip), None, spacing=6))
         c.addStretch(1)
         grid.addWidget(self.float_card, 0, 2)
         v.addLayout(grid)

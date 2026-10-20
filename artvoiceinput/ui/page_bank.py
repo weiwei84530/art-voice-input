@@ -4,16 +4,16 @@ order: 詞包 to switch on, 詞庫列表 (each word's 優先度 as a bar from �
 import os
 
 from pypinyin import lazy_pinyin
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QPoint, QRectF, Qt
 from PySide6.QtGui import QPainter, QPen
-from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QLineEdit, QSizePolicy, QToolTip, QVBoxLayout,
+from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QLineEdit, QSizePolicy, QVBoxLayout,
                                QWidget)
 
 from .. import hotwords as hw
 from .. import packs
 from ..memory import BOUNDARY
 from . import theme
-from .kit import Choice, Switch, T, button, card, dim, draw_icon, icon, label
+from .kit import Choice, Switch, T, Tip, button, card, dim, draw_icon, icon, label
 
 TABS = [("packs", "詞包", "勾選的詞包，裡面的詞會優先辨識；「編輯詞」用記事本打開，存檔後下次說話就生效"),
         ("words", "詞庫列表", "每個詞出現的機會：選字選到會提高，被換掉會降低；0% 不影響辨識"),
@@ -421,8 +421,8 @@ class BankPage(QWidget):
         if not word:
             return
         if not self.win.hotwords.add(word):
-            QToolTip.showText(self.add_input.mapToGlobal(self.add_input.rect().bottomLeft()), "單一個中文字不能加入詞庫",
-                              self.add_input)
+            Tip.flash(self.add_input.mapToGlobal(self.add_input.rect().bottomLeft()) + QPoint(0, 6),
+                      "單一個中文字不能加入詞庫", self.add_input, 2500)
             return
         self.add_input.clear()
         self._draw()

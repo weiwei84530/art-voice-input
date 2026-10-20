@@ -28,8 +28,9 @@ automatically; read it before reviving or redesigning something). Module docstri
   ```
 
   Then check the tail of `%LOCALAPPDATA%\ArtVoiceInput\artvoiceinput.log` for "就緒" / errors.
-- `--debug` (`config.DEBUG`, set by `app.main`) shows and enables the 一般 tab's 開發測試 rows (保存錄音,
-  短停頓就執行指令); a release hides them and forces them off. Autostart registers the launch as this run was made.
+- `--debug` (`config.DEBUG`, set by `app.main`) keeps every utterance's recording (`save_recordings`, no setting);
+  a release keeps none. There are no developer options in the window. Autostart registers the launch as this run
+  was made.
 - When the user decides something, record it here briefly as the current design (one line of why when it is not
   obvious); don't append dated narrative. Replace what it supersedes; move nothing back from history unless needed.
 
@@ -135,8 +136,9 @@ and runs (nothing decoded when nothing was said since the last commit).
 - Sound-alike (`_alike`, `candidates.sounds_alike`): same tones required, fuzzy pairs, dictionary readings of the
   command (any reading of a 多音字 only where the dictionary lacks the word). 金嘆號 → 驚嘆號; 都好, 問好, 放心 are not
   commands. Still taken: 封號 → 分號, 據點 → 句點.
-- Quick test (`early_commands`, debug only, off): a second VAD at `QUICK_SILENCE` 0.15s runs short pieces after a
-  pause at once when a command (`_quick_ok`, all commands for now), the following piece cut (`_quick_done`).
+- Quick commands (always on, the user's decision 2026-10-20; no setting): a second VAD at `QUICK_SILENCE` 0.15s
+  runs short pieces after a pause at once when a command (`_quick_ok`, all commands), the following piece cut
+  (`_quick_done`).
 - Spoken operations (`rules.py`, 自訂操作 tab): phrase(s) separated by 、 → one step: keys, text, 左右輸入文字
   (`WRAP`, caret put back between), or a command: 復原, 結束錄音, 全選 / 複製 / 剪下 / 貼上. Defaults
   (`rules.defaults`, rows fixed but the phrase; empty turns off): 換行、下一行 Shift+Enter, 空白, 括號 （）,
@@ -192,7 +194,8 @@ sentence end → 嗎 questions → trailing punctuation.
   that selects ≤4 Chinese characters or ≤3 English words (read 80ms after release). Tabs by closeness of sound
   (pointer over a tab opens it), design G2 made compact (the user's pick, not G3): a plain list with the tabs in a
   rail on the right (name over count), light or dark with `config.theme`; grid 4x4 (one character) or 2x5, only as
-  many columns as the fullest tab needs; no timeout, any click or key closes it. Chinese (`candidates.ranked`): 同音, 不同聲調, 模糊音 (`candidates._FUZZY`: zh/z,
+  many columns as the fullest tab needs; the word there now leads the first tab, bold with an orange mark (a click
+  on it keeps it; counts leave it out); no timeout, any click or key closes it. Chinese (`candidates.ranked`): 同音, 不同聲調, 模糊音 (`candidates._FUZZY`: zh/z,
   sh/s, an/ang, en/eng, r/l, ㄩㄣ/ㄧㄣ, ㄈ/ㄏㄨ, ㄋ/ㄌ …; fuzzy-only words from frequency 3, `app._FUZZY_MIN`; 詞庫
   words by sound too). English: 近音字 (`sounds.near`, weighted phoneme edit distance), 詞庫 (`sounds.alike`), 大小寫
   (`memory.variants`).
@@ -234,7 +237,7 @@ sentence end → 嗎 questions → trailing punctuation.
 ## Settings window and looks
 
 Defaults (`Config`) are the user's own setup: no hotkey, bubble, floating button (流光 look), 彩虹 glow, autostart
-on; 保存錄音 / 短停頓就執行指令 on by default only with --debug.
+on.
 
 Settings window (`ui/`, the 2026-10 redesign; mockups on the claude.ai Design canvas
 https://claude.ai/artifact/8UWdBateenAsqfZKeHPeiG, style C): frameless 960x640, Windows 11 rounded corners. Home:
@@ -248,10 +251,12 @@ place, 自訂 rows choose 按下按鍵 / 打出文字 / 左右包住, 新增一�
 included, is marked; 說標點的名字 and 說「詞的字」 cards below), 詞庫 (design 1: segmented tabs with counts, search,
 order), 辨識紀錄 (design 1: timeline, filters 全部 / 文字 / 指令 / 選字與復原, 清除紀錄 → `App._clear_log`), 系統
 (design 3: 外觀模式 亮色 / 暗色 / 跟隨系統 with sun / moon / computer icons, autostart, settings file drop zone,
-developer options with --debug, about). `config.theme` drives the settings window and the 選字 menu;
+about). `config.theme` drives the settings window and the 選字 menu;
 the floating button, bubble and glow are colored and not themed. `dev/settings_preview.py [page] [--dark]
 [shot.png]` shows the window on a temp copy of the user's data.
-- Each setting's help is an ⓘ after its name (`ui.kit.Info`), not tooltips.
+- Each setting's help is an ⓘ after its name (`ui.kit.Info`), not tooltips. Where an ⓘ doesn't fit (icon buttons,
+  swatches, phrase chips, dates, the 回首頁 strip) a hint shows after the pointer rests 1s (`kit.TipRouter`);
+  辨識紀錄's row tips come at Qt's usual time (`quick_tip`). All are `kit.Tip` (120ms fade), never Qt's tooltip.
 - 設定檔 (`userdata.py`): 匯出 writes all settings and the 詞庫 (list, aliases, 選字記憶, pack files) to one JSON; 匯入
   replaces settings except `userdata.LOCAL` (mic, autostart, float place) and merges the 詞庫 (file wins); 還原預設
   resets everything including the 詞庫.
@@ -298,7 +303,7 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
 - `dev/headless.py` runs the real App against a simulated text box (feed:WAV, op:PHRASE, clip:TEXT): default for
   tests. Audio: Windows TTS (zh-TW Hanhan, `dev/tts.ps1`) or the user's saved recordings (`recordings.py`,
   DATA_DIR/recordings with index.jsonl; development only, to be removed before release, keep it inside that module,
-  `App._keep`, the 開發測試 row and `save_recordings`). Saved recordings were decoded with that moment's 詞庫;
+  `App._keep` and `save_recordings`). Saved recordings were decoded with that moment's 詞庫;
   press-and-talk ones (before 2026-10-14) still hold the start sound the app cut out.
 - Never let a test write the user's real data files while their Art VoiceInput runs.
 - `dev/e2e.py` types into real Notepad / Windows Terminal: only when the user is away (it once typed into their

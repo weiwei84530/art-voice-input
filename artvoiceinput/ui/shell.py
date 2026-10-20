@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (QAbstractButton, QGraphicsDropShadowEffect, QGrap
 
 from .. import __version__
 from . import theme
-from .kit import T, Hub, Tip, draw_icon, logo_renderer
+from .kit import T, Hub, Tip, TipRouter, draw_icon, logo_renderer
 
 W, H = 960, 640
 ORG_HOME, ORG_PAGE = 380, 56
@@ -199,6 +199,7 @@ class Strip(QAbstractButton):
         super().__init__(parent)
         self.setCursor(Qt.PointingHandCursor)
         self.setAccessibleName("回首頁")
+        self.setToolTip("回首頁")   # after a second's rest (kit.TipRouter)
         self.setGeometry(0, 0, ORG_PAGE, H)
         self.opacity = 0.0
         self._h = 0.0              # the pointer over it, eased 0..1
@@ -217,11 +218,9 @@ class Strip(QAbstractButton):
 
     def enterEvent(self, e):
         self._go(1.0)
-        Tip.show_text(self.mapToGlobal(self.rect().center()) + QPointF(30, -14).toPoint(), "回首頁", self)
 
     def leaveEvent(self, e):
         self._go(0.0)
-        Tip.hide_text(self)
 
     def paintEvent(self, _):
         if self.opacity <= 0:
@@ -348,6 +347,7 @@ class Shell(QWidget):
         self.setWindowTitle("阿特語音輸入法 設定")
         self.setAttribute(Qt.WA_StyledBackground)
         self.setFont(theme.font(13))
+        self.setFocusPolicy(Qt.ClickFocus)
         self.pages = {}            # key -> PageFrame
         self.tiles = {}
         self.current = None        # open page key, None at home
@@ -379,6 +379,7 @@ class Shell(QWidget):
         self._anim.finished.connect(self._done)
         self.theme.changed.connect(self._restyle)
         self._restyle()
+        self._tips = TipRouter(self)
 
     # --- building ---
     def add_page(self, key: str, page):
@@ -410,6 +411,7 @@ class Shell(QWidget):
         if self.current is not None or self._anim.state() == QVariantAnimation.Running:
             return
         self.current = key
+        self._park_focus()
         frame = self.pages[key]
         self.stack.setCurrentWidget(frame)
         frame.scroll.verticalScrollBar().setValue(0)
@@ -427,10 +429,16 @@ class Shell(QWidget):
         if self.current is None or self._anim.state() == QVariantAnimation.Running:
             return
         Tip.hide_text(self.strip)
+        self._park_focus()
         tile = self.tiles[self.current]
         self._from = (TILE_X + 22, TILE_Y + tile.y() + (TILE_H - 34) // 2, 34)
         self.current = None
         self._run(-1)
+
+    def _park_focus(self):
+        """Focus on the window itself: the clicked tile (or a page's control) being hidden handed the focus on as if
+        Tab was pressed, and the next control (詞庫's first switch) showed its keyboard ring."""
+        self.setFocus(Qt.OtherFocusReason)
 
     def show_home_now(self):
         """Home at once (the window opened again)."""

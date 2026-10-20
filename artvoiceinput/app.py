@@ -454,7 +454,7 @@ class App(QObject):
             if self.listener is None:
                 self.listener = Listener(str(models.vad_path()), self._on_listen_speech, self._on_listen_piece,
                                          self._on_listen_quick)
-            self.listener.start(self.cfg.mic, quick=self.cfg.early_commands)
+            self.listener.start(self.cfg.mic, quick=True)
         except Exception as e:
             log.exception("listen start failed")
             self._notify(f"無法開啟麥克風：{e}")
@@ -730,7 +730,7 @@ class App(QObject):
         self._submit_piece(piece, probe)
 
     def _on_listen_quick(self, piece):
-        """Listener thread: short speech after a pause stopped for listen.QUICK_SILENCE (config.early_commands): a
+        """Listener thread: short speech after a pause stopped for listen.QUICK_SILENCE (always, 2026-10-20): a
         command runs now, before the piece ends (_piece_job, quick)."""
         with self._early_lock:
             if self._early_pieces is not None:   # the press is not known to listen yet
@@ -1761,6 +1761,9 @@ class App(QObject):
         menu = self._menu
         self._menu = None
         if menu and menu[0] == "pick" and word:
+            if word == menu[1].text.strip():   # the word that is there now (the menu's first): kept as it is
+                log.info("menu pick: kept %s", word)
+                return
             self._apply_pick(menu[1], word)
 
     def _apply_pick(self, sel, word: str):
@@ -1897,8 +1900,8 @@ def _plain(text: str) -> str:
 
 
 def _quick_ok(op, typed) -> bool:
-    """A command a quick piece may run (config.early_commands): any, while the user tries out where it fires
-    wrongly (2026-10-17, their request; it was only those typing text or a new line for a few hours)."""
+    """A command a quick piece may run: any (2026-10-17, the user's request; it was only those typing text or a new
+    line for a few hours). Quick pieces are the default since 2026-10-20 (the user's decision)."""
     return op is not None or bool(typed)
 
 

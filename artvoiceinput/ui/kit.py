@@ -1,10 +1,10 @@
 """Building blocks of the redesigned settings window: icons, the switch, cards, chips, segmented buttons, ⓘ."""
-from PySide6.QtCore import (Property, QByteArray, QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRect, QRectF,
-                            QSize, Qt, QVariantAnimation, Signal)
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QGuiApplication, QIcon, QImage, QPainter, QPen, QPixmap
+from PySide6.QtCore import (Property, QByteArray, QEasingCurve, QEvent, QObject, QPoint, QPointF, QPropertyAnimation,
+                            QRect, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal)
+from PySide6.QtGui import QColor, QCursor, QFont, QFontMetrics, QGuiApplication, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import (QAbstractButton, QButtonGroup, QFrame, QHBoxLayout, QLabel, QLayout, QPushButton,
-                               QSizePolicy, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QAbstractButton, QApplication, QButtonGroup, QFrame, QHBoxLayout, QLabel, QLayout,
+                               QPushButton, QSizePolicy, QVBoxLayout, QWidget)
 
 from . import theme
 
@@ -286,6 +286,19 @@ class Tip(QWidget):
         cls.ready()._show(pos, text, owner)
 
     @classmethod
+    def flash(cls, pos: QPoint, text: str, owner: QWidget, ms: int = 1800):
+        """Shown at once and gone after ms (已複製, a word the 詞庫 can't take)."""
+        cls.show_text(pos, text, owner)
+        tip = cls._one
+        tip._flash = getattr(tip, "_flash", None) or QTimer(tip, singleShot=True)
+        try:
+            tip._flash.timeout.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+        tip._flash.timeout.connect(lambda: cls.hide_text(owner))
+        tip._flash.start(ms)
+
+    @classmethod
     def hide_text(cls, owner: QWidget):
         if cls._one is not None and cls._one.owner is owner:
             cls._one._fade(0.0)
@@ -352,6 +365,51 @@ class Tip(QWidget):
         p.setFont(theme.font(12))
         p.drawText(QRectF(self.rect()).adjusted(10, 7, -10, -7), Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignVCenter,
                    self.text)
+
+
+class TipRouter(QObject):
+    """Every tooltip (setToolTip) of a window shown as a Tip: after the pointer rests DELAY on the widget (the user's
+    choice, 2026-10-20, for icon buttons, swatches, chips … where an ⓘ beside them doesn't fit), or at Qt's usual
+    time for a widget marked quick_tip (辨識紀錄's rows, ! and copy). Qt's own tooltip never shows there."""
+    DELAY = 1000
+
+    def __init__(self, window: QWidget):
+        super().__init__(window)
+        self.window = window
+        self.target = None
+        self.timer = QTimer(self, singleShot=True, interval=self.DELAY)
+        self.timer.timeout.connect(self._fire)
+        QApplication.instance().installEventFilter(self)
+
+    def eventFilter(self, obj, e):
+        t = e.type()
+        if t not in _TIP_EVENTS or not isinstance(obj, QWidget) or obj.window() is not self.window:
+            return False
+        if t == QEvent.ToolTip:
+            w = obj
+            while w is not None and not w.toolTip():
+                w = w.parentWidget()
+            if w is not None and w.property("quick_tip"):
+                Tip.show_text(e.globalPos() + QPoint(12, 18), w.toolTip(), w)
+            return True
+        if t == QEvent.Enter:
+            if obj.toolTip() and not obj.property("quick_tip"):
+                self.target = obj
+                self.timer.start()
+        else:
+            if obj is self.target:
+                self.timer.stop()
+                self.target = None
+            Tip.hide_text(obj)
+        return False
+
+    def _fire(self):
+        w = self.target
+        if w is not None and w.isVisible() and w.underMouse() and w.toolTip():
+            Tip.show_text(QCursor.pos() + QPoint(12, 18), w.toolTip(), w)
+
+
+_TIP_EVENTS = {QEvent.ToolTip, QEvent.Enter, QEvent.Leave, QEvent.MouseButtonPress, QEvent.Hide}
 
 
 class Info(QLabel):

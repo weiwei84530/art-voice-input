@@ -30,7 +30,7 @@ SILENCE = 0.3        # seconds of silence that end a piece
 LEAD = 0.5           # seconds of audio decoded before a piece
 TAIL = 0.25          # and after it
 MAX_PIECE = 30       # seconds; X-ASR fails beyond 40s
-# a quick piece (config.early_commands, a development test, 2026-10-17): speech after at least SILENCE of silence that
+# a quick piece (always on since 2026-10-20, the user's decision; tried from 2026-10-17): speech after at least SILENCE of silence that
 # stops for QUICK_SILENCE and is at most QUICK_MAX long, handed over before the VAD ends the piece, so a command said
 # alone can run 0.15s sooner (dev/cmdlab: at 0.15s about 5 text utterances in 616 had a command word cut out alone)
 QUICK_SILENCE = 0.15
