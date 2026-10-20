@@ -159,9 +159,9 @@ class Brand(QWidget):
         vw = fm.horizontalAdvance(__version__)
         bottom = 550                                     # the digits' ink ends here
         base = bottom - fm.tightBoundingRect(__version__).bottom()
+        p.setOpacity(a * 0.9)   # as 版本 (2026-10-21, the user's request)
         p.drawText(QPointF(x, base), __version__)
         p.setFont(theme.font(13))
-        p.setOpacity(a * 0.9)
         p.drawText(QPointF(x + vw + 8, bottom - QFontMetricsF(p.font()).tightBoundingRect("版本").bottom()), "版本")
         p.setOpacity(a)
         p.setFont(theme.font(22, 600, num=True))
