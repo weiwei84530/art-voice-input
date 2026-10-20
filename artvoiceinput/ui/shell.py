@@ -12,10 +12,11 @@ from PySide6.QtWidgets import (QAbstractButton, QApplication, QGraphicsDropShado
 
 from .. import __version__
 from . import theme
-from .kit import T, Hub, Tip, TipRouter, draw_icon, logo_renderer
+from .kit import T, Hub, Tip, TipRouter, calm, draw_icon, logo_renderer
 
 W, H = 960, 640
 ORG_HOME, ORG_PAGE = 380, 56
+VERSION_PX, VERSION_WEIGHT = 44, 500   # the version on the brand block (was 56 bold)
 TILE_X, TILE_Y, TILE_W, TILE_H, TILE_GAP = 404, 40, 532, 86, 8
 FLY_END = (84, 18, 40)          # the page title's icon: x, y, size
 HEADER = 76
@@ -84,7 +85,7 @@ class Brand(QWidget):
         self._pulse.stop()
 
     def _tick(self):
-        if self.fade < 1 and self.status == "就緒" and self.window().isVisible():
+        if self.fade < 1 and self.status == "就緒" and self.window().isVisible() and not calm():
             self.update(QRect(34 + 3 - 14, round(self._dot_y) - 14, 28, 28))   # only the dot
 
     def _text(self, p, rect: QRectF, align, text: str, shift: float = 0, grow: float = 0):
@@ -132,7 +133,7 @@ class Brand(QWidget):
         white = QColor("#FFFFFF")
         dot = QPointF(x + 3.5, self._dot_y)
         p.setPen(Qt.NoPen)
-        if self.status == "就緒":
+        if self.status == "就緒" and not calm():
             k = ((time.monotonic() - self._t0) / self.PULSE_S) % 1.0
             p.setBrush(QColor(255, 255, 255, round(110 * (1 - k) ** 1.6)))
             r = 3.5 + 7.5 * SOFT(k)
@@ -151,12 +152,17 @@ class Brand(QWidget):
         p.setOpacity(a * 0.92)
         self._text(p, QRectF(x, 572, 330, 20), Qt.AlignLeft | Qt.AlignVCenter, "語音在這台電腦上辨識，不會上傳")
         p.setOpacity(a)
-        p.setFont(theme.font(56, 700, num=True))
-        vw = p.fontMetrics().horizontalAdvance(__version__)
-        self._text(p, QRectF(x, 496, 300, 64), Qt.AlignLeft | Qt.AlignBottom, __version__)
+        # the version lighter and smaller than the name (2026-10-20, the user's request: only the name stands out);
+        # 版本's ink ends where the digits' does
+        p.setFont(theme.font(VERSION_PX, VERSION_WEIGHT, num=True))
+        fm = QFontMetricsF(p.font())
+        vw = fm.horizontalAdvance(__version__)
+        bottom = 550                                     # the digits' ink ends here
+        base = bottom - fm.tightBoundingRect(__version__).bottom()
+        p.drawText(QPointF(x, base), __version__)
         p.setFont(theme.font(13))
         p.setOpacity(a * 0.9)
-        self._text(p, QRectF(x + vw + 10, 496, 100, 58), Qt.AlignLeft | Qt.AlignBottom, "版本")
+        p.drawText(QPointF(x + vw + 8, bottom - QFontMetricsF(p.font()).tightBoundingRect("版本").bottom()), "版本")
         p.setOpacity(a)
         p.setFont(theme.font(22, 600, num=True))
         self._text(p, QRectF(x, 438, 330, 30), Qt.AlignLeft | Qt.AlignVCenter, "Art VoiceInput", 3, 1.5)
@@ -196,6 +202,9 @@ class Tile(QAbstractButton):
 
     def _go(self, end: float):
         self._anim.stop()
+        if calm():
+            self._hover(end)
+            return
         self._anim.setStartValue(self._h)
         self._anim.setEndValue(end)
         self._anim.start()
@@ -274,6 +283,9 @@ class Strip(QAbstractButton):
 
     def _go(self, end: float):
         self._anim.stop()
+        if calm():
+            self._hover(end)
+            return
         self._anim.setStartValue(self._h)
         self._anim.setEndValue(end)
         self._anim.start()
@@ -526,6 +538,10 @@ class Shell(QWidget):
         self.stack.show()
         self.strip.show()
         self.fly.show()
+        if calm():   # 節流模式: straight to the end
+            self._frame(1.0)
+            self._done()
+            return
         self._anim.setDuration(self.FORWARD_MS if direction > 0 else self.BACK_MS)
         self._anim.start()
 

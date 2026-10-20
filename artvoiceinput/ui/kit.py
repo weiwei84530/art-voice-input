@@ -1,4 +1,7 @@
 """Building blocks of the redesigned settings window: icons, the switch, cards, chips, segmented buttons, ⓘ."""
+import math
+import time
+
 from PySide6.QtCore import (Property, QByteArray, QEasingCurve, QEvent, QObject, QPoint, QPointF, QPropertyAnimation,
                             QRect, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal)
 from PySide6.QtGui import QColor, QCursor, QFont, QFontMetrics, QGuiApplication, QIcon, QImage, QPainter, QPen, QPixmap
@@ -7,6 +10,22 @@ from PySide6.QtWidgets import (QAbstractButton, QApplication, QButtonGroup, QFra
                                QPushButton, QSizePolicy, QVBoxLayout, QWidget)
 
 from . import theme
+
+_calm = False
+
+
+def calm() -> bool:
+    """節流模式 (config.orb_lite, on the 系統 page): the settings window skips its animations (page transition,
+    hovers, the switch knob, the glow editor's slide) and its endless ones (the ready dot, the state pills)."""
+    return _calm
+
+
+def set_calm(on: bool):
+    global _calm
+    _calm = on
+    Pill._tick()
+    for w in QApplication.topLevelWidgets():
+        w.update()
 
 # 24x24 line icons (stroke), with an optional filled part
 ICONS = {
@@ -212,6 +231,9 @@ class Switch(QAbstractButton):
 
     def _slide(self, on: bool):
         self._anim.stop()
+        if calm():
+            self._set(1.0 if on else 0.0)
+            return
         self._anim.setEndValue(1.0 if on else 0.0)
         self._anim.start()
 
@@ -587,38 +609,149 @@ class FlowLayout(QLayout):
 
 
 class Pill(QLabel):
-    """A small rounded state label: 已設定 (orange dot) or 未使用 (gray)."""
+    """A small rounded state label (design M2, 2026-10-20, the user's pick): on, a solid orange pill with a white dot
+    that breathes, a soft orange ring around it at its widest when the dot is brightest; off, gray and still. All pills
+    breathe together: the phase is the clock's, not the time each was turned on (the user's request)."""
+    PERIOD = 1.8      # one breath, seconds
+    ROOM = 3          # around the pill, for its ring
+    _all = []         # live pills, for the one shared timer
+    _timer = None
 
     def __init__(self, text: str = "", on: bool = False):
         super().__init__(text)
         self.on = on
-        self.setFont(theme.font(11.5, 500))
-        self.setContentsMargins(9 + 11, 2, 9, 2)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.set(text, on)
+        Pill._all.append(self)
 
     def set(self, text: str, on: bool):
         self.on = on
         self.setText(text)
-        self.setContentsMargins(9 + (11 if on else 0), 2, 9, 2)
+        self.setFont(theme.font(11.5, 700 if on else 500))
+        g = self.ROOM
+        self.setContentsMargins(g + 9 + (10 if on else 0), g + 2, g + 10, g + 2)
+        self._tick()
         self.update()
+
+    @classmethod
+    def _tick(cls):
+        """Start the shared timer while a breathing pill shows, stop it otherwise."""
+        live = not calm() and any(_alive(p) and p.on and p.isVisible() for p in cls._all)
+        if cls._timer is None:
+            cls._timer = QTimer(interval=33)
+            cls._timer.timeout.connect(cls._frame)
+        if live and not cls._timer.isActive():
+            cls._timer.start()
+        elif not live and cls._timer.isActive():
+            cls._timer.stop()
+
+    @classmethod
+    def _frame(cls):
+        cls._all = [p for p in cls._all if _alive(p)]
+        for p in cls._all:
+            if p.on and p.isVisible():
+                p.update()
+        cls._tick()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        Pill._tick()
+
+    def hideEvent(self, e):
+        super().hideEvent(e)
+        QTimer.singleShot(0, Pill._tick)
 
     def paintEvent(self, e):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        if self.on:
-            p.setPen(Qt.NoPen)
-            p.setBrush(T("accbg"))
-        else:
+        g = self.ROOM
+        r = QRectF(self.rect()).adjusted(g + 0.5, g + 0.5, -g - 0.5, -g - 0.5)
+        rad = r.height() / 2
+        if not self.on:
             p.setPen(QPen(T("line"), 1))
             p.setBrush(T("tile2"))
-        p.drawRoundedRect(r, r.height() / 2, r.height() / 2)
-        if self.on:
-            p.setBrush(T("acc"))
-            p.drawEllipse(QPointF(9 + 3, r.center().y()), 3, 3)
-        p.setPen(T("acct") if self.on else T("muted"))
+            p.drawRoundedRect(r, rad, rad)
+            p.setPen(T("muted"))
+            p.setFont(self.font())
+            p.drawText(self.contentsRect(), Qt.AlignVCenter | Qt.AlignLeft, self.text())
+            return
+        # breath 0..1 from the clock: 1 = the ring widest and the dot brightest
+        still = calm()
+        b = 0.0 if still else 0.5 - 0.5 * math.cos(2 * math.pi * (time.monotonic() % self.PERIOD) / self.PERIOD)
+        p.setPen(Qt.NoPen)
+        if b > 0.01:
+            ring = QColor(theme.ACCENT)
+            ring.setAlphaF(0.16 * b + 0.06)
+            p.setBrush(ring)
+            w = g * b
+            p.drawRoundedRect(r.adjusted(-w, -w, w, w), rad + w, rad + w)
+        p.setBrush(T("acc"))
+        p.drawRoundedRect(r, rad, rad)
+        dot = QColor("#FFFFFF")
+        dot.setAlphaF(1.0 if still else 0.45 + 0.55 * b)
+        p.setBrush(dot)
+        p.drawEllipse(QPointF(r.x() + 9 + 3, r.center().y()), 3, 3)
+        p.setPen(QColor("#FFFFFF"))
         p.setFont(self.font())
         p.drawText(self.contentsRect(), Qt.AlignVCenter | Qt.AlignLeft, self.text())
+
+
+class Slides(QWidget):
+    """Panes side by side, one shown: going to another slides the shown one out to the left and the next in from the
+    right (design A1, 2026-10-20, the user's pick for the glow editor). As tall as the tallest pane."""
+    MS = 420
+
+    def __init__(self, *panes: QWidget):
+        super().__init__()
+        self.panes = list(panes)
+        for w in self.panes:
+            w.setParent(self)
+        self.index = 0
+        self._pos = 0.0
+        self._anim = QVariantAnimation(self, duration=self.MS, easingCurve=QEasingCurve.OutCubic)
+        self._anim.valueChanged.connect(self._set_pos)
+
+    def go(self, index: int):
+        if index == self.index and not self._anim.state():
+            return
+        self.index = index
+        self._anim.stop()
+        if calm() or not self.isVisible():
+            self._set_pos(float(index))
+            return
+        self._anim.setStartValue(self._pos)
+        self._anim.setEndValue(float(index))
+        self._anim.start()
+
+    def _set_pos(self, v):
+        self._pos = float(v)
+        self._place()
+
+    def _place(self):
+        w, h = self.width(), self.height()
+        for i, pane in enumerate(self.panes):
+            x = round((i - self._pos) * (w + 24))
+            pane.setGeometry(x, 0, w, h)
+            pane.setVisible(-w - 24 < x < w + 24)
+
+    def resizeEvent(self, e):
+        self._place()
+
+    def sizeHint(self):
+        hints = [p.sizeHint() for p in self.panes]
+        return QSize(max(s.width() for s in hints), max(s.height() for s in hints))
+
+    def minimumSizeHint(self):
+        hints = [p.minimumSizeHint() for p in self.panes]
+        return QSize(max(s.width() for s in hints), max(s.height() for s in hints))
+
+
+def _alive(w) -> bool:
+    try:
+        w.objectName()
+        return True
+    except RuntimeError:   # the C++ widget is gone
+        return False
 
 
 class Keycap(QWidget):

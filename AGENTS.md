@@ -248,19 +248,25 @@ on.
 Settings window (`ui/`, the 2026-10 redesign; mockups on the claude.ai Design canvas
 https://claude.ai/artifact/8UWdBateenAsqfZKeHPeiG, style C): frameless 960x640, Windows 11 rounded corners. Home:
 the orange brand block (status with a pulsing dot while ready, logo, 阿特語音輸入法, version from
-`artvoiceinput.__version__`; logo and names carry the logo's solid shadow, from design H5; the version, the status line
-and the lines below have none) and six tiles, each icon
+`artvoiceinput.__version__`, 44px medium so only the name stands out, 版本's ink bottom on the digits'; logo and
+names carry the logo's solid shadow, from design H5; the version, the status line and the lines below have none) and
+six tiles, each icon
 bled large into the tile's bottom right (tilted 5°; hover lifts it up-right, turning clockwise). A tile opens its page
 (transition Fly): the block shrinks to a 56px strip that goes home, the icon flies to the page title. Pages: 麥克風
-(hotkey card, 點進輸入框時 radio, floating button + its two options; auto-off chips, stop_on_enter, device with 測試麥克風 (`audio.LevelProbe`, its own stream; meter design I1:
-24 segments, the last six warmer, a falling peak tick; stops when the page hides), mute), 外觀與聲音
-(live preview, button looks, glow tiles + motions, 自訂 fold for colors / sliders / edges, mark color, 節流模式,
-sounds), 語音指令 (design C4: "當我說 [chips] 就 [what]" grouped with an orange bar per group, phrase chips edited in
+(design M2: hotkey card, 點進輸入框時 radio, floating button card with a 顯示浮動按鈕 row and its two options under
+it; no orange outline on cards (outlines answer the pointer only); each card's state pill (`kit.Pill`) is solid
+orange and breathes while on, all pills in step with the clock; auto-off chips, stop_on_enter, device with 測試麥克風
+(`audio.LevelProbe`, its own stream; meter design I1: 24 segments, the last six warmer, a falling peak tick; stops
+when the page hides), mute), 外觀與聲音 (on one screen, no scrolling: preview beside the mark colors (design A3,
+named), button looks beside the glow, whose 自訂顏色、速度與邊緣 slides its editor in its place (design A1,
+`kit.Slides`), sounds across), 語音指令 (design C4: "當我說 [chips] 就 [what]" grouped with an orange bar per group, phrase chips edited in
 place, 自訂 rows choose 按下按鍵 / 打出文字 / 左右包住, 新增一句; a phrase said for two things, punctuation names
 included, is marked; 說標點的名字 and 說「詞的字」 cards below), 詞庫 (design 1: segmented tabs with counts, search,
 order), 辨識紀錄 (design 1: timeline, filters 全部 / 文字 / 指令 / 選字與復原, 清除紀錄 → `App._clear_log`), 系統
-(design 3: 外觀模式 亮色 / 暗色 / 跟隨系統 with sun / moon / computer icons, autostart, settings file drop zone,
-about). `config.theme` drives the settings window and the 選字 menu;
+(design 3: 外觀模式 亮色 / 暗色 / 跟隨系統 with sun / moon / computer icons, autostart, 節流模式, settings file
+drop zone, about). 節流模式 (`orb_lite`) also calms this window (`kit.calm`): pages switch at once, no hover,
+switch or slide animations, the ready dot and state pills hold still, the preview's glow stands still. Small icon
+animations for the three 麥克風 cards are still being designed (round 13 on the canvas). `config.theme` drives the settings window and the 選字 menu;
 the floating button, bubble and glow are colored and not themed. `dev/settings_preview.py [page] [--dark]
 [shot.png]` shows the window on a temp copy of the user's data.
 - One typeface, Noto Sans TC (Bahnschrift for numbers): the window sets the application's font, since a style

@@ -9,7 +9,8 @@ from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QMessageBox, QVBoxLayout
 
 from .. import __version__, paths, userdata
 from . import theme
-from .kit import Choice, Switch, T, button, card, dim, draw_icon, hbox, icon, label, sep, titled, vbox
+from .kit import (Choice, Info, Switch, T, button, card, dim, draw_icon, hbox, icon, label, sep, set_calm, titled,
+                  vbox)
 
 
 class Drop(QWidget):
@@ -110,6 +111,16 @@ class SysPage(QWidget):
         self.auto.toggled.connect(self._auto)
         self.auto_note = label("")
         row("開機時自動啟動", "登入 Windows 後在背景啟動，常駐在右下角", hbox(self.auto, self.auto_note, None, spacing=10))
+        # 節流模式 (moved here from 外觀與聲音, 2026-10-20, the user's request): the orbs and the glow draw less, and
+        # this window skips its animations (kit.calm)
+        self.lite = Switch(name="節流模式")
+        self.lite.toggled.connect(self._lite)
+        self.lite_note = label("")
+        row("節流模式", "省 CPU：按鈕和光暈畫得簡單，這個視窗不播動畫",
+            hbox(self.lite, self.lite_note, Info(
+                "開啟後：能量球每秒 15 張、光暈較粗略，螢幕邊緣光暈的波浪、流星、漣漪每秒 24 張；這個設定視窗直接切換頁面，"
+                "不播滑過、燈號閃爍和預覽的動畫。關閉時能量球每秒 30 張、會移動的光暈每秒 48 張，比較順，但 CPU 用量約多七成"),
+                None, spacing=10))
         drop = Drop()
         drop.dropped.connect(self._import_file)
         drop.clicked.connect(self._import_pick)
@@ -146,6 +157,9 @@ class SysPage(QWidget):
         self._mode_note()
         self.auto.set_quiet(self.cfg.autostart)
         self._auto_note()
+        self.lite.set_quiet(self.cfg.orb_lite)
+        self._lite_note()
+        set_calm(self.cfg.orb_lite)
 
     def summary(self) -> str:
         return f"{dict(theme.MODES)[self.cfg.theme]}模式、開機" + ("自動啟動" if self.cfg.autostart else "不啟動") + "、設定檔"
@@ -168,6 +182,17 @@ class SysPage(QWidget):
         else:
             text = "不管 Windows 怎麼設，都用" + ("暗色" if self.cfg.theme == "dark" else "亮色")
         self.mode_row.sub.setText(text)
+
+    # --- 節流模式 ---
+    def _lite(self, on: bool):
+        self.cfg.orb_lite = on
+        self.win.save()
+        set_calm(on)
+        self._lite_note()
+        self.win.look_page.refresh_orb()
+
+    def _lite_note(self):
+        self.lite_note.setText("已開啟，動畫從簡" if self.cfg.orb_lite else "動畫完整播放")
 
     # --- autostart ---
     def _auto(self, on: bool):

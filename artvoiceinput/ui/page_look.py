@@ -1,6 +1,6 @@
-"""外觀與聲音: a preview (a window with the draft marked, the floating button, the glow along the edges), then the
-button look and size, the edge glow (styles, motion, and under 自訂 its parameters, colors and edges), the draft's mark
-color, 節流模式 and the sounds."""
+"""外觀與聲音, on one screen: a preview (a window with the draft marked, the floating button, the glow along the
+edges) beside the draft's mark color, the button look and size beside the edge glow (styles and motion; 自訂顏色、速度與邊緣
+slides its parameters, colors and edges in their place), the sounds across."""
 import time
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
@@ -14,8 +14,9 @@ from ..floatbtn import _SIZE as _MIC_SIZE, OrbButton, _paint_mic
 from ..highlight import COLORS as MARK_COLORS
 from ..orbs import LOOKS, draw as draw_orb, palette
 from . import theme
-from .kit import Choice, Info, Switch, T, button, card, hbox, label, sep
+from .kit import Choice, Info, Slides, T, button, calm, card, dim, hbox, icon, label, sep
 
+PREVIEW_H = 132     # the preview, as tall as the mark card beside it
 PREVIEW_MS = 3300   # a glow previewed shows this long, its fade-out included (App._preview_glow)
 _SET_PAUSE = 0.8    # seconds between the start and the end sound of a set
 SLIDERS = (("turn", "旋轉速度", 0, 40), ("pulse", "呼吸", 0, 100), ("depth", "寬度", 40, 200), ("bright", "亮度", 30, 160))
@@ -66,13 +67,13 @@ class Preview(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setFixedHeight(160)
+        self.setFixedHeight(PREVIEW_H)
         self.colors = palette(None)
         self.glow_on = True
         self.mark = QColor(MARK_COLORS[0][0])
         self.orb = OrbSample(self)
         self._t0 = time.monotonic()
-        self._timer = QTimer(self, interval=40, timeout=self.update)
+        self._timer = QTimer(self, interval=40, timeout=lambda: None if calm() else self.update())
 
     def showEvent(self, e):
         self._timer.start()
@@ -81,7 +82,7 @@ class Preview(QWidget):
         self._timer.stop()
 
     def resizeEvent(self, e):
-        self.orb.move(self.width() - 70 - self.orb.width() // 2, (self.height() - self.orb.height()) // 2)
+        self.orb.move(self.width() - 52 - self.orb.width() // 2, (self.height() - self.orb.height()) // 2)
 
     def paintEvent(self, _):
         p = QPainter(self)
@@ -99,7 +100,7 @@ class Preview(QWidget):
         if self.glow_on:
             self._edges(p, r)
         # the window
-        w = QRectF(36, 28, min(420, r.width() - 200), 100)
+        w = QRectF(22, 22, r.width() - 22 - 104, r.height() - 44)
         for i, a in enumerate((10, 6, 3)):
             p.setBrush(QColor(0, 0, 0, a))
             p.drawRoundedRect(w.adjusted(-i, 4 + i, i, 8 + i), 7, 7)
@@ -109,10 +110,10 @@ class Preview(QWidget):
         p.setPen(Qt.NoPen)
         p.setBrush(T("tile2"))
         p.drawRoundedRect(QRectF(w.x() + 0.5, w.y() + 0.5, w.width() - 1, 18), 6, 6)
-        p.setFont(theme.font(14.5))
+        p.setFont(theme.font(13.5))
         fm = p.fontMetrics()
         a, b = "明天下午三點開會，", "記得帶上週的報告"
-        x, y = w.x() + 14, w.y() + 30
+        x, y = w.x() + 12, w.y() + 30
         p.setPen(T("ink"))
         p.drawText(QPointF(x, y + fm.ascent()), a)
         bx = x + fm.horizontalAdvance(a)
@@ -128,7 +129,7 @@ class Preview(QWidget):
 
     def _edges(self, p, r):
         """The colors run along the four edges, fading inward."""
-        shift = ((time.monotonic() - self._t0) / 4.0) % 1.0
+        shift = 0.0 if calm() else ((time.monotonic() - self._t0) / 4.0) % 1.0
         cols = [QColor(c) for c in self.colors] + [QColor(self.colors[0])]
         for horizontal, rect, start, end in (
                 (True, QRectF(r.left(), r.top(), r.width(), 14), r.topLeft(), r.topRight()),
@@ -276,6 +277,49 @@ class Swatch(QAbstractButton):
             p.drawText(r, Qt.AlignCenter, self.text_)
 
 
+class MarkOption(QAbstractButton):
+    """A mark color with its name (design A3); color "" draws a + (自訂 with no color of its own yet)."""
+
+    def __init__(self, color: str, name: str):
+        super().__init__()
+        self.color, self.name = color, name
+        self.setCheckable(True)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedHeight(30)
+        self.setAccessibleName(name)
+
+    def enterEvent(self, e):
+        self.update()
+
+    def leaveEvent(self, e):
+        self.update()
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        r = QRectF(self.rect())
+        if self.isChecked() or self.underMouse():
+            p.setPen(Qt.NoPen)
+            p.setBrush(T("accbg") if self.isChecked() else T("tile2"))
+            p.drawRoundedRect(r, 6, 6)
+        sw = QRectF(6, (r.height() - 22) / 2, 22, 22)
+        if self.color:
+            p.setPen(QPen(T("line"), 1))
+            p.setBrush(QColor("#FFFFFF"))
+            p.drawRoundedRect(sw, 5, 5)
+            p.setBrush(QColor(self.color))
+            p.drawRoundedRect(sw, 5, 5)
+        else:
+            p.setPen(QPen(T("muted"), 1.5))
+            p.setBrush(Qt.NoBrush)
+            p.drawRoundedRect(sw.adjusted(0.75, 0.75, -0.75, -0.75), 5, 5)
+            p.drawLine(sw.center() - QPointF(5, 0), sw.center() + QPointF(5, 0))
+            p.drawLine(sw.center() - QPointF(0, 5), sw.center() + QPointF(0, 5))
+        p.setPen(T("ink") if self.color or self.isChecked() else T("muted"))
+        p.setFont(theme.font(12.5, 700 if self.isChecked() else 500))
+        p.drawText(QRectF(36, 0, r.width() - 38, r.height()), Qt.AlignLeft | Qt.AlignVCenter, self.name)
+
+
 class LookPage(QWidget):
     title = "外觀與聲音"
 
@@ -284,17 +328,43 @@ class LookPage(QWidget):
         self.win, self.cfg = win, win.cfg
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(12)
-        self.preview = Preview()
-        v.addWidget(self.preview)
-        self.preview.orb.keep = lambda: self.cfg.float_keep
-
+        v.setSpacing(10)
+        # 2026-10-20, the user's design: everything on one screen, no scrolling. The preview and the mark colors (design
+        # A3) side by side, the button looks and the glow (its editor a second pane, design A1), 提示音 across
         top = QGridLayout()
         top.setSpacing(12)
         top.setColumnStretch(0, 1)
         top.setColumnStretch(1, 1)
+        self.preview = Preview()
+        self.preview.orb.keep = lambda: self.cfg.float_keep
+        top.addWidget(self.preview, 0, 0)
+        # 草稿反白顏色: named colors in three columns, 自訂 last
+        c_mark, c = card()
+        c.addLayout(hbox(label("草稿反白顏色", h3=True), Info("麥克風開著時，講完還可能被修正的字會疊上這個顏色，定稿後消失"),
+                         None, spacing=6))
+        mark_grid = QGridLayout()
+        mark_grid.setSpacing(4)
+        self.marks = {}
+        for i, (color, name) in enumerate(MARK_COLORS):
+            m = MarkOption(color, name)
+            m.clicked.connect(lambda _=False, col=color: self._mark(col))
+            self.marks[color.upper()] = m
+            mark_grid.addWidget(m, i // 3, i % 3)
+        self.mark_custom = MarkOption("", "自訂")
+        self.mark_custom.clicked.connect(self._pick_mark)
+        mark_grid.addWidget(self.mark_custom, len(MARK_COLORS) // 3, len(MARK_COLORS) % 3)
+        c.addLayout(mark_grid)
+        c.addStretch(1)
+        top.addWidget(c_mark, 0, 1)
+        v.addLayout(top)
+
+        mid = QGridLayout()
+        mid.setSpacing(12)
+        mid.setColumnStretch(0, 1)
+        mid.setColumnStretch(1, 1)
         # 按鈕樣式
         c_look, c = card()
+        c.layout().setSpacing(10)
         c.addLayout(hbox(label("按鈕樣式", h3=True), Info("浮動按鈕和語音氣泡的樣子：原本的麥克風，或跟光暈同色的能量球"
                                                        "（沒開光暈時用彩虹的顏色）。上面預覽裡的按鈕可以點一下看動畫"),
                          None, spacing=6))
@@ -318,90 +388,81 @@ class LookPage(QWidget):
         self.scale_text.setFixedWidth(90)
         c.addLayout(hbox(label("大小", b14=True), self.scale, self.scale_text))
         c.addStretch(1)
-        top.addWidget(c_look, 0, 0)
-        # 螢幕邊緣光暈
+        mid.addWidget(c_look, 0, 0)
+
+        # 螢幕邊緣光暈: the styles, and 自訂顏色、速度與邊緣 sliding in their place (design A1)
         c_glow, c = card()
+        main = QWidget()
+        mv = QVBoxLayout(main)
+        mv.setContentsMargins(0, 0, 0, 0)
+        mv.setSpacing(8)
         self.preview_button = button("▶ 預覽", self._preview_glow)
         self._preview_done = QTimer(self, singleShot=True, interval=PREVIEW_MS, timeout=self._show_glow)
-        c.addLayout(hbox(label("螢幕邊緣光暈", h3=True), Info("麥克風開著時，螢幕邊緣亮起一圈光，講話時會變亮。"
-                                                         "選了、調了或按「預覽」會先亮一下讓你看"), None,
-                         self.preview_button, spacing=6))
+        mv.addLayout(hbox(label("螢幕邊緣光暈", h3=True), Info("麥克風開著時，螢幕邊緣亮起一圈光，講話時會變亮。"
+                                                          "選了、調了或按「預覽」會先亮一下讓你看"), None,
+                          self.preview_button, spacing=6))
         grid = QGridLayout()
         grid.setSpacing(6)
         self.glows = {}
-        for i, (key, name) in enumerate([("", "關閉")] + [(s.id, s.name) for s in glowmod.STYLES]):
+        for i, (key, name) in enumerate([("", "關閉")] + [(st.id, st.name) for st in glowmod.STYLES]):
             t = GlowTile(key, name)
             t.clicked.connect(lambda _=False, k=key: self._glow(k))
             self.glows[key] = t
             grid.addWidget(t, i // 4, i % 4)
-        c.addLayout(grid)
+        mv.addLayout(grid)
         self.motions = Choice(list(glowmod.MOTIONS.items()))
         self.motions.picked.connect(self._motion)
-        c.addWidget(self.motions)
-        # 自訂: the style's parameters, colors and edges (the old 外觀 tab's editor, folded)
-        self.custom_toggle = button("", self._toggle_custom)
-        self.custom_toggle.setStyleSheet("QPushButton { background: transparent; border: none; padding: 2px 0; "
-                                         "text-align: left; }")
-        self.reset_button = button("恢復預設", self._reset_glow, link=True)
-        c.addLayout(hbox(self.custom_toggle, None, self.reset_button))
-        self.custom = QWidget()
-        cv = QVBoxLayout(self.custom)
-        cv.setContentsMargins(0, 0, 0, 0)
-        cv.setSpacing(8)
-        self.color_row = hbox(spacing=4)
-        cv.addLayout(hbox(label("顏色", b14=True), self.color_row, None, spacing=10))
-        self.sliders = {}
-        for key, name, lo, hi in SLIDERS:
-            s = QSlider(Qt.Horizontal, minimum=lo, maximum=hi)
-            s.setCursor(Qt.PointingHandCursor)
-            s.valueChanged.connect(lambda val, k=key, w=s: self._glow_edited(k, val / 100, save=not w.isSliderDown()))
-            s.sliderReleased.connect(lambda: self._glow_edited(None, None))
-            self.sliders[key] = s
-            n = label(name)
-            n.setFixedWidth(64)
-            cv.addLayout(hbox(n, s, spacing=10))
-        self.edges = Choice([(k, v[0]) for k, v in glowmod.EDGES.items()])
-        self.edges.picked.connect(self._edges)
-        cv.addLayout(hbox(label("亮哪幾邊", b14=True), None, spacing=10))
-        cv.addWidget(self.edges)
-        self.custom.hide()
-        c.addWidget(self.custom)
-        c.addStretch(1)
-        top.addWidget(c_glow, 0, 1)
-        v.addLayout(top)
+        mv.addWidget(self.motions)
+        mv.addStretch(1)
+        self.custom_open = button("自訂顏色、速度與邊緣", lambda: self._custom(True), chip=True)
+        self.custom_open.setIcon(icon("chev", T("muted"), 14, 2.0))
+        self.custom_open.setLayoutDirection(Qt.RightToLeft)
+        mv.addLayout(hbox(self.custom_open, None))
 
-        bottom = QGridLayout()
-        bottom.setSpacing(12)
-        bottom.setColumnStretch(0, 1)
-        bottom.setColumnStretch(1, 2)
-        # 草稿反白顏色 + 節流模式
-        c_mark, c = card()
-        c.addLayout(hbox(label("草稿反白顏色", h3=True), Info("麥克風開著時，講完還可能被修正的字會疊上這個顏色，定稿後消失"),
-                         None, spacing=6))
-        self.marks = {}
-        row = hbox(spacing=6)
-        for color, name in MARK_COLORS:
-            s = Swatch(color)
-            s.setToolTip(name)
-            s.clicked.connect(lambda _=False, col=color: self._mark(col))
-            self.marks[color.upper()] = s
-            row.addWidget(s)
-        self.mark_custom = Swatch("#00000000")
-        self.mark_custom.setToolTip("自訂顏色")
-        self.mark_custom.clicked.connect(self._pick_mark)
-        row.addWidget(self.mark_custom)
-        row.addStretch(1)
-        c.addLayout(row)
-        c.addWidget(sep())
-        self.lite = Switch(name="節流模式")
-        self.lite.toggled.connect(self._lite)
-        c.addLayout(hbox(label("節流模式", b14=True), Info(
-            "勾選後動畫改用較省 CPU 的畫法：能量球每秒 15 張、光暈較粗略；螢幕邊緣光暈的波浪、流星、漣漪每秒 24 張。不開時"
-            "能量球每秒 30 張、細節完整；會移動的光暈每秒 48 張，比較順，但 CPU 用量約多七成"), None, self.lite, spacing=6))
-        c.addStretch(1)
-        bottom.addWidget(c_mark, 0, 0)
-        # 提示音
+        edit = QWidget()
+        ev = QVBoxLayout(edit)
+        ev.setContentsMargins(0, 0, 0, 0)
+        ev.setSpacing(10)
+        self.custom_back = button("螢幕邊緣光暈", lambda: self._custom(False), link=True)
+        self.custom_back.setIcon(icon("back", T("ink"), 15, 2.2))
+        self.custom_back.setFont(theme.font(15, 700))
+        self.custom_back.setStyleSheet("QPushButton { color: %s; padding: 0; text-decoration: none; }" % T("ink").name())
+        self.custom_name = dim("")
+        self.edited_badge = label("已編輯", warn=True)
+        self.reset_button = button("恢復預設", self._reset_glow)
+        ev.addLayout(hbox(self.custom_back, self.custom_name, None, self.edited_badge, self.reset_button, spacing=6))
+        self.color_row = hbox(spacing=4)
+        colors_label = label("顏色", b14=True)
+        colors_label.setFixedWidth(64)
+        ev.addLayout(hbox(colors_label, self.color_row, None, spacing=10))
+        self.sliders = {}
+        sliders = QGridLayout()
+        sliders.setHorizontalSpacing(18)
+        sliders.setVerticalSpacing(8)
+        for i, (key, name, lo, hi) in enumerate(SLIDERS):
+            sl = QSlider(Qt.Horizontal, minimum=lo, maximum=hi)
+            sl.setCursor(Qt.PointingHandCursor)
+            sl.valueChanged.connect(lambda val, k=key, w=sl: self._glow_edited(k, val / 100, save=not w.isSliderDown()))
+            sl.sliderReleased.connect(lambda: self._glow_edited(None, None))
+            self.sliders[key] = sl
+            n = label(name)
+            n.setFixedWidth(56)
+            sliders.addLayout(hbox(n, sl, spacing=6), i // 2, i % 2)
+        ev.addLayout(sliders)
+        self.edges = Choice([(k, val[0]) for k, val in glowmod.EDGES.items()])
+        self.edges.picked.connect(self._edges)
+        edges_label = label("亮哪幾邊", b14=True)
+        edges_label.setFixedWidth(64)
+        ev.addLayout(hbox(edges_label, self.edges, None, spacing=10))
+        ev.addStretch(1)
+        self.glow_slides = Slides(main, edit)
+        c.addWidget(self.glow_slides, 1)
+        mid.addWidget(c_glow, 0, 1)
+        v.addLayout(mid)
+
+        # 提示音, across
         c_sound, c = card()
+        c.layout().setSpacing(10)
         self.listen_button = button("▶ 試聽", self._play_sounds)
         self._sound_done = QTimer(self, singleShot=True, timeout=self._show_sounds)
         self._set_timer = QTimer(self, singleShot=True, timeout=lambda: cues.play(self._set_timer.property("cue"), "stop"))
@@ -421,12 +482,9 @@ class LookPage(QWidget):
         self.custom_sounds.setLayout(hbox(label("開始"), self.start_box, 12, label("結束"), self.stop_box, None,
                                           spacing=6))
         c.addWidget(self.custom_sounds)
-        c.addStretch(1)
-        bottom.addWidget(c_sound, 0, 1)
-        v.addLayout(bottom)
+        v.addWidget(c_sound)
         v.addStretch(1)
         self._live = QTimer(self, singleShot=True, interval=80, timeout=self._preview_glow)
-        self._custom_open = False
 
     # --- values ---
     def load(self):
@@ -439,7 +497,6 @@ class LookPage(QWidget):
         self._scale_text(cfg.button_scale)
         self.motions.set(cfg.glow_motion)
         self.edges.set(cfg.glow_edges)
-        self.lite.set_quiet(cfg.orb_lite)
         for box, cid in ((self.start_box, cfg.start_sound), (self.stop_box, cfg.stop_sound)):
             box.blockSignals(True)
             box.setCurrentIndex(max(0, box.findData(cid)))
@@ -460,6 +517,14 @@ class LookPage(QWidget):
 
     def restyle(self):
         self.preview.update()
+        self.custom_open.setIcon(icon("chev", T("muted"), 14, 2.0))
+        self.custom_back.setIcon(icon("back", T("ink"), 15, 2.2))
+        self.custom_back.setStyleSheet("QPushButton { color: %s; padding: 0; text-decoration: none; }" % T("ink").name())
+
+    def hideEvent(self, e):
+        """Back to the styles when the page is left."""
+        self._custom(False)
+        super().hideEvent(e)
 
     # --- button look ---
     def _look(self, key: str):
@@ -483,9 +548,8 @@ class LookPage(QWidget):
         self.cfg.button_scale = self.scale.value()
         self.win.save()
 
-    def _lite(self, on: bool):
-        self.cfg.orb_lite = on
-        self.win.save()
+    def refresh_orb(self):
+        """節流模式 changed (the 系統 page)."""
         self._show_orb()
 
     def _show_orb(self):
@@ -530,10 +594,13 @@ class LookPage(QWidget):
         playing = self._preview_done.isActive()
         self.preview_button.setEnabled(on and not playing)
         self.preview_button.setText("播放中…" if playing else "▶ 預覽")
-        self.custom_toggle.setVisible(on)
-        self.custom_toggle.setText(("▾ 收起自訂" if self._custom_open else "▸ 自訂顏色、速度與邊緣"))
-        self.custom.setVisible(on and self._custom_open)
-        self.reset_button.setVisible(on and glowmod.edited(cfg.glow, cfg.glow_edits))
+        self.custom_open.setVisible(on)
+        if not on and self.glow_slides.index:
+            self.glow_slides.go(0)
+        edited = on and glowmod.edited(cfg.glow, cfg.glow_edits)
+        self.edited_badge.setVisible(edited)
+        self.reset_button.setEnabled(edited)
+        self.custom_name.setText(f"／ 自訂{glowmod.BY_ID[cfg.glow].name}" if on else "")
         c = self._params()
         for key, s in self.sliders.items():
             s.blockSignals(True)
@@ -544,10 +611,10 @@ class LookPage(QWidget):
             if w is not None:
                 w.deleteLater()
         for i, color in enumerate(c["colors"]):
-            s = Swatch(color, "", 26)
-            s.setToolTip("點一下換顏色")
-            s.clicked.connect(lambda _=False, i=i: self._glow_color(i))
-            self.color_row.addWidget(s)
+            sw = Swatch(color, "", 26)
+            sw.setToolTip("點一下換顏色")
+            sw.clicked.connect(lambda _=False, i=i: self._glow_color(i))
+            self.color_row.addWidget(sw)
         if len(c["colors"]) < glowmod.MAX_COLORS:
             self.color_row.addWidget(button("＋", lambda: self._glow_color(-1), ib=True))
         if len(c["colors"]) > 2:
@@ -557,9 +624,9 @@ class LookPage(QWidget):
         self.preview.update()
         self._show_orb()
 
-    def _toggle_custom(self):
-        self._custom_open = not self._custom_open
-        self._show_glow()
+    def _custom(self, open_: bool):
+        """自訂顏色、速度與邊緣 slides in over the styles (open_), or back."""
+        self.glow_slides.go(1 if open_ and self.cfg.glow else 0)
 
     def _glow_edited(self, key, value, save: bool = True):
         """A parameter of the style picked changed (key None: a slider let go). While a slider is dragged the glow
@@ -618,11 +685,10 @@ class LookPage(QWidget):
     def _show_mark(self):
         color = self.cfg.highlight_color.upper()
         preset = self.marks.get(color)
-        for s in self.marks.values():
-            s.setChecked(s is preset)
+        for m in self.marks.values():
+            m.setChecked(m is preset)
         self.mark_custom.setChecked(preset is None)
-        self.mark_custom.color = "#00000000" if preset is not None else color
-        self.mark_custom.text_ = "＋" if preset is not None else "字"
+        self.mark_custom.color = "" if preset is not None else color
         self.mark_custom.update()
         self.preview.mark = QColor(color)
         self.preview.update()

@@ -94,8 +94,8 @@ QLabel[sh="true"] {{ font-size: 13px; font-weight: 700; color: {t['muted']}; }}
 QLabel[b14="true"] {{ font-size: 14px; font-weight: 500; }}
 QLabel[warn="true"] {{ color: {t['acct']}; font-size: 12.5px; font-weight: 500; }}
 QFrame#card {{ background: {t['tile']}; border: 1px solid {t['line']}; border-radius: 6px; }}
-QFrame#card[live="true"] {{ border: 1px solid {t['acc']}; }}
 QFrame#card QLabel, QFrame#card QFrame {{ border: none; }}
+QFrame#card QFrame#branch {{ border: none; border-left: 2px solid {t['line']}; background: transparent; }}
 QFrame#sep {{ background: {t['line']}; border: none; max-height: 1px; min-height: 1px; }}
 QPushButton {{ background: {t['tile2']}; border: 1px solid {t['line']}; border-radius: 5px; padding: 0 14px;
               min-height: 30px; font-size: 13px; }}

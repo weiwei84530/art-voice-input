@@ -1,7 +1,7 @@
 """麥克風: the ways to turn listening on (hotkey, clicking into a text box, the floating button), when it turns off,
 and the device."""
 from PySide6.QtCore import QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QBrush, QColor, QConicalGradient, QIntValidator, QPainter, QPen, QRadialGradient
+from PySide6.QtGui import QColor, QIntValidator, QPainter, QPen
 from PySide6.QtWidgets import (QAbstractButton, QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
                                QLineEdit, QVBoxLayout, QWidget)
 
@@ -236,38 +236,6 @@ class Option(QAbstractButton):
                    fm.elidedText(self.desc, Qt.ElideRight, int(r.width() - 40)))
 
 
-class FloatSample(QWidget):
-    """A text box and the floating button near it, faint while the button is off."""
-
-    def __init__(self):
-        super().__init__()
-        self.setFixedHeight(60)
-        self.on = True
-
-    def paintEvent(self, _):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        p.setPen(QPen(T("line"), 1))
-        p.setBrush(T("tile2"))
-        p.drawRoundedRect(r, 6, 6)
-        p.setBrush(T("tile"))
-        p.drawRoundedRect(QRectF(12, 12, min(120, r.width() - 70), 36), 4, 4)
-        p.setOpacity(1 if self.on else 0.25)
-        orb = QRectF(r.right() - 18 - 28, r.bottom() - 12 - 28, 28, 28)
-        g = QConicalGradient(orb.center(), 90)
-        for i, c in enumerate(("#3d7bff", "#a259ff", "#ff4fa3", "#ff9f43", "#29d3ff", "#3d7bff")):
-            g.setColorAt(i / 5, QColor(c))
-        p.setPen(Qt.NoPen)
-        p.setBrush(QBrush(g))
-        p.drawEllipse(orb)
-        hl = QRadialGradient(orb.center().x(), orb.top() + orb.height() * 0.38, orb.width() * 0.38)
-        hl.setColorAt(0, QColor(255, 255, 255, 190))
-        hl.setColorAt(1, QColor(255, 255, 255, 0))
-        p.setBrush(QBrush(hl))
-        p.drawEllipse(orb)
-
-
 def _row(text: QWidget, switch: QWidget) -> QHBoxLayout:
     """A setting's name and line, then its switch: the text takes the room (its line stays on one line)."""
     h = hbox(text, switch)
@@ -284,7 +252,7 @@ class MicPage(QWidget):
         self._capturing = False
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(10)
+        v.setSpacing(8)
         self.no_way = label("目前沒有任何方式能開麥克風，請至少開啟一種", warn=True)
         v.addLayout(hbox(label("開麥克風的方式", sh=True), self.no_way, None, spacing=10))
         grid = QGridLayout()
@@ -331,22 +299,27 @@ class MicPage(QWidget):
         grid.addWidget(self.near_card, 0, 1)
 
         # 浮動按鈕
+        # design M2 (2026-10-20, the user's pick): a 顯示浮動按鈕 row with its switch, the two options hanging under it
         self.float_card, c = card()
-        self.float_switch = Switch(name="浮動按鈕")
-        self.float_switch.toggled.connect(self._float)
+        self.float_pill = Pill()
         c.addLayout(hbox(label("浮動按鈕", h3=True), Info("停在螢幕上的按鈕，點一下開麥克風，拖到哪就留在哪；樣子和大小在"
-                                                       "「外觀與聲音」設定"), None, self.float_switch, spacing=6))
-        self.float_sample = FloatSample()
-        c.addWidget(self.float_sample)
-        c.addWidget(dim("停在螢幕上，點一下開麥克風，拖到哪就留在哪", wrap=True))
+                                                       "「外觀與聲音」設定"), None, self.float_pill, spacing=6))
+        self.float_switch = Switch(name="顯示浮動按鈕")
+        self.float_switch.toggled.connect(self._float)
+        c.addLayout(_row(titled("顯示浮動按鈕", "停在螢幕上，點一下開麥克風，拖到哪就留在哪"), self.float_switch))
+        branch = QFrame(objectName="branch")
+        b_box = QVBoxLayout(branch)
+        b_box.setContentsMargins(12, 2, 0, 2)
+        b_box.setSpacing(12)
         self.float_text_only = QCheckBox("未偵測到輸入區域時隱藏")
         self.float_hide = QCheckBox("錄音時隱藏按鈕")
         for b, tip in ((self.float_text_only, "勾選時，游標不在可以打字的地方就隱藏浮動按鈕；不勾就到處都顯示"),
-                       (self.float_hide, "勾選時，開麥克風時按鈕放大淡出，關掉後縮回來；不勾按鈕會留著，麥克風開著時再點一下"
-                                         "就關掉")):
+                       (self.float_hide, "勾選時，開麥克風時按鈕放大淡出，關掉後縮回來；不勾按鈕會留著，變小、轉快，"
+                                         "麥克風開著時再點一下就關掉")):
             b.setCursor(Qt.PointingHandCursor)
             b.toggled.connect(self._float_opts)
-            c.addLayout(hbox(b, Info(tip), None, spacing=6))
+            b_box.addLayout(hbox(b, Info(tip), None, spacing=6))
+        c.addWidget(branch)
         c.addStretch(1)
         grid.addWidget(self.float_card, 0, 2)
         v.addLayout(grid)
@@ -475,7 +448,6 @@ class MicPage(QWidget):
         self.cap_button.setText("取消" if self._capturing else "重新設定" if has else "設定按鍵")
         self.clear_button.setVisible(has and not self._capturing)
         self.hk_pill.set("已設定" if has else "未設定", has)
-        prop(self.hk_card, live=has)
 
     # --- the rest ---
     def _near(self, key: str):
@@ -489,7 +461,6 @@ class MicPage(QWidget):
         for k, o in self.nears.items():
             o.setChecked(k == key)
         self.near_pill.set({"": "未使用", "bubble": "語音氣泡", "listen": "自動開"}[key], bool(key))
-        prop(self.near_card, live=bool(key))
 
     def _float(self, on: bool):
         self.cfg.show_float = on
@@ -506,11 +477,9 @@ class MicPage(QWidget):
 
     def _show_float(self):
         on = self.cfg.show_float
-        self.float_sample.on = on
-        self.float_sample.update()
+        self.float_pill.set("已開啟" if on else "未開啟", on)
         for b in (self.float_text_only, self.float_hide):
             b.setEnabled(on)
-        prop(self.float_card, live=on)
 
     def _show_no_way(self):
         self.no_way.setVisible(not (self.cfg.hotkey or self.cfg.auto_listen or self.cfg.show_bubble
