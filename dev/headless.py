@@ -106,9 +106,13 @@ appmod.press_chord = box.keys
 
 
 def _press_key(vk, n=1):
-    """Left moves the caret, Delete deletes after it; others are printed."""
+    """Left / Right move the caret, Delete and Backspace delete; others are printed."""
     if vk == 0x25:
         box.caret = max(0, box.caret - n)
+    elif vk == 0x27:
+        box.caret = min(len(box.text), box.caret + n)
+    elif vk == 0x08:
+        box.back(n)
     elif vk == 0x2E:
         box.text = box.text[:box.caret] + box.text[box.caret + n:]
     else:

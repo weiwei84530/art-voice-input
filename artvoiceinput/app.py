@@ -1732,6 +1732,13 @@ class App(QObject):
         try:
             if is_latin(text):
                 known = self._known_terms(terms)
+                # Chinese X-ASR wrote as English (How the -> 好的; 2026-10-21, the user's request): first next to
+                # Chinese
+                before, after = sel.before.rstrip(" "), sel.after.lstrip(" ")
+                left, right = before[-1:] if _is_cjk(before[-1:]) else "", after[:1] if _is_cjk(after[:1]) else ""
+                zh = syllables.chinese_words(text, left, right, picker_mod.WORDS[0] * picker_mod.WORDS[1])
+                if zh and (left or right):
+                    tabs.append(("中文", zh))
                 if len(text.split()) == 1:
                     tabs.append(("近音字", sounds.near(text, known, picker_mod.WORDS[0] * picker_mod.WORDS[1])))
                 tabs.append(("詞庫", sounds.alike(text, known, limit=10)))
@@ -1739,6 +1746,8 @@ class App(QObject):
                 weights = self.hotwords.weights_for(forms)
                 forms.sort(key=lambda w: -weights.get(w, 0))   # stable: the rest keep their order
                 tabs.append(("大小寫", forms))
+                if zh and not (left or right):
+                    tabs.append(("中文", zh))
             else:
                 found = candidates.ranked(text)
                 if len(text) == 1:
@@ -1814,6 +1823,15 @@ class App(QObject):
         if not pasted:
             self._notify(_SEL_LOST)
             return
+        before = sel.before
+        if is_latin(text) and _is_cjk(word):   # 我 How the 意思 -> 我好的意思: the spaces to Chinese go too
+            if sel.after[:1] == " " and _is_cjk(sel.after.lstrip(" ")[:1]) and not sel.text.endswith(" "):
+                press_key(0x2E, 1)   # Delete: the space after
+            if before.endswith(" ") and _is_cjk(before.rstrip(" ")[-1:]) and not sel.text.startswith(" "):
+                press_key(0x25, len(word))   # Left past the word, Backspace, Right: the space before
+                press_key(0x08, 1)
+                press_key(0x27, len(word))
+                before = before[:-1]
         line = sel.before + sel.text + sel.after
         start = len(sel.before) + lead
         self.memory.record(line, start, start + len(text), word)
@@ -1822,7 +1840,7 @@ class App(QObject):
         self.hotwords.picked(text, word)
         self._suggest_pack(word)
         self.settings.refresh_hotwords()
-        self.session.replaced_selection(sel.before, word, foreground())
+        self.session.replaced_selection(before, word, foreground())
         self.record.emit({"time": time.strftime("%H:%M:%S"), "kind": "選字", "main": f"{text} → {word}", "copy": word,
                           "steps": []})
 

@@ -193,7 +193,8 @@ sentence end → 嗎 questions → trailing punctuation.
   utterance that is one English word of 2-6 letters (not all capitals, no known term) replacing one selected Chinese
   character, or next to Chinese at the caret, becomes the likeliest character (`syllables.chinese_for`: pinyin
   spelling or CMUdict phonemes against Mandarin syllables, a character making a word with a neighbour first, never
-  the replaced one); 辨識紀錄 step 英文轉中文. 選字 and 選字記憶 are not involved (tried and reverted the same day).
+  the replaced one); 辨識紀錄 step 英文轉中文. 選字記憶 is not involved (tried and reverted the same day: the user's
+  mishearings are one character said alone, not English amid Chinese).
 - English sentence end: . ? ! after English → 。？！ when the sentence has Chinese. 嗎。 → 嗎？ (only 嗎: 呢 / 吧 end
   statements too).
 - Trailing punctuation: kept, except when the caret's line has text on both sides (`selection.read_caret`; in
@@ -210,7 +211,9 @@ sentence end → 嗎 questions → trailing punctuation.
   on it keeps it; counts leave it out); no timeout, any click or key closes it. Chinese (`candidates.ranked`): 同音, 不同聲調, 模糊音 (`candidates._FUZZY`: zh/z,
   sh/s, an/ang, en/eng, r/l, ㄩㄣ/ㄧㄣ, ㄈ/ㄏㄨ, ㄋ/ㄌ …; fuzzy-only words from frequency 3, `app._FUZZY_MIN`; 詞庫
   words by sound too). English: 近音字 (`sounds.near`, weighted phoneme edit distance), 詞庫 (`sounds.alike`), 大小寫
-  (`memory.variants`).
+  (`memory.variants`), 中文 (Chinese X-ASR wrote as English, `syllables.chinese_words`: one word as characters,
+  2-3 words as a dictionary word, How the -> 好的; first next to Chinese; the spaces to Chinese go with the pick;
+  nothing learned).
 - **詞庫 list** (`hotwords.py`, `hotword-list.json`; code says hotwords, UI says 詞庫 / 優先度): 優先度 shown as
   stored − 100 (0% nothing, +100% top, negative red). A pick of 2+ characters or English moves the picked word +25%
   and the replaced one −25%. Typed words are top. English replaced by English goes down too, to −50% at most (2026-10-21, TTS-measured: `hotwords` docstring); English for Chinese or back lowers no English; case forms are separate hotwords. Single characters never listed. ✕ puts a
@@ -229,7 +232,7 @@ sentence end → 嗎 questions → trailing punctuation.
   counts) and no dictionary word around is broken (`_breaks_word`); never breaks a raised 詞庫 word or makes a lowered
   one (`Hotwords.levels`). Picking back a changed character learns "keep it here" under the heard reading.
 - **On-screen terms**: at the start UIA reads the focused control's text; CamelCase / acronyms / digits, and 5+
-  letter words seen twice, bias at 1.5.
+  letter words seen twice, bias at 1.5; git commit hashes (afe5559) are not terms.
 - Dictionary: McBopomofo word list (MIT, `dict/words.tsv.gz`, `dev/build_dict.py`), cached as
   `cache/word_index.pkl`. English: `dict/english.tsv.gz` (`dev/build_english.py`, wordfreq CC BY-SA + CMUdict BSD).
 

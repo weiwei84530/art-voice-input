@@ -1,6 +1,7 @@
 """The Chinese character an English word may have been (2026-10-21, the user's request): one character said alone,
 to replace a selected one or to add one in Chinese text, comes out of X-ASR as an English syllable (啊 -> Ah,
-的 -> The). App._as_chinese turns such an utterance into the character. Two ways in:
+的 -> The). App._as_chinese turns such an utterance into the character; 選字's 中文 tab offers them for selected
+English, a few words as one Chinese word (How the -> 好的, chinese_words). Two ways in:
 - a word spelled like pinyin is that syllable (hao, zai, shi);
 - an English word in CMUdict (sounds.py's english.tsv.gz) is compared by its phonemes with every Mandarin syllable,
   each written as rough ARPAbet (_INITIALS / _FINALS), with sounds.py's weighted phoneme distance.
@@ -8,6 +9,7 @@ Tones are not known, so every tone of a syllable counts. Characters come from th
 (candidates.py), each under the pinyin of its readings there (pypinyin's other readings are left out); one that
 makes a dictionary word with the character before or after it goes first (你 how 嗎 -> 好: 你好), then the closer
 syllable, then the more common character."""
+import itertools
 import logging
 import math
 import re
@@ -116,6 +118,34 @@ def syllables_for(word: str) -> list[tuple[str, float]]:
 def chinese_for(word: str, before: str = "", after: str = "", limit: int = 10, exclude: str = "") -> list[str]:
     """Single characters the English word may have been, best first. before / after: the character right before and
     right after it ("" for none); exclude: a character not wanted (the one being replaced)."""
+    scored = _scored(word, before, after, exclude)
+    return [ch for ch, _ in sorted(scored.items(), key=lambda cs: -cs[1])[:limit]]
+
+
+def chinese_words(text: str, before: str = "", after: str = "", limit: int = 10) -> list[str]:
+    """What English text may have been in Chinese: one word, single characters (chinese_for); two or three, the
+    dictionary words their characters make (How the -> 好的), best first."""
+    words = text.split()
+    if len(words) == 1:
+        return chinese_for(words[0], before, after, limit)
+    if not 2 <= len(words) <= 3:
+        return []
+    per = []
+    for i, w in enumerate(words):
+        s = _scored(w, before if i == 0 else "", after if i == len(words) - 1 else "")
+        if not s:
+            return []
+        per.append(sorted(s.items(), key=lambda cs: -cs[1])[:15])
+    top = max(candidates.frequency(w) for w in ("的", "是", "我")) or 1
+    out = {}
+    for combo in itertools.product(*per):
+        w = "".join(ch for ch, _ in combo)
+        if candidates.is_word(w):
+            out[w] = sum(s for _, s in combo) / len(combo) + 0.3 * math.log(candidates.frequency(w) + 1) / math.log(top + 1)
+    return [w for w, _ in sorted(out.items(), key=lambda ws: -ws[1])[:limit]]
+
+
+def _scored(word: str, before: str = "", after: str = "", exclude: str = "") -> dict[str, float]:
     index = _load()
     scored = {}
     top = max((f for cs in index.values() for _, f in cs[:1]), default=1)
@@ -130,4 +160,4 @@ def chinese_for(word: str, before: str = "", after: str = "", limit: int = 10, e
             score = sim + (0.6 if joins else 0) + 0.3 * math.log(freq + 1) / math.log(top + 1)
             if score > scored.get(ch, 0):
                 scored[ch] = score
-    return [ch for ch, _ in sorted(scored.items(), key=lambda cs: -cs[1])[:limit]]
+    return scored

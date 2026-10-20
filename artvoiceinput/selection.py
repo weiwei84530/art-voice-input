@@ -536,6 +536,7 @@ has had her him his not now nor too yes who whom why let may might new old use u
 lines code text true false null none return print import class function def else elif self error value
 name type data list open close save edit view help tools window select click press enter""".split())
 _MAX_TERMS = 40
+_HASH = re.compile(r"[0-9a-f]{7,40}")   # a git commit (afe5559): letters and digits nobody says (2026-10-21)
 
 
 def terms_in(text: str) -> list[str]:
@@ -545,7 +546,7 @@ def terms_in(text: str) -> list[str]:
     counts = Counter(m.group(0) for m in _TERM.finditer(text))
     out = []
     for w, n in counts.most_common():
-        if len(w) < 3 or w.casefold() in _COMMON:
+        if len(w) < 3 or w.casefold() in _COMMON or (_HASH.fullmatch(w) and any(c.isdigit() for c in w)):
             continue
         strong = any(c.isupper() for c in w[1:]) or any(c.isdigit() for c in w)
         if strong or (len(w) >= 5 and n >= 2):
