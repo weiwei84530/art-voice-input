@@ -23,12 +23,6 @@ user's choice: picked once, used everywhere until picked back in another context
 with another value whose context does not conflict with it; examples in conflicting contexts stay, which is how one
 reading learns two answers.
 
-English syllables (2026-10-21, the user's request): X-ASR writes some spoken characters as an English syllable (好 ->
-how). One English word picked as a single character (選字's 中文 tab, syllables.py) is learned the same way under the
-casefolded word (key "how", no tone digit, so apart from every Chinese reading), its sides the characters around it
-past the spaces X-ASR puts between Chinese and English; applied, the spaces to Chinese on either side go with it
-(你 how 嗎 -> 你好嗎). Picking the English back (the 英文 tab of that character) learns "keep it here" (value "how").
-
 Also learned, in the same file so the user can read everything (DATA_DIR/smart-picks.json; the examples are listed
 and edited on the 詞庫 tab since 2026-10-14): styles, how often each way of writing English was picked (voiceInput, Voice Input …), counted apart for one
 word and for several, to order those candidates. (Picks raising a word's X-ASR bias was planned and dropped the same
@@ -53,7 +47,6 @@ _SIDE = 2
 _CAMEL = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+")
 _LATIN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _\-]*$")
 _STYLES_MANY = ["camel", "pascal", "title", "lower", "upper", "snake", "kebab", "joined"]
-_WORD = re.compile(r"^[a-z]+$")   # an English syllable's key
 
 
 def situation(text: str, start: int, end: int) -> tuple[list[str], list[str]]:
@@ -166,7 +159,7 @@ class Memory:
             data = json.loads(path.read_text(encoding="utf-8"))
             old = data.get("version", 1) < VERSION   # right side as readings: dropped (the user's choice)
             for ex in [] if old else data.get("examples", []):
-                if not _valid(ex["key"], ex["value"]):
+                if not _single(ex["value"]):
                     continue          # phrases and English were learned before the change to single characters
                 self.examples.setdefault(ex["key"], []).append(
                     {"value": ex["value"], "left": list(ex["left"]), "right": list(ex["right"]),
@@ -206,7 +199,7 @@ class Memory:
                     key, value, left, right = ex["key"], ex["value"], list(ex["left"]), list(ex["right"])
                 except (KeyError, TypeError):
                     continue
-                if not _valid(key, value):
+                if not _single(value):
                     continue
                 exs = self.examples.setdefault(key, [])
                 if any((e["value"], e["left"], e["right"]) == (value, left, right) for e in exs):
@@ -260,15 +253,6 @@ class Memory:
                     return None
             return max(top, key=lambda e: e["serial"])["value"]
 
-    def english_for(self, text: str, start: int) -> list[str]:
-        """English syllables the examples turn into the character at text[start] in its context (the 英文 tab of
-        選字: picking one back)."""
-        left, right = situation(text, start, start + 1)
-        ch = text[start]
-        with self._lock:
-            keys = [k for k in self.examples if _WORD.match(k)]
-        return [k for k in keys if self.lookup(k, left, right, single=True) == ch]
-
     def values(self, key: str) -> list[str]:
         """Every value picked for key, newest first."""
         with self._lock:
@@ -292,10 +276,6 @@ class Memory:
         if _single(old) and _single(value):
             changed = self._changed(text, start, old, value)
             self._learn(reading_key(value if changed else old), value, text, start, end)
-        elif _WORD.match(old.casefold()) and _single(value):        # how -> 好
-            self._learn(old.casefold(), value, text, *_past_spaces(text, start, end))
-        elif _single(old) and _WORD.match(value.casefold()):        # 好 -> how, picked back
-            self._learn(value.casefold(), value, text, start, end)
         with self._lock:
             self._learn_style(old, value)
         self.save()
@@ -330,21 +310,6 @@ class Memory:
         while i < len(toks) and toks[i].start < len(prefix):
             i += 1
         while i < len(toks):
-            t = toks[i]
-            if t.kind == "word" and t.reading in self.examples and _WORD.match(t.reading):
-                a, b = _past_spaces(full, t.start, t.end, floor=pos)
-                left, right = situation(full, a, b)
-                value = self.lookup(t.reading, left, right, single=True)
-                if value is not None and _single(value):
-                    why = _blocked(full, t.start, t.end, value, levels) if levels else ""
-                    if why:
-                        log.info("smart pick skipped: %s -> %s (%s)", t.text, value, why)
-                    else:
-                        log.info("smart pick applied: %s -> %s", t.text, value)
-                        out.append(full[pos:a] + value)
-                        pos = b
-                i += 1
-                continue
             for n in lengths:
                 run = toks[i:i + n]
                 if len(run) < n or run[0].kind != "cjk" or not _contiguous(full, run):
@@ -408,28 +373,6 @@ def _blocked(full: str, a: int, b: int, value: str, levels: dict[str, int]) -> s
         if pct < 100 and _covers(new, word, a, a + len(value)) and not _covers(full, word, a, b):
             return f"would make {word} {pct - 100:+d}%"
     return ""
-
-
-def _past_spaces(text: str, start: int, end: int, floor: int = 0) -> tuple[int, int]:
-    """text[start:end] widened over the spaces between it and a Chinese character on either side (not before
-    floor)."""
-    a = start
-    while a > floor and text[a - 1] == " ":
-        a -= 1
-    if a == start or not (a > 0 and _CJK.match(text[a - 1])):
-        a = start
-    b = end
-    while b < len(text) and text[b] == " ":
-        b += 1
-    if b == end or not (b < len(text) and _CJK.match(text[b])):
-        b = end
-    return a, b
-
-
-def _valid(key: str, value: str) -> bool:
-    """An example worth keeping: a single character (under a reading or an English syllable), or an English
-    syllable kept as it is."""
-    return _single(value) or (bool(_WORD.match(key)) and value.casefold() == key)
 
 
 def _now() -> str:
