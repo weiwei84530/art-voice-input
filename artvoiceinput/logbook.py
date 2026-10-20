@@ -5,7 +5,7 @@ sentence with its story in sentences, was built first and found too busy the sam
 
 A session: id, listening, start, end, counts, rows. A row: time, heard (what was said, as recognized alone), change
 (the document's change as HTML: new text green, removed struck through red, long unchanged stretches cut to …), tag
-(a few words: 整句重聽, 指令：換行, 復原 …) and its kind (for its color), tip, copy (the sentence it finished), bank
+(a few words: 整句修正, 指令：換行, 復原 …) and its kind (for its color), tip, copy (the sentence it finished), bank
 (what the 詞庫 may have done to it: the 辨識紀錄 tab marks such rows with a yellow ! whose tooltip lists it;
 2026-10-17, the user's request)."""
 import difflib
@@ -191,10 +191,11 @@ class LogBook:
         said = info.get("heard", "")
         why, tag, kind = [], "", ""
         if info.get("redo"):
-            said, tag, kind = "（游標移開前講的）", "改打在新的游標位置", "fix"
-            why.append("辨識結果還沒打出來前游標就移開了，所以打在你點的新位置")
+            # plain 文字 (2026-10-21, the user's choice; 改打在新的游標位置 until then): it is new text, not settled
+            said = "（游標移開前講的）"
+            why.append("游標移開前講的，辨識結果還沒打出來游標就移開了，所以改打在你點的新位置")
         elif before and not after.startswith(before):
-            tag, kind = "整句重聽", "fix"
+            tag, kind = "整句修正", "fix"   # 整句重聽 until 2026-10-21 (the user's choice)
             self._redos += 1
             if self._redos == 1:
                 why.append("停頓之後才知道前面該斷在哪、怎麼寫，所以每次停頓都把還沒定稿的句子重聽一次")
@@ -202,7 +203,7 @@ class LogBook:
             tag = "；".join(t for t in (tag, f"「{_tail(locked)}」以前定稿") if t)
             kind = kind or "lock"
             why.append("標點落在你停頓的地方，前面就固定了；之後停頓只重聽後面的句子，比較快")
-        tech = tech_of(info.get("entry"), f"整句重聽 {info['redo_s']:.2f} 秒" if "redo_s" in info else "")
+        tech = tech_of(info.get("entry"), f"整句修正 {info['redo_s']:.2f} 秒" if "redo_s" in info else "")
         change = diff_html(before, after) if before else ins(after)
         bank = list(dict.fromkeys(bank_of(info.get("entry")) + info.get("bank", [])))
         g = self._row(said, change, tag, kind, _tip(why, tech), bank=bank)

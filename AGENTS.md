@@ -294,7 +294,9 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   resets everything including the 詞庫.
 - 辨識紀錄 (`logbook.py`, `set_log`): one row per event, grouped per listening session, newest first, heard vs the
   screen's change as a diff, details in the tooltip; copy icon on rows that settled text; an orange book (the 詞庫 tile's) when the 詞庫
-  may have shaped the text (`logbook.bank_of`; good news, not a warning). Text fixed as typed is 定稿.
+  may have shaped the text (`logbook.bank_of`; good news, not a warning). Text fixed as typed is 定稿 (its tag and dot the text red a
+  little deeper, #C8323E); a pause's re-decode that changed the text is 整句修正; speech typed at a new caret is
+  plain 文字, the why in its tip (2026-10-21).
 - 詞庫 tab: four collapsible sections, one open (`hotword_section`): 詞包, 詞庫列表, 選字記憶 (shown as
   這個ying3片是 → 這個影片是), 英文強制替換; each with its own remembered 排序.
 - Glow (`glow.py`, off by default): styles with editable parameters (`glow_edits`, 已編輯 + 恢復預設), up to 6 colors,

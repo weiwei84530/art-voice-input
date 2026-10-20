@@ -12,6 +12,7 @@ from .kit import Choice, T, Tip, button, dim, icon, label
 
 FILTERS = [("all", "全部"), ("text", "文字"), ("cmd", "指令"), ("fix", "選字與復原")]
 KIND_COLORS = {"text": "#FF453A", "cmd": "#3D7BFF", "pick": "#A259FF", "undo": "#8A9099"}
+SETTLED = ("#C8323E", "#E8525C")   # 定稿, light and dark: the text red a little deeper (2026-10-21, the user's pick)
 MAX_ROWS = 300   # rows drawn, newest first
 LINE_X = 77      # the timeline's x
 
@@ -98,7 +99,7 @@ class Entry(QWidget):
         h.addSpacing(18)   # the dot is painted on the line
         tag = QLabel(tag_of(r))
         tag.setFont(theme.font(11.5, 700))
-        color = KIND_COLORS[self.kind]
+        color = self.color = SETTLED[dark] if tag_of(r) == "定稿" else KIND_COLORS[self.kind]
         c = QColor(color)
         tag.setStyleSheet(f"color: {color}; background: rgba({c.red()},{c.green()},{c.blue()},34); border-radius: 4px;"
                           " padding: 2px 7px;")
@@ -153,7 +154,7 @@ class Entry(QWidget):
         p.setBrush(T("bg"))
         c = QPointF(LINE_X + 1, 17)
         p.drawEllipse(c, 7, 7)
-        p.setBrush(QColor(KIND_COLORS[self.kind]))
+        p.setBrush(QColor(self.color))
         p.drawEllipse(c, 4, 4)
 
 
