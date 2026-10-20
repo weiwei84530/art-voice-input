@@ -183,7 +183,8 @@ sentence end → 嗎 questions → trailing punctuation.
 
 - **選字 menu** (`picker.py`): opens by itself while listening (`App._auto_pick`) after a mouse drag or double click
   that selects ≤4 Chinese characters or ≤3 English words (read 80ms after release). Tabs by closeness of sound
-  (pointer over a tab opens it), on the side away from the selection; grid 4x4 (one character) or 2x5; no timeout,
+  (pointer over a tab opens it), design G3: a plain list with the tabs in a row along the bottom (always, also when
+  the menu opens above the selection), light or dark with `config.theme`; grid 4x4 (one character) or 2x5; no timeout,
   any click or key closes it. Chinese (`candidates.ranked`): 同音, 不同聲調, 模糊音 (`candidates._FUZZY`: zh/z,
   sh/s, an/ang, en/eng, r/l, ㄩㄣ/ㄧㄣ, ㄈ/ㄏㄨ, ㄋ/ㄌ …; fuzzy-only words from frequency 3, `app._FUZZY_MIN`; 詞庫
   words by sound too). English: 近音字 (`sounds.near`, weighted phoneme edit distance), 詞庫 (`sounds.alike`), 大小寫
@@ -240,7 +241,7 @@ place, 自訂 rows choose 按下按鍵 / 打出文字 / 左右包住, 新增一�
 included, is marked; 說標點的名字 and 說「詞的字」 cards below), 詞庫 (design 1: segmented tabs with counts, search,
 order), 辨識紀錄 (design 1: timeline, filters 全部 / 文字 / 指令 / 選字與復原, 清除紀錄 → `App._clear_log`), 系統
 (design 3: 外觀模式 亮色 / 暗色 / 跟隨系統 with sun / moon / computer icons, autostart, settings file drop zone,
-developer options with --debug, about). `config.theme` drives the settings window and (planned) the 選字 menu;
+developer options with --debug, about). `config.theme` drives the settings window and the 選字 menu;
 the floating button, bubble and glow are colored and not themed. `dev/settings_preview.py [page] [--dark]
 [shot.png]` shows the window on a temp copy of the user's data.
 - Each setting's help is an ⓘ after its name (`ui.kit.Info`), not tooltips.

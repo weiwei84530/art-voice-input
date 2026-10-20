@@ -1,42 +1,31 @@
-"""The 選字 menu: a small dark window that does not take focus, so the target app keeps its caret and selection.
+"""The 選字 menu: a small window that does not take focus, so the target app keeps its caret and selection.
 
-Redesigned 2026-10-16 (the user's design): no input box (words are added on the 詞庫 tab instead), the candidates
-in tabs, by how close they sound: 同音 / 不同聲調 / 模糊音 for Chinese, 近音字 / 詞庫 / 大小寫 for English. The pointer
-over a tab opens it. The tabs sit on the side away from the selection (under the menu when it opens below the
-selection, on top when it opens above it), so the pointer coming from the selection reaches the candidates first.
-Candidates fill a grid top to bottom, then left to right: 4 columns for a single character, 2 for words. Rows are
-answered with the mouse only (decided 2026-09-29: short spoken answers like 對 / 第二個 were often misheard). There
-is no timeout: the app closes the menu when the user's next click or key is somewhere else.
+Design G3 (2026-10-20, the user's pick of the redesign's menus): the candidates as a plain list, the tabs (by how close
+they sound: 同音 / 不同聲調 / 模糊音 for Chinese, 近音字 / 詞庫 / 大小寫 for English) in a row along the bottom with
+their counts, the open one marked by an orange bar on top. The tabs stay at the bottom even when the menu opens above
+the selection (they flipped to the top before). The pointer over a tab opens it. Candidates fill a grid top to bottom,
+then left to right: 4 columns for a single character, 2 for words; the word that is there now (the first of the first
+tab) is bold with an orange mark. Light or dark with the settings window (config.theme, ui/theme.py). Rows are answered
+with the mouse only (decided 2026-09-29: short spoken answers like 對 / 第二個 were often misheard). There is no
+timeout: the app closes the menu when the user's next click or key is somewhere else.
 """
 import ctypes
 
-from PySide6.QtCore import QPoint, Qt, QTimer, Signal
-from PySide6.QtGui import QCursor, QGuiApplication
-from PySide6.QtWidgets import (QGridLayout, QHBoxLayout, QLabel, QPushButton, QStackedWidget, QVBoxLayout,
-                               QWidget)
+from PySide6.QtCore import QPoint, QRectF, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QCursor, QFontMetrics, QGuiApplication, QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import QWidget
 
-_STYLE = """
-QWidget#picker { background: #202024; border: 1px solid #3a3a40; border-radius: 8px; }
-QPushButton { color: #f2f2f2; background: transparent; border: none; border-radius: 5px;
-              padding: 4px 10px; text-align: left; font-size: 15px; }
-QPushButton:hover { background: #3a3a44; }
-QLabel#tab { color: #9a9aa4; padding: 3px 8px; font-size: 12px; border-radius: 5px; }
-QLabel#tab[current="true"] { color: #f2f2f2; background: #34343c; }
-QLabel#empty { color: #8a8a94; padding: 6px 10px; font-size: 13px; }
-"""
+from .ui import theme as themes
+
 _GWL_EXSTYLE, _WS_EX_NOACTIVATE, _WS_EX_TOPMOST = -20, 0x08000000, 0x8
 SINGLE = (4, 4)   # columns, rows per tab for one Chinese character
 WORDS = (2, 5)    # for words and English
-
-
-class _Tab(QLabel):
-    def __init__(self, text, on_hover):
-        super().__init__(text, objectName="tab")
-        self._on_hover = on_hover
-
-    def enterEvent(self, e):
-        self._on_hover()
-        super().enterEvent(e)
+_SHADOW = 12      # room around the menu for its shadow
+_PAD = 6          # inside the menu, around the candidates
+_CELL_SINGLE = (46, 38)
+_CELL_WORD = (104, 34)
+_WORD_MAX = 220   # a long English candidate widens its column up to this
+_BAR = 40         # the row of tabs
 
 
 class Picker(QWidget):
@@ -47,31 +36,24 @@ class Picker(QWidget):
         super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setMouseTracking(True)
+        self.theme = None           # ui.theme.Theme, shared with the settings window (use_theme)
         self.tabs: list[tuple[str, list[str]]] = []
         self.current = 0
+        self.single = False
+        self.message = ""           # shown instead of candidates: … while loading, 沒有候選字
         self._anchor = None         # (top-left, bottom y) of the selection the menu belongs to, logical pixels
-        self._above = False         # opened above the selection (tabs on top)
         self._answered = False
-        self._tab_labels: list[_Tab] = []
-
-        self.frame = QWidget(self, objectName="picker")
-        self.frame.setAttribute(Qt.WA_StyledBackground)
-        self.frame.setStyleSheet(_STYLE)
-        self.tab_row = QWidget()
-        self.tab_layout = QHBoxLayout(self.tab_row)
-        self.tab_layout.setContentsMargins(0, 0, 0, 0)
-        self.tab_layout.setSpacing(2)
-        self.pages = QStackedWidget()
-        self.inner = QVBoxLayout(self.frame)
-        self.inner.setContentsMargins(6, 6, 6, 6)
-        self.inner.setSpacing(4)
-        self.inner.addWidget(self.pages)
-        self.inner.addWidget(self.tab_row)
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(self.frame)
+        self._hover = None          # ("cell", i) or ("tab", i)
+        self._cells: list[QRectF] = []
+        self._tab_rects: list[QRectF] = []
+        self._box = QRectF()
 
     # --- public API ---
+    def use_theme(self, theme):
+        self.theme = theme
+        theme.changed.connect(self.update)
+
     @property
     def candidates(self) -> list[str]:
         """Every candidate, tab after tab."""
@@ -79,14 +61,14 @@ class Picker(QWidget):
 
     def show_loading(self, word: str, rect):
         self._answered = False
-        self._fill([], single=False, loading=True)
+        self._fill([], single=False, message="…")
         self._place(rect)
 
     def show_candidates(self, word: str, tabs: list[tuple[str, list[str]]]):
         """tabs: (name, words) with words, in order; the first is opened."""
-        self._fill(tabs, single=len(word) == 1 and not word.isascii())
+        self._fill(tabs, single=len(word) == 1 and not word.isascii(), message="沒有候選字")
         if self.isVisible():
-            QTimer.singleShot(0, self._refit)
+            QTimer.singleShot(0, self._clamp)
 
     def owns(self, hwnd: int) -> bool:
         return bool(hwnd) and ctypes.windll.user32.GetAncestor(hwnd, 2) == int(self.winId())   # GA_ROOT
@@ -103,70 +85,170 @@ class Picker(QWidget):
     def open_tab(self, i: int):
         if 0 <= i < len(self.tabs) and i != self.current:
             self.current = i
-            self.pages.setCurrentIndex(i)
-            self._style_tabs()
+            self.update()
 
-    # --- internals ---
-    def _style_tabs(self):
-        for i, t in enumerate(self._tab_labels):
-            t.setProperty("current", i == self.current)
-            t.style().unpolish(t)
-            t.style().polish(t)
+    # --- layout ---
+    def _fill(self, tabs, single: bool, message: str):
+        self.tabs = [(name, words[:(SINGLE if single else WORDS)[0] * (SINGLE if single else WORDS)[1]])
+                     for name, words in tabs]
+        self.current, self.single, self.message = 0, single, message
+        self._hover = None
+        self._layout()
+        self.update()
 
-    def _clear(self):
-        while self.pages.count():
-            w = self.pages.widget(0)
-            self.pages.removeWidget(w)
-            w.hide()               # removed now, not at deleteLater: the old rows kept the window large
-            w.setParent(None)
-            w.deleteLater()
-        while self.tab_layout.count():
-            w = self.tab_layout.takeAt(0).widget()
-            if w is not None:
-                w.hide()
-                w.setParent(None)
-                w.deleteLater()
-        self._tab_labels = []
+    def _layout(self):
+        cols, rows = SINGLE if self.single else WORDS
+        cw, ch = _CELL_SINGLE if self.single else _CELL_WORD
+        if not self.single and self.tabs:
+            f = themes.font(15.5, 500)
+            fm = QFontMetrics(f)
+            longest = max((fm.horizontalAdvance(w) for _, ws in self.tabs for w in ws), default=0)
+            cw = min(max(cw, longest + 28), _WORD_MAX)
+        if self.tabs:
+            width = cols * cw + 2 * _PAD
+            fm_tabs = themes.font(12.5, 700)
+            tab_need = sum(QFontMetrics(fm_tabs).horizontalAdvance(f"{n} {len(ws)}") + 22 for n, ws in self.tabs)
+            width = max(width, tab_need + 2 * _PAD)
+            height = rows * ch + 2 * _PAD + _BAR
+        else:
+            width, height = 140, 44
+        self._box = QRectF(_SHADOW, _SHADOW - 4, width, height)
+        self.setFixedSize(round(width + 2 * _SHADOW), round(height + 2 * _SHADOW))
+        x0, y0 = self._box.x() + _PAD, self._box.y() + _PAD
+        self._cells = [QRectF(x0 + (n // rows) * cw, y0 + (n % rows) * ch, cw, ch) for n in range(cols * rows)]
+        self._tab_rects = []
+        if self.tabs:
+            bar_y = self._box.bottom() - _BAR + 5
+            tw = (width - 12) / len(self.tabs)
+            self._tab_rects = [QRectF(self._box.x() + 6 + i * tw + 1, bar_y, tw - 2, _BAR - 11)
+                               for i in range(len(self.tabs))]
 
-    def _fill(self, tabs, single: bool, loading: bool = False):
-        self._clear()
-        self.tabs, self.current = tabs, 0
-        if not tabs:
-            page = QLabel("…" if loading else "沒有候選字", objectName="empty")
-            self.pages.addWidget(page)
-            self.tab_row.hide()
-            self._shrink()
+    # --- painting ---
+    def _c(self, key: str) -> QColor:
+        if self.theme is None:
+            return themes.qcolor(themes.LIGHT[key])
+        return self.theme.color(key)
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        box = self._box
+        dark = self.theme is not None and self.theme["dark"]
+        for i in range(_SHADOW, 0, -2):   # a soft shadow, darker under the menu
+            a = (34 if dark else 16) * (1 - i / _SHADOW) ** 2
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(0, 0, 0, round(a)))
+            p.drawRoundedRect(box.adjusted(-i / 2, -i / 2 + 4, i / 2, i / 2 + 6), 8 + i / 2, 8 + i / 2)
+        path = QPainterPath()
+        path.addRoundedRect(box, 8, 8)
+        p.fillPath(path, self._c("tile"))
+        p.save()
+        p.setClipPath(path)
+        if not self.tabs:
+            p.setPen(self._c("muted"))
+            p.setFont(themes.font(13))
+            p.drawText(box, Qt.AlignCenter, self.message)
+        else:
+            self._paint_cells(p)
+            self._paint_tabs(p)
+        p.restore()
+        p.setPen(QPen(self._c("line"), 1))
+        p.setBrush(Qt.NoBrush)
+        p.drawRoundedRect(box.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8)
+
+    def _paint_cells(self, p):
+        words = self.tabs[self.current][1]
+        if not words:
+            p.setPen(self._c("muted"))
+            p.setFont(themes.font(13))
+            area = QRectF(self._box.x(), self._box.y(), self._box.width(), self._box.height() - _BAR)
+            p.drawText(area, Qt.AlignCenter, "沒有候選字")
             return
-        cols, rows = SINGLE if single else WORDS
-        for i, (name, words) in enumerate(tabs):
-            page = QWidget()
-            grid = QGridLayout(page)
-            grid.setContentsMargins(0, 0, 0, 0)
-            grid.setSpacing(0)
-            for n, word in enumerate(words[:cols * rows]):
-                grid.addWidget(QPushButton(word, clicked=lambda _=False, w=word: self.pick(w)), n % rows, n // rows)
-            grid.setRowStretch(rows, 1)
-            self.pages.addWidget(page)
-            tab = _Tab(name, lambda i=i: self.open_tab(i))
-            self.tab_layout.addWidget(tab)
-            self._tab_labels.append(tab)
-        self.tab_layout.addStretch(1)
-        self.tab_row.show()
-        self.pages.setCurrentIndex(0)
-        self._style_tabs()
-        self._shrink()
+        for i, word in enumerate(words):
+            r = self._cells[i]
+            hot = self._hover == ("cell", i)
+            first = self.current == 0 and i == 0
+            if hot:
+                p.setPen(Qt.NoPen)
+                p.setBrush(self._c("accbg"))
+                p.drawRoundedRect(r, 5, 5)
+            if first:
+                p.setPen(Qt.NoPen)
+                p.setBrush(self._c("acc"))
+                if self.single:
+                    p.drawRoundedRect(QRectF(r.x() + 12, r.bottom() - 6, r.width() - 24, 2), 1, 1)
+                else:
+                    p.drawRoundedRect(QRectF(r.x() + 3, r.y() + 10, 3, r.height() - 20), 1.5, 1.5)
+            p.setPen(self._c("acct") if hot else self._c("ink"))
+            p.setFont(themes.font(19 if self.single else 15.5, 700 if first else 500))
+            if self.single:
+                p.drawText(r, Qt.AlignCenter, word)
+            else:
+                fm = p.fontMetrics()
+                p.drawText(r.adjusted(12, 0, -6, 0), Qt.AlignLeft | Qt.AlignVCenter,
+                           fm.elidedText(word, Qt.ElideRight, int(r.width() - 18)))
 
-    def _refit(self):
-        """Rows added to a visible window are shown, and sized, on the next event loop pass."""
-        if self.isVisible():
-            self._shrink()
-            self._clamp()
+    def _paint_tabs(self, p):
+        box = self._box
+        bar = QRectF(box.x(), box.bottom() - _BAR, box.width(), _BAR)
+        p.fillRect(bar, self._c("tile2"))
+        p.fillRect(QRectF(bar.x(), bar.y(), bar.width(), 1), self._c("line"))
+        for i, ((name, words), r) in enumerate(zip(self.tabs, self._tab_rects)):
+            on = i == self.current
+            if on:
+                p.setPen(Qt.NoPen)
+                p.setBrush(self._c("tile"))
+                p.drawRoundedRect(r, 5, 5)
+                p.setBrush(self._c("acc"))
+                p.drawRoundedRect(QRectF(r.x() + 10, r.y(), r.width() - 20, 3), 1.5, 1.5)
+            name_font = themes.font(12.5, 700 if on else 500)
+            num_font = themes.font(11, 600, num=True)
+            p.setFont(name_font)
+            nw = p.fontMetrics().horizontalAdvance(name)
+            p.setFont(num_font)
+            count = str(len(words))
+            cw = p.fontMetrics().horizontalAdvance(count)
+            x = r.center().x() - (nw + 5 + cw) / 2
+            p.setFont(name_font)
+            p.setPen(self._c("ink") if on else self._c("muted"))
+            p.drawText(QRectF(x, r.y(), nw + 2, r.height()), Qt.AlignLeft | Qt.AlignVCenter, name)
+            p.setFont(num_font)
+            p.setPen(self._c("acct") if on else self._c("muted"))
+            p.drawText(QRectF(x + nw + 5, r.y() + 1, cw + 2, r.height()), Qt.AlignLeft | Qt.AlignVCenter, count)
 
-    def _shrink(self):
-        self.frame.layout().activate()
-        self.layout().activate()
-        self.resize(self.sizeHint())
+    # --- the mouse ---
+    def _hit(self, pos):
+        for i, r in enumerate(self._tab_rects):
+            if r.contains(pos):
+                return "tab", i
+        if self.tabs:
+            for i in range(len(self.tabs[self.current][1])):
+                if self._cells[i].contains(pos):
+                    return "cell", i
+        return None
 
+    def mouseMoveEvent(self, e):
+        hit = self._hit(e.position())
+        if hit and hit[0] == "tab":
+            self.open_tab(hit[1])
+        if hit != self._hover:
+            self._hover = hit
+            self.setCursor(Qt.PointingHandCursor if hit and hit[0] == "cell" else Qt.ArrowCursor)
+            self.update()
+
+    def leaveEvent(self, e):
+        if self._hover is not None:
+            self._hover = None
+            self.update()
+
+    def mouseReleaseEvent(self, e):
+        if e.button() != Qt.LeftButton:
+            return
+        hit = self._hit(e.position())
+        if hit and hit[0] == "cell":
+            self.pick(self.tabs[self.current][1][hit[1]])
+
+    # --- placing ---
     def _place(self, rect):
         """rect: selection bounds in physical screen pixels (x, y, w, h) from UI Automation, or None (then next
         to the mouse)."""
@@ -178,12 +260,11 @@ class Picker(QWidget):
             pos = QPoint(top.x(), self._anchor[1] + 6)
         else:
             pos = QCursor.pos() + QPoint(0, 6)
-        self.move(pos)
+        self.move(pos - QPoint(_SHADOW, _SHADOW - 4))
         self._no_activate()
         self.show()
         self._no_activate()
         self._clamp()
-        QTimer.singleShot(0, self._refit)   # rows added while an earlier menu was still open are sized later
 
     @staticmethod
     def _to_logical(p: QPoint) -> QPoint:
@@ -194,30 +275,20 @@ class Picker(QWidget):
                 return QPoint(g.x() + int((p.x() - g.x()) / r), g.y() + int((p.y() - g.y()) / r))
         return p
 
-    def _set_above(self, above: bool):
-        """The tabs go on the side away from the selection."""
-        if above == self._above:
-            return
-        self._above = above
-        self.inner.removeWidget(self.tab_row)
-        self.inner.insertWidget(0 if above else 1, self.tab_row)
-
     def _clamp(self):
         """Keep the menu on screen. Under a selection too close to the bottom it opens above it instead, like an
-        IME candidate window."""
+        IME candidate window (the tabs stay at the bottom)."""
         anchor = self._anchor
         screen = QGuiApplication.screenAt(anchor[0] if anchor else self.pos()) or QGuiApplication.primaryScreen()
         a = screen.availableGeometry()
+        top_gap, bottom_gap = round(self._box.y()), round(self.height() - self._box.bottom())
         y = self.y()
-        above = False
         if anchor:
-            y = anchor[1] + 6
-            if y + self.height() > a.bottom():
-                y = anchor[0].y() - 6 - self.height()
-                above = True
-        self._set_above(above)
-        x = min(max(self.x(), a.left()), a.right() - self.width())
-        y = min(max(y, a.top()), a.bottom() - self.height())
+            y = anchor[1] + 6 - top_gap
+            if y + self.height() - bottom_gap > a.bottom():
+                y = anchor[0].y() - 6 - round(self._box.bottom())
+        x = min(max(self.x(), a.left() - _SHADOW), a.right() - self.width() + _SHADOW)
+        y = min(max(y, a.top() - top_gap), a.bottom() - self.height() + bottom_gap)
         self.move(x, y)
 
     def _no_activate(self):

@@ -242,6 +242,7 @@ class App(QObject):
         self._picker_hwnd = int(self.picker.winId())
         self.settings = SettingsWindow(self.cfg, self.hotwords, self.memory)
         self.settings.applied.connect(self.apply_settings)
+        self.picker.use_theme(self.settings.theme)   # light or dark with the settings window
         self.book = LogBook(self._log_changed)   # the 辨識紀錄 page, kept for this session only
         self.settings.clear_log.connect(self._clear_log)
         self.settings.glow_preview.connect(self._preview_glow)
