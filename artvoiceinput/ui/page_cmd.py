@@ -185,6 +185,7 @@ class ChipSet(QWidget):
         self._build()
 
     def _build(self):
+        _hold(self)
         while self._lay.count():
             w = self._lay.takeAt(0).widget()
             if w is not None:
@@ -238,6 +239,7 @@ class ChipSet(QWidget):
             self.phrases[i] = text
         else:
             del self.phrases[i]
+        QTimer.singleShot(0, self._build)   # not from inside the editor's own signal
         QTimer.singleShot(0, lambda: self.changed.emit(self.phrases))
 
 
@@ -272,6 +274,15 @@ class Act(QWidget):
         p.setPen(T("ink"))
         p.setFont(self.font())
         p.drawText(QRectF(self.rect()).adjusted(0, 0, 0, -1 if self.kind == "key" else 0), Qt.AlignCenter, self.text)
+
+
+def _hold(w: QWidget):
+    """Rebuilt out of sight: the whole window waits a moment, the scroll area too (the page alone was not enough:
+    the table shrank for a moment and the view jumped)."""
+    top = w.window()
+    if top.updatesEnabled():
+        top.setUpdatesEnabled(False)
+        QTimer.singleShot(40, lambda: top.setUpdatesEnabled(True))
 
 
 def _note(text: str):
@@ -704,11 +715,7 @@ class CmdPage(QWidget):
         return {n for n, c in count.items() if c > 1}
 
     def _draw(self, new_row: dict | None = None):
-        # rebuilt out of sight: the half-built table flashed. The whole window waits, the scroll area too (the page
-        # alone was not enough: the table shrank for a moment and the view jumped)
-        top = self.window()
-        top.setUpdatesEnabled(False)
-        QTimer.singleShot(40, lambda: top.setUpdatesEnabled(True))
+        _hold(self)   # the half-built table flashed
         lay = self.book_layout
         while lay.count():
             item = lay.takeAt(0)
