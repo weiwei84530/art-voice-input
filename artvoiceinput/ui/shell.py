@@ -174,8 +174,8 @@ class Brand(QWidget):
         # the logo with its solid shadow
         for d in (14, 12, 10):
             p.setOpacity(a * 0.06)
-            # 6px down (10 until 2026-10-21: it read too thick, the user's request)
-            self._logo_shadow.render(p, QRectF(x - 14 - d / 4, 254 + 6 - d / 4, 132 + d / 2, 132 + d / 2))
+            # 8px down (10 until 2026-10-21: it read too thick, the user's request)
+            self._logo_shadow.render(p, QRectF(x - 14 - d / 4, 254 + 8 - d / 4, 132 + d / 2, 132 + d / 2))
         p.setOpacity(a)
         self._logo.render(p, QRectF(x - 14, 254, 132, 132))
 
