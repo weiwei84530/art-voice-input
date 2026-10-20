@@ -16,7 +16,7 @@ from . import theme
 from .kit import Choice, Switch, T, Tip, button, calm, card, dim, draw_icon, icon, label
 
 TABS = [("packs", "詞包", "勾選的詞包，裡面的詞會優先辨識；「編輯詞」用記事本打開，存檔後下次說話就生效"),
-        ("words", "詞庫列表", "每個詞出現的機會：選字選到會提高，被換掉會降低，也可以按 − / + 自己調，一次 25%；0% 不影響辨識"),
+        ("words", "詞庫列表", "每個詞出現的機會：選字選到會提高，被換掉會降低，也可以按 − / + 自己調，一次 25%"),
         ("picks", "選字記憶", "選過的單字：聽到同樣的讀音、前後字也一樣時自動換"),
         ("aliases", "英文替換", "聽到左邊的拼法，一律寫成右邊")]
 SORTS = {"words": ("hotword_sort", [("weight", "優先度（高→低）"), ("name", "名稱 A→Z"), ("name_desc", "名稱 Z→A"),
@@ -121,6 +121,14 @@ def _arrow():
         draw_icon(p, "arrow", QRectF(4, 0, 16, 16), T("muted"), 2)
     w.paintEvent = paint
     return w
+
+
+COL_W = 72   # 優先度 and 記住於: values centered under their names, the same place on every tab
+
+
+def _col(w):
+    w.setAlignment(Qt.AlignCenter)
+    return _fixed(w, COL_W)
 
 
 def _fixed(w, width: int):
@@ -291,10 +299,8 @@ class BankPage(QWidget):
         sl.addStretch(1)
         sl.addWidget(self._h("多出現 →"))
         head.lay.addWidget(scale, 1)
-        h = self._h("優先度")
-        h.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        head.lay.addWidget(_fixed(h, 56))
-        head.lay.addWidget(_fixed(self._h("日期"), 64))
+        head.lay.addWidget(_col(self._h("優先度")))
+        head.lay.addWidget(_col(self._h("記住於")))
         head.lay.addSpacing(28 + head.lay.spacing())   # the ✕ and the gap before it
         self.list.addWidget(head)
         items = self._sorted_words()
@@ -309,7 +315,6 @@ class BankPage(QWidget):
             bar = Bar(h.pct)
             pct = label("")
             pct.setFont(theme.font(14, 600, num=True))
-            pct.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             down, up = self._step_button("minus", "降低 25%"), self._step_button("plus", "提高 25%")
             parts = (h.word, bar, pct, down, up)
             down.clicked.connect(lambda _=False, parts=parts: self._step(parts, -hw.PICK_STEP))
@@ -321,10 +326,10 @@ class BankPage(QWidget):
             slider.addWidget(bar, 1)
             slider.addWidget(up)
             r.lay.addLayout(slider, 1)
-            r.lay.addWidget(_fixed(pct, 56))
+            r.lay.addWidget(_col(pct))
             date = dim(h.added[5:10].replace("-", "/") if h.added else "")
             date.setToolTip(h.added)
-            r.lay.addWidget(_fixed(date, 64))
+            r.lay.addWidget(_col(date))
             r.lay.addWidget(_x_button(lambda _=False, word=h.word: self._remove_word(word), "移除，優先度回到預設"))
             self.list.addWidget(r)
             n += 1
@@ -341,7 +346,7 @@ class BankPage(QWidget):
         head.lay.addWidget(self._h("聽到"), 1)
         head.lay.addSpacing(24)
         head.lay.addWidget(self._h("自動寫成"), 1)
-        head.lay.addWidget(_fixed(self._h("記住於"), 60))
+        head.lay.addWidget(_col(self._h("記住於")))
         head.lay.addSpacing(28 + head.lay.spacing())   # the ✕ and the gap before it
         self.list.addWidget(head)
         n = 0
@@ -362,7 +367,7 @@ class BankPage(QWidget):
             r.lay.addWidget(to, 1)
             d = dim(e["added"][5:10].replace("-", "/"))
             d.setToolTip(e["added"])
-            r.lay.addWidget(_fixed(d, 60))
+            r.lay.addWidget(_col(d))
             r.lay.addWidget(_x_button(lambda _=False, k=e["key"], s=e["serial"]: self._remove_pick(k, s), "忘掉這筆"))
             self.list.addWidget(r)
             n += 1
@@ -379,7 +384,7 @@ class BankPage(QWidget):
         head.lay.addWidget(self._h("聽到"), 1)
         head.lay.addSpacing(24)
         head.lay.addWidget(self._h("一律寫成"), 1)
-        head.lay.addWidget(_fixed(self._h("日期"), 60))
+        head.lay.addWidget(_col(self._h("記住於")))
         head.lay.addSpacing(28 + head.lay.spacing())   # the ✕ and the gap before it
         self.list.addWidget(head)
         n = 0
@@ -397,7 +402,7 @@ class BankPage(QWidget):
             r.lay.addWidget(b, 1)
             d = dim(added[5:10].replace("-", "/"))
             d.setToolTip(added)
-            r.lay.addWidget(_fixed(d, 60))
+            r.lay.addWidget(_col(d))
             r.lay.addWidget(_x_button(lambda _=False, w=word, al=alias: self._remove_alias(w, al), "不再替換"))
             self.list.addWidget(r)
             n += 1
