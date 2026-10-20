@@ -615,10 +615,16 @@ class App(QObject):
                 or self._focus_busy or self._quitting:
             return
         self._focus_busy = True
+        settings = int(self.settings.winId()) if self.settings.isVisible() else 0
 
         def read():
             started = time.monotonic()   # a click before this is where the focus read is
             info = focus_info()
+            if info[0] is None and settings and foreground() == settings:
+                # our settings window in front counts as a place where nothing can be typed (2026-10-20, the
+                # user's request: with listening still on the user believes the text box still takes it); the
+                # floating button, bubble and 選字 menu never take the foreground and still change nothing
+                info = (False, None)
             self.main.emit(lambda: self._focus_seen(*info, started))
         self._focus_pool.submit(read)
 
@@ -636,8 +642,8 @@ class App(QObject):
         there shows the bubble by the click, or with auto_listen turns listening on (keyboard focus does neither);
         the floating button shows. The focus went where nothing can be typed (a web page's blank part, a button, the
         desktop): the bubble goes, and with auto_off listening is turned off (when it was in a text box before:
-        listening may be turned on by hand anywhere). Unknown places and Art VoiceInput's own windows change
-        nothing."""
+        listening may be turned on by hand anywhere); the settings window in front counts as such a place. Unknown
+        places and Art VoiceInput's other windows change nothing."""
         self._focus_busy = False
         bubble, floating, auto = self.cfg.show_bubble, self.cfg.show_float, self.cfg.auto_listen
         if not (bubble or floating or auto or self.cfg.auto_off) or editable is None:

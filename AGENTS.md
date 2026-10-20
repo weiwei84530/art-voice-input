@@ -94,8 +94,9 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
   counts as editable). With auto_listen a left click that put the focus in a text box turns listening on, at the
   moments the bubble would show (`App._clicked`; keyboard focus does nothing; 2026-10-20). 自動關閉麥克風
   (`auto_off`, off by default, a checkbox in the 點進輸入框時 card, for any way listening was turned on): the focus
-  leaving a text box for a non-editable place turns it off. Art VoiceInput's own windows and unknown controls change
-  nothing.
+  leaving a text box for a non-editable place turns it off. The settings window in front counts as non-editable
+  (2026-10-20, the user's request: the user knows where they clicked, a microphone left on there misleads); the
+  floating button, bubble and 選字 menu (never in front) and unknown controls change nothing.
 - **Bubble** (`show_bubble`, default): fades in just right of a left click (not a drag) that put the focus in a text
   box (focus read 120ms after the click); goes on typing / wheel (at once) or focus leaving (fade). Keyboard focus
   shows nothing. Placed at the click because UIA caret positions are wrong in Notion, LINE, web pages.

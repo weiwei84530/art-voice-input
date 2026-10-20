@@ -5,7 +5,7 @@ place of the focused app, so nothing is typed into real windows. Audio comes fro
 
 Each step is a wav name in <dir>/wav (the hotkey pressed before and after it is spoken), sel:WORD (select the last WORD in the
 box), mousesel:WORD (the same with the mouse: the 選字 menu may open while listening), floatclick (the floating
-button is clicked), window:N (window N comes to the front; the text box is 4242), focus:box:N / focus:none (what the
+button is clicked), window:N (window N comes to the front; the text box is 4242), settings (the settings window opens in front), focus:box:N / focus:none (what the
 focus watcher reads: text box N, or a place where nothing can be typed), click (the user clicks: ends what the app knows about the text), tap (one press of the hotkey), toggle:WAV (tap,
 speak, tap), hotkey:SPEC (the hotkey, keys.parse_hotkey; default mouse_middle), rules:default (the default operations),
 rule:JSON (add an operation, rules.Rule.from_dict), at:WORD (put the caret right after the last WORD; at: puts it at
@@ -296,6 +296,13 @@ try:
             appmod.foreground = session.foreground = lambda: hwnd
             pump(1.5)
             print(f"[切換視窗 {hwnd}] 聽寫中：{A._listening}")
+            continue
+        if step == "settings":   # the settings window opens in front (the focus in it)
+            A.settings.show()
+            hwnd = int(A.settings.winId())
+            appmod.foreground = session.foreground = lambda: hwnd
+            pump(1.5)
+            print(f"[設定視窗在前面] 聽寫中：{A._listening}")
             continue
         if step == "floatclick":   # the floating button is clicked
             A._float_clicked()
