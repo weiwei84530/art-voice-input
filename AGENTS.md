@@ -260,7 +260,8 @@ orange and breathes while on, all pills in step with the clock; auto-off chips, 
 when the page hides), mute), 外觀與聲音 (on one screen, no scrolling: preview beside the mark colors (design A3,
 named), button looks beside the glow, whose 自訂顏色、速度與邊緣 slides its editor in its place in the same card
 (design A1, `kit.Slides`; the page around it stays put): names in one column, controls from the sliders' left, values
-after the sliders, small edge chips, 回到光暈樣式 where the chip was, 恢復預設 across; sounds across; while listening
+after the sliders, small 發光邊緣 chips, 回到光暈樣式 where the chip was, 恢復預設 across; sounds across, 自定義's start
+and end beside the sets (room kept, the sets don't move); while listening
 ▶ 預覽 / ▶ 試聽 read 錄音中無法使用 and picks play nothing), 語音指令 (design C4: "當我說 [chips] 就 [what]" grouped with an orange bar per group, phrase chips edited in
 place, 自訂 rows choose 按下按鍵 / 打出文字 / 左右包住, 新增一句; a phrase said for two things, punctuation names
 included, is marked; 說標點的名字 and 說「詞的字」 cards below), 詞庫 (design 1: segmented tabs with counts, search,
@@ -286,7 +287,7 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
 - 詞庫 tab: four collapsible sections, one open (`hotword_section`): 詞包, 詞庫列表, 選字記憶 (shown as
   這個ying3片是 → 這個影片是), 英文強制替換; each with its own remembered 排序.
 - Glow (`glow.py`, off by default): styles with editable parameters (`glow_edits`, 已編輯 + 恢復預設), up to 6 colors,
-  edges (`glow_edges`), motions 柔光 / 波浪 / 流星 / 漣漪 (`glow_motion`); four click-through strips; colors by numpy LUT;
+  edges (a style's parameter like the others, `glow.edges_for`, 2026-10-21; the preview shows only those), motions 柔光 / 波浪 / 流星 / 漣漪 (`glow_motion`); four click-through strips; colors by numpy LUT;
   moving motions at 48 fps unless 節流模式 (柔光 24). 流星's position is summed per frame (`EdgeGlow._lap`).
 - 按鈕樣式 (`orbs.py`, `button_look`): mic + ten orb looks in the glow's colors (蝕光 the latest), drawn on a canvas
   1.4x the mic (`orbs.SCALE`), frames cached per loop phase, only while shown; 30 fps (15 with 節流模式). Hover

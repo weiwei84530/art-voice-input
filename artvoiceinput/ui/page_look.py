@@ -18,6 +18,7 @@ from .kit import Choice, Info, Slides, T, button, calm, card, dim, hbox, icon, l
 
 PREVIEW_H = 132     # the preview, as tall as the mark card beside it
 _NAME_W = 60        # the glow editor's names column
+_SOUND_ROOM = 220   # 自定義's start / end beside the sound sets
 BUSY = "錄音中無法使用"   # ▶ 預覽 / ▶ 試聽 while listening
 PREVIEW_MS = 3300   # a glow previewed shows this long, its fade-out included (App._preview_glow)
 _SET_PAUSE = 0.8    # seconds between the start and the end sound of a set
@@ -103,6 +104,7 @@ class Preview(QWidget):
         self.setFixedHeight(PREVIEW_H)
         self.colors = palette(None)
         self.glow_on = True
+        self.edges = "all"   # glow.EDGES
         self.mark = QColor(MARK_COLORS[0][0])
         self.orb = OrbSample(self)
         self._t0 = time.monotonic()
@@ -161,7 +163,8 @@ class Preview(QWidget):
         p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 6, 6)
 
     def _edges(self, p, r):
-        """The colors run along the four edges, fading inward."""
+        """The colors run along the edges the style glows on, fading inward."""
+        _, *lit = glowmod.EDGES[self.edges]
         shift = 0.0 if calm() else ((time.monotonic() - self._t0) / 4.0) % 1.0
         cols = [QColor(c) for c in self.colors] + [QColor(self.colors[0])]
         for horizontal, rect, start, end in (
@@ -169,6 +172,8 @@ class Preview(QWidget):
                 (True, QRectF(r.left(), r.bottom() - 14, r.width(), 14), r.bottomLeft(), r.bottomRight()),
                 (False, QRectF(r.left(), r.top(), 14, r.height()), r.topLeft(), r.bottomLeft()),
                 (False, QRectF(r.right() - 14, r.top(), 14, r.height()), r.topRight(), r.bottomRight())):
+            if not lit.pop(0):
+                continue
             g = QLinearGradient(start, end)
             g.setSpread(QLinearGradient.RepeatSpread)
             n = len(cols) - 1
@@ -496,7 +501,7 @@ class LookPage(QWidget):
             g.addWidget(n, row, col + 2)
         self.edges = Choice([(k, val[0]) for k, val in glowmod.EDGES.items()], small=True)
         self.edges.picked.connect(self._edges)
-        g.addWidget(name("亮哪幾邊"), 3, 0)
+        g.addWidget(name("發光邊緣"), 3, 0)
         g.addWidget(self.edges, 3, 1, 1, 6)
         ev.addLayout(g)
         ev.addStretch(1)
@@ -521,17 +526,31 @@ class LookPage(QWidget):
         sets = [(cid, text) for cid, text, *_ in cues.SOUNDS] + [("", "無"), (None, "自定義")]
         self.sound_sets = Choice(sets)
         self.sound_sets.picked.connect(self._sound_set)
-        c.addWidget(self.sound_sets)
         self.start_box, self.stop_box = QComboBox(), QComboBox()
         for box, kind in ((self.start_box, "start"), (self.stop_box, "stop")):
             for cid, text, *_ in cues.SOUNDS:
                 box.addItem(text, cid)
             box.addItem("無", "")
             box.currentIndexChanged.connect(lambda _=0, b=box, k=kind: self._sound(b, k))
+        # 自定義's start and end on the right of the sets (below them the page would not fit), its room kept so the
+        # sets don't move when it shows
         self.custom_sounds = QWidget()
-        self.custom_sounds.setLayout(hbox(label("開始"), self.start_box, 12, label("結束"), self.stop_box, None,
-                                          spacing=6))
-        c.addWidget(self.custom_sounds)
+        cg = QGridLayout(self.custom_sounds)
+        cg.setContentsMargins(0, 0, 0, 0)
+        cg.setHorizontalSpacing(8)
+        cg.setVerticalSpacing(6)
+        for row, (text, box) in enumerate((("開始", self.start_box), ("結束", self.stop_box))):
+            box.setProperty("slim", True)
+            cg.addWidget(label(text), row, 0)
+            cg.addWidget(box, row, 1)
+        cg.setColumnStretch(1, 1)
+        room = QWidget()
+        room.setFixedWidth(_SOUND_ROOM)
+        rv = QVBoxLayout(room)
+        rv.setContentsMargins(0, 0, 0, 0)
+        rv.addWidget(self.custom_sounds)
+        rv.addStretch(1)
+        c.addLayout(hbox(self.sound_sets, room, spacing=20))
         v.addWidget(c_sound)
         v.addStretch(1)
         self._live = QTimer(self, singleShot=True, interval=80, timeout=self._preview_glow)
@@ -546,7 +565,6 @@ class LookPage(QWidget):
         self.scale.blockSignals(False)
         self._scale_text(cfg.button_scale)
         self.motions.set(cfg.glow_motion)
-        self.edges.set(cfg.glow_edges)
         for box, cid in ((self.start_box, cfg.start_sound), (self.stop_box, cfg.stop_sound)):
             box.blockSignals(True)
             box.setCurrentIndex(max(0, box.findData(cid)))
@@ -621,9 +639,7 @@ class LookPage(QWidget):
         self._preview_glow()
 
     def _edges(self, key: str):
-        self.cfg.glow_edges = key
-        self.win.save()
-        self._preview_glow()
+        self._glow_edited("edges", key)
 
     def _params(self) -> dict:
         style_id = self.cfg.glow or glowmod.STYLES[0].id
@@ -658,6 +674,7 @@ class LookPage(QWidget):
             s.setValue(round(float(c[key]) * 100))
             s.blockSignals(False)
             self.slider_values[key].setText(str(s.value()))
+        self.edges.set(c["edges"])
         while self.color_row.count():
             w = self.color_row.takeAt(0).widget()
             if w is not None:
@@ -674,6 +691,7 @@ class LookPage(QWidget):
         self.color_row.addStretch(1)
         self.preview.colors = _colors_of(cfg.glow, cfg.glow_edits)
         self.preview.glow_on = on
+        self.preview.edges = c["edges"]
         self.preview.update()
         self._show_orb()
 

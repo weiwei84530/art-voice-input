@@ -54,8 +54,9 @@ STYLES = [
 ]
 BY_ID = {s.id: s for s in STYLES}
 # every style's parameters can be changed on the 外觀 tab (2026-10-16, the user's design, replacing a separate 自訂
-# style): config.glow_edits holds the changed ones per style id, 恢復預設 drops them
-PARAM_KEYS = ("colors", "turn", "pulse", "depth", "bright")
+# style): config.glow_edits holds the changed ones per style id, 恢復預設 drops them. The edges are one of them
+# (2026-10-21, the user's request: one setting for every style, not shown as an edit, read wrong)
+PARAM_KEYS = ("colors", "turn", "pulse", "depth", "bright", "edges")
 MAX_COLORS = 6
 
 
@@ -64,7 +65,7 @@ def params(style: Style) -> dict:
     (cut to 4 until 2026-10-16: changing any slider of 彩虹 dropped its fifth color)."""
     colors = list(style.colors[:-1]) if style.colors[0] == style.colors[-1] else list(style.colors)
     return {"colors": colors[:MAX_COLORS], "turn": style.turn, "pulse": style.pulse, "depth": style.depth,
-            "bright": style.bright}
+            "bright": style.bright, "edges": "all"}
 
 
 def edited(style_id: str, edits: dict | None) -> bool:
@@ -72,6 +73,12 @@ def edited(style_id: str, edits: dict | None) -> bool:
     preset = BY_ID.get(style_id)
     e = (edits or {}).get(style_id)
     return bool(preset and e) and {**params(preset), **e} != params(preset)
+
+
+def edges_for(style_id: str, edits: dict | None) -> str:
+    """Which edges the style glows on (EDGES), all unless changed."""
+    edges = ((edits or {}).get(style_id) or {}).get("edges", "all")
+    return edges if edges in EDGES else "all"
 
 
 def style_for(style_id: str, edits: dict | None) -> Style | None:

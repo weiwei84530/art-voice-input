@@ -46,7 +46,7 @@ from . import autostart, candidates, config, cues, edit, models, packs, paths, r
 from .asr import SAMPLE_RATE, Recognizer
 from .config import Config
 from .floatbtn import Bubble, FloatButton
-from .glow import EdgeGlow, style_for
+from .glow import EdgeGlow, edges_for, style_for
 from .orbs import palette
 from .highlight import DraftMarks, draft_rects
 from .logbook import BANK_HITS, LogBook, bank_of, esc
@@ -210,7 +210,7 @@ class App(QObject):
         self._busy, self._busy_lock = 0, threading.Lock()   # decoding jobs queued or running
         self.glow = EdgeGlow(lambda: self.listener.level if self._listening else 0.0)
         self.glow.set_style(style_for(self.cfg.glow, self.cfg.glow_edits))
-        self.glow.set_edges(self.cfg.glow_edges)
+        self.glow.set_edges(edges_for(self.cfg.glow, self.cfg.glow_edits))
         self.glow.set_motion(self.cfg.glow_motion)
         self.glow.set_lite(self.cfg.orb_lite)
         self._preview_end = QTimer(self, singleShot=True,
@@ -672,7 +672,7 @@ class App(QObject):
         """A glow style picked, changed or previewed in the settings: shown for a moment (unless listening shows it
         already); a change while it shows restarts the moment."""
         self.glow.set_style(style_for(style_id, self.cfg.glow_edits))
-        self.glow.set_edges(self.cfg.glow_edges)
+        self.glow.set_edges(edges_for(self.cfg.glow, self.cfg.glow_edits))
         self.glow.set_motion(self.cfg.glow_motion)
         if not self._listening:
             self.glow.show(QGuiApplication.screenAt(self.settings.geometry().center()))
@@ -1824,9 +1824,9 @@ class App(QObject):
         self._pack_stamp = None   # packs ticked may have changed (an import, 還原預設)
         self._load_packs()
         style = style_for(self.cfg.glow, self.cfg.glow_edits)
-        if self.glow.style != style or self.glow.edges != self.cfg.glow_edges                 or self.glow.motion != self.cfg.glow_motion:
+        if self.glow.style != style or self.glow.edges != edges_for(self.cfg.glow, self.cfg.glow_edits)                 or self.glow.motion != self.cfg.glow_motion:
             self.glow.set_style(style)
-            self.glow.set_edges(self.cfg.glow_edges)
+            self.glow.set_edges(edges_for(self.cfg.glow, self.cfg.glow_edits))
             self.glow.set_motion(self.cfg.glow_motion)
             if self._listening and self._listen_shown and self.cfg.glow:
                 self.glow.show(self._pointer_screen())

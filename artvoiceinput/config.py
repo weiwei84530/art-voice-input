@@ -29,7 +29,6 @@ class Config:
     # none (2026-10-16, the user's design: the one key binding left; any key since 2026-10-17)
     hotkey: str = ""
     glow: str = "siri"             # glow.py style along the screen's edges while listening, "" for none
-    glow_edges: str = "all"        # which edges glow (glow.EDGES): all, tb, lr, top, bottom
     glow_motion: str = "soft"      # how it moves (glow.MOTIONS): soft, wave, comet, ripple
     # the floating button's and the bubble's look (orbs.LOOKS): the microphone, or an energy orb in the glow's colors
     button_look: str = "flow"
@@ -37,7 +36,8 @@ class Config:
     orb_lite: bool = False
     # the floating button's and the bubble's size, percent of the usual (75-125; 2026-10-16, the user's request)
     button_scale: int = 100
-    # each glow style's changed parameters: style id -> colors (2-4), turn, pulse, depth, bright (glow.PARAM_KEYS)
+    # each glow style's changed parameters: style id -> colors (2-6), turn, pulse, depth, bright, edges
+    # (glow.PARAM_KEYS)
     glow_edits: dict = field(default_factory=dict)
     # the floating microphone button's place (show_float), as fractions of the screen's free range
     float_pos: list = field(default_factory=lambda: [0.98, 0.88])
@@ -111,6 +111,9 @@ class Config:
         if data.get("glow") == "custom":   # the 自訂 style (2026-10-16, a few hours): 彩虹 changed that way
             cfg.glow = "siri"
             cfg.glow_edits = {"siri": data.get("glow_custom") or {}}
+        edges = data.get("glow_edges")   # one for every style until 2026-10-21: now the style's own
+        if edges and edges != "all" and cfg.glow:
+            cfg.glow_edits = {**cfg.glow_edits, cfg.glow: {**cfg.glow_edits.get(cfg.glow, {}), "edges": edges}}
         cfg.button_scale = min(max(int(cfg.button_scale), BUTTON_SCALE_RANGE[0]), BUTTON_SCALE_RANGE[1])
         cfg.save_recordings = DEBUG   # no setting (2026-10-20): recordings are kept exactly in debug mode
         if "rules" in data:
