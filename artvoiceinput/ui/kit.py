@@ -1,7 +1,7 @@
 """Building blocks of the redesigned settings window: icons, the switch, cards, chips, segmented buttons, ⓘ."""
 from PySide6.QtCore import (Property, QByteArray, QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRect, QRectF,
-                            QSize, Qt, Signal)
-from PySide6.QtGui import QColor, QFontMetrics, QIcon, QPainter, QPen, QPixmap
+                            QSize, Qt, QTimer, Signal)
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (QAbstractButton, QButtonGroup, QFrame, QHBoxLayout, QLabel, QLayout, QPushButton,
                                QSizePolicy, QToolTip, QVBoxLayout, QWidget)
@@ -53,7 +53,25 @@ def logo_renderer(color: str = "#FFFFFF") -> QSvgRenderer:
 
 
 def draw_icon(p: QPainter, name: str, rect: QRectF, color: QColor, width: float = 1.9):
-    svg_renderer(name, color, width).render(p, rect)
+    if color.alphaF() >= 1 or not ICONS[name][1]:
+        svg_renderer(name, color, width).render(p, rect)
+        return
+    # stroke and fill drawn opaque on a layer, then faded together: where they overlap is not darker
+    scale = 2 * max(1.0, p.device().devicePixelRatioF(), abs(p.worldTransform().m11()), abs(p.worldTransform().m22()))
+    img = QImage(max(1, round(rect.width() * scale)), max(1, round(rect.height() * scale)),
+                 QImage.Format_ARGB32_Premultiplied)
+    img.fill(Qt.transparent)
+    q = QPainter(img)
+    q.setRenderHint(QPainter.Antialiasing)
+    opaque = QColor(color)
+    opaque.setAlphaF(1.0)
+    svg_renderer(name, opaque, width).render(q, QRectF(0, 0, img.width(), img.height()))
+    q.end()
+    p.save()
+    p.setOpacity(p.opacity() * color.alphaF())
+    p.setRenderHint(QPainter.SmoothPixmapTransform)
+    p.drawImage(rect, img)
+    p.restore()
 
 
 def icon(name: str, color: QColor, size: int = 16, width: float = 2.0, dpr: float = 2.0) -> QIcon:
@@ -188,7 +206,8 @@ class Switch(QAbstractButton):
         self.setFixedSize(40, 22)
         self.setAccessibleName(name)
         self._pos = 1.0 if checked else 0.0
-        self._anim = QPropertyAnimation(self, b"pos", self, duration=150, easingCurve=QEasingCurve.OutCubic)
+        # not "pos": that is QWidget's own position, and animating it moved the switch to its parent's top left
+        self._anim = QPropertyAnimation(self, b"knob", self, duration=150, easingCurve=QEasingCurve.OutCubic)
         self.toggled.connect(self._slide)
 
     def _slide(self, on: bool):
@@ -212,7 +231,7 @@ class Switch(QAbstractButton):
         self._pos = v
         self.update()
 
-    pos = Property(float, _get, _set)
+    knob = Property(float, _get, _set)
 
     def sizeHint(self):
         return QSize(40, 22)
@@ -247,13 +266,23 @@ class Switch(QAbstractButton):
 
 
 class Info(QLabel):
-    """ⓘ after a name: its explanation shows while the pointer is on it."""
+    """ⓘ after a name: its explanation shows while the pointer is on it. QToolTip ignores a showText of the tip it
+    is just hiding (same text, same widget), so leaving and coming back quickly showed nothing: while the pointer is
+    here a timer shows the tip again whenever it is gone."""
 
     def __init__(self, tip: str):
         super().__init__()
         self.tip = tip
         self.setFixedSize(16, 16)
         self.setCursor(Qt.WhatsThisCursor)
+        self._keep = QTimer(self, interval=150)
+        self._keep.timeout.connect(self._show)
+
+    def _show(self):
+        if not self.underMouse():
+            self._keep.stop()
+        elif not QToolTip.isVisible() or QToolTip.text() != self.tip:
+            QToolTip.showText(self.mapToGlobal(QPoint(0, self.height() + 6)), self.tip, self)
 
     def paintEvent(self, _):
         p = QPainter(self)
@@ -268,8 +297,10 @@ class Info(QLabel):
 
     def enterEvent(self, e):
         QToolTip.showText(self.mapToGlobal(QPoint(0, self.height() + 6)), self.tip, self)
+        self._keep.start()
 
     def leaveEvent(self, e):
+        self._keep.stop()
         QToolTip.hideText()
 
 
@@ -306,7 +337,7 @@ class Choice(QWidget):
         else:
             lay = FlowLayout(self, spacing=6)
         for key, text, *rest in items:
-            b = QPushButton(text)
+            b = _Segment(text) if kind == "seg" else QPushButton(text)
             b.setCheckable(True)
             b.setCursor(Qt.PointingHandCursor)
             b.setProperty(kind, True)
@@ -322,13 +353,7 @@ class Choice(QWidget):
         self.set(value)
 
     def setText(self, key, text: str):
-        """A button's text; a segment keeps room for its bold (picked) look."""
-        b = self.buttons[key]
-        b.setText(text)
-        if b.property("seg"):
-            f = theme.font(13.5 if b.property("big") else 13, 700)
-            extra = 24 + (22 if not b.icon().isNull() else 0) + (8 if b.property("big") else 0)
-            b.setMinimumWidth(QFontMetrics(f).horizontalAdvance(text) + extra)
+        self.buttons[key].setText(text)
 
     def set(self, value):
         for k, b in self.buttons.items():
@@ -342,6 +367,21 @@ class Choice(QWidget):
 
     def value(self):
         return next((k for k, b in self.buttons.items() if b.isChecked()), None)
+
+
+class _Segment(QPushButton):
+    """A segment: as wide as its text in bold (the picked look), so picking it cuts nothing off. Measured in the font
+    the style sheet gave the button, which is not the window's font."""
+
+    def sizeHint(self):
+        s = super().sizeHint()
+        bold = QFont(self.font())
+        bold.setWeight(QFont.Bold)
+        extra = QFontMetrics(bold).horizontalAdvance(self.text()) - self.fontMetrics().horizontalAdvance(self.text())
+        return QSize(s.width() + max(0, extra) + 4, s.height())
+
+    def minimumSizeHint(self):
+        return self.sizeHint()
 
 
 class FlowLayout(QLayout):

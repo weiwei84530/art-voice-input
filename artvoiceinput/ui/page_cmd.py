@@ -280,7 +280,8 @@ class KeyField(QLineEdit):
         super().__init__(text)
         self.setReadOnly(True)
         self.setPlaceholderText("點這裡後按下按鍵")
-        self.setFixedSize(150, 30)
+        self.setProperty("slim", True)
+        self.setFixedWidth(150)
         self.setCursor(Qt.PointingHandCursor)
         self.setFont(theme.font(13.5, 600, num=True))
 
@@ -354,7 +355,7 @@ class RuleRow(QWidget):
         row = self.row
         kind = QComboBox()
         kind.setCursor(Qt.PointingHandCursor)
-        kind.setFixedHeight(30)
+        kind.setProperty("slim", True)   # the style sheet's height fits the row (a fixed height was overridden)
         if row["type"] is None:
             kind.addItem("選擇要做的事", None)
         for k, name in KINDS:
@@ -373,7 +374,8 @@ class RuleRow(QWidget):
         elif row["type"] == rules.TEXT:
             f = QLineEdit(row["value"] or "")
             f.setPlaceholderText("要打出的文字")
-            f.setFixedSize(160, 30)
+            f.setProperty("slim", True)
+            f.setFixedWidth(160)
             f.editingFinished.connect(lambda: self._value(f.text()))
             th.addWidget(f)
         elif row["type"] == rules.WRAP:
@@ -382,7 +384,8 @@ class RuleRow(QWidget):
             for i, hint in ((0, "左邊"), (1, "右邊")):
                 f = QLineEdit(pair[i])
                 f.setPlaceholderText(hint)
-                f.setFixedSize(64, 30)
+                f.setProperty("slim", True)
+                f.setFixedWidth(64)
                 f.setAlignment(Qt.AlignCenter)
                 f.editingFinished.connect(lambda i=i, f=f: self._pair(i, f.text()))
                 th.addWidget(f)

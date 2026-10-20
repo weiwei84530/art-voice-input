@@ -190,9 +190,9 @@ sentence end → 嗎 questions → trailing punctuation.
 
 - **選字 menu** (`picker.py`): opens by itself while listening (`App._auto_pick`) after a mouse drag or double click
   that selects ≤4 Chinese characters or ≤3 English words (read 80ms after release). Tabs by closeness of sound
-  (pointer over a tab opens it), design G3: a plain list with the tabs in a row along the bottom (always, also when
-  the menu opens above the selection), light or dark with `config.theme`; grid 4x4 (one character) or 2x5; no timeout,
-  any click or key closes it. Chinese (`candidates.ranked`): 同音, 不同聲調, 模糊音 (`candidates._FUZZY`: zh/z,
+  (pointer over a tab opens it), design G2 made compact (the user's pick, not G3): a plain list with the tabs in a
+  rail on the right (name over count), light or dark with `config.theme`; grid 4x4 (one character) or 2x5, only as
+  many columns as the fullest tab needs; no timeout, any click or key closes it. Chinese (`candidates.ranked`): 同音, 不同聲調, 模糊音 (`candidates._FUZZY`: zh/z,
   sh/s, an/ang, en/eng, r/l, ㄩㄣ/ㄧㄣ, ㄈ/ㄏㄨ, ㄋ/ㄌ …; fuzzy-only words from frequency 3, `app._FUZZY_MIN`; 詞庫
   words by sound too). English: 近音字 (`sounds.near`, weighted phoneme edit distance), 詞庫 (`sounds.alike`), 大小寫
   (`memory.variants`).

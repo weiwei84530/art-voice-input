@@ -1,9 +1,9 @@
 """The 選字 menu: a small window that does not take focus, so the target app keeps its caret and selection.
 
-Design G3 (2026-10-20, the user's pick of the redesign's menus): the candidates as a plain list, the tabs (by how close
-they sound: 同音 / 不同聲調 / 模糊音 for Chinese, 近音字 / 詞庫 / 大小寫 for English) in a row along the bottom with
-their counts, the open one marked by an orange bar on top. The tabs stay at the bottom even when the menu opens above
-the selection (they flipped to the top before). The pointer over a tab opens it. Candidates fill a grid top to bottom,
+Design G2 (2026-10-20, the user's pick of the redesign's menus, made compact): the candidates as a plain list, the
+tabs (by how close they sound: 同音 / 不同聲調 / 模糊音 for Chinese, 近音字 / 詞庫 / 大小寫 for English) in a rail on
+the right, each a name over its count, the open one marked by an orange bar on its left. The pointer over a tab opens
+it. Candidates fill a grid top to bottom,
 then left to right: 4 columns for a single character, 2 for words; the word that is there now (the first of the first
 tab) is bold with an orange mark. Light or dark with the settings window (config.theme, ui/theme.py). Rows are answered
 with the mouse only (decided 2026-09-29: short spoken answers like 對 / 第二個 were often misheard). There is no
@@ -21,11 +21,15 @@ _GWL_EXSTYLE, _WS_EX_NOACTIVATE, _WS_EX_TOPMOST = -20, 0x08000000, 0x8
 SINGLE = (4, 4)   # columns, rows per tab for one Chinese character
 WORDS = (2, 5)    # for words and English
 _SHADOW = 12      # room around the menu for its shadow
-_PAD = 6          # inside the menu, around the candidates
-_CELL_SINGLE = (46, 38)
-_CELL_WORD = (104, 34)
-_WORD_MAX = 220   # a long English candidate widens its column up to this
-_BAR = 40         # the row of tabs
+_PAD = 5          # inside the menu, around the candidates
+_CELL_SINGLE = (40, 32)
+_CELL_WORD = (88, 28)
+_FONT_SINGLE, _FONT_WORD = 17, 14
+_WORD_MAX = 200   # a long English candidate widens its column up to this
+_RAIL_PAD = 5     # inside the rail of tabs
+_TAB_H = 32       # a tab: its name over its count
+_TAB_GAP = 2
+_RAIL_MIN = 62
 
 
 class Picker(QWidget):
@@ -48,6 +52,8 @@ class Picker(QWidget):
         self._cells: list[QRectF] = []
         self._tab_rects: list[QRectF] = []
         self._box = QRectF()
+        self._list = QRectF()       # the candidates' side and the rail of tabs
+        self._rail = QRectF()
 
     # --- public API ---
     def use_theme(self, theme):
@@ -100,28 +106,28 @@ class Picker(QWidget):
         cols, rows = SINGLE if self.single else WORDS
         cw, ch = _CELL_SINGLE if self.single else _CELL_WORD
         if not self.single and self.tabs:
-            f = themes.font(15.5, 500)
-            fm = QFontMetrics(f)
+            fm = QFontMetrics(themes.font(_FONT_WORD, 500))
             longest = max((fm.horizontalAdvance(w) for _, ws in self.tabs for w in ws), default=0)
-            cw = min(max(cw, longest + 28), _WORD_MAX)
+            cw = min(max(cw, longest + 24), _WORD_MAX)
         if self.tabs:
-            width = cols * cw + 2 * _PAD
-            fm_tabs = themes.font(12.5, 700)
-            tab_need = sum(QFontMetrics(fm_tabs).horizontalAdvance(f"{n} {len(ws)}") + 22 for n, ws in self.tabs)
-            width = max(width, tab_need + 2 * _PAD)
-            height = rows * ch + 2 * _PAD + _BAR
+            # only as many columns as the fullest tab needs, so the menu stays the same size across tabs
+            cols = max(1, min(cols, max(-(-len(ws) // rows) for _, ws in self.tabs)))
+            list_w, list_h = cols * cw + 2 * _PAD, rows * ch + 2 * _PAD
+            fm = QFontMetrics(themes.font(12, 700))
+            rail_w = max(_RAIL_MIN, max(fm.horizontalAdvance(n) for n, _ in self.tabs) + 22 + 2 * _RAIL_PAD)
+            rail_h = len(self.tabs) * (_TAB_H + _TAB_GAP) - _TAB_GAP + 2 * _RAIL_PAD
+            width, height = list_w + rail_w, max(list_h, rail_h)
         else:
-            width, height = 140, 44
+            list_w = rail_w = 0
+            width, height = 120, 38
         self._box = QRectF(_SHADOW, _SHADOW - 4, width, height)
         self.setFixedSize(round(width + 2 * _SHADOW), round(height + 2 * _SHADOW))
         x0, y0 = self._box.x() + _PAD, self._box.y() + _PAD
         self._cells = [QRectF(x0 + (n // rows) * cw, y0 + (n % rows) * ch, cw, ch) for n in range(cols * rows)]
-        self._tab_rects = []
-        if self.tabs:
-            bar_y = self._box.bottom() - _BAR + 5
-            tw = (width - 12) / len(self.tabs)
-            self._tab_rects = [QRectF(self._box.x() + 6 + i * tw + 1, bar_y, tw - 2, _BAR - 11)
-                               for i in range(len(self.tabs))]
+        self._list = QRectF(self._box.x(), self._box.y(), list_w, height)
+        self._rail = QRectF(self._box.x() + list_w, self._box.y(), rail_w, height)
+        self._tab_rects = [QRectF(self._rail.x() + _RAIL_PAD, self._rail.y() + _RAIL_PAD + i * (_TAB_H + _TAB_GAP),
+                                  rail_w - 2 * _RAIL_PAD, _TAB_H) for i in range(len(self.tabs))]
 
     # --- painting ---
     def _c(self, key: str) -> QColor:
@@ -161,8 +167,7 @@ class Picker(QWidget):
         if not words:
             p.setPen(self._c("muted"))
             p.setFont(themes.font(13))
-            area = QRectF(self._box.x(), self._box.y(), self._box.width(), self._box.height() - _BAR)
-            p.drawText(area, Qt.AlignCenter, "沒有候選字")
+            p.drawText(self._list, Qt.AlignCenter, "沒有候選字")
             return
         for i, word in enumerate(words):
             r = self._cells[i]
@@ -176,23 +181,22 @@ class Picker(QWidget):
                 p.setPen(Qt.NoPen)
                 p.setBrush(self._c("acc"))
                 if self.single:
-                    p.drawRoundedRect(QRectF(r.x() + 12, r.bottom() - 6, r.width() - 24, 2), 1, 1)
+                    p.drawRoundedRect(QRectF(r.x() + 11, r.bottom() - 5, r.width() - 22, 2), 1, 1)
                 else:
-                    p.drawRoundedRect(QRectF(r.x() + 3, r.y() + 10, 3, r.height() - 20), 1.5, 1.5)
+                    p.drawRoundedRect(QRectF(r.x() + 3, r.y() + 8, 3, r.height() - 16), 1.5, 1.5)
             p.setPen(self._c("acct") if hot else self._c("ink"))
-            p.setFont(themes.font(19 if self.single else 15.5, 700 if first else 500))
+            p.setFont(themes.font(_FONT_SINGLE if self.single else _FONT_WORD, 700 if first else 500))
             if self.single:
                 p.drawText(r, Qt.AlignCenter, word)
             else:
                 fm = p.fontMetrics()
-                p.drawText(r.adjusted(12, 0, -6, 0), Qt.AlignLeft | Qt.AlignVCenter,
-                           fm.elidedText(word, Qt.ElideRight, int(r.width() - 18)))
+                p.drawText(r.adjusted(11, 0, -5, 0), Qt.AlignLeft | Qt.AlignVCenter,
+                           fm.elidedText(word, Qt.ElideRight, int(r.width() - 16)))
 
     def _paint_tabs(self, p):
-        box = self._box
-        bar = QRectF(box.x(), box.bottom() - _BAR, box.width(), _BAR)
-        p.fillRect(bar, self._c("tile2"))
-        p.fillRect(QRectF(bar.x(), bar.y(), bar.width(), 1), self._c("line"))
+        rail = self._rail
+        p.fillRect(rail, self._c("tile2"))
+        p.fillRect(QRectF(rail.x(), rail.y(), 1, rail.height()), self._c("line"))
         for i, ((name, words), r) in enumerate(zip(self.tabs, self._tab_rects)):
             on = i == self.current
             if on:
@@ -200,21 +204,14 @@ class Picker(QWidget):
                 p.setBrush(self._c("tile"))
                 p.drawRoundedRect(r, 5, 5)
                 p.setBrush(self._c("acc"))
-                p.drawRoundedRect(QRectF(r.x() + 10, r.y(), r.width() - 20, 3), 1.5, 1.5)
-            name_font = themes.font(12.5, 700 if on else 500)
-            num_font = themes.font(11, 600, num=True)
-            p.setFont(name_font)
-            nw = p.fontMetrics().horizontalAdvance(name)
-            p.setFont(num_font)
-            count = str(len(words))
-            cw = p.fontMetrics().horizontalAdvance(count)
-            x = r.center().x() - (nw + 5 + cw) / 2
-            p.setFont(name_font)
+                p.drawRoundedRect(QRectF(r.x(), r.y() + 7, 3, r.height() - 14), 1.5, 1.5)
+            p.setFont(themes.font(12, 700 if on else 500))
             p.setPen(self._c("ink") if on else self._c("muted"))
-            p.drawText(QRectF(x, r.y(), nw + 2, r.height()), Qt.AlignLeft | Qt.AlignVCenter, name)
-            p.setFont(num_font)
+            p.drawText(QRectF(r.x() + 10, r.y() + 2, r.width() - 12, 16), Qt.AlignLeft | Qt.AlignVCenter, name)
+            p.setFont(themes.font(10.5, 600, num=True))
             p.setPen(self._c("acct") if on else self._c("muted"))
-            p.drawText(QRectF(x + nw + 5, r.y() + 1, cw + 2, r.height()), Qt.AlignLeft | Qt.AlignVCenter, count)
+            p.drawText(QRectF(r.x() + 10, r.y() + 17, r.width() - 12, 13), Qt.AlignLeft | Qt.AlignVCenter,
+                       f"{len(words)} 個")
 
     # --- the mouse ---
     def _hit(self, pos):
@@ -277,7 +274,7 @@ class Picker(QWidget):
 
     def _clamp(self):
         """Keep the menu on screen. Under a selection too close to the bottom it opens above it instead, like an
-        IME candidate window (the tabs stay at the bottom)."""
+        IME candidate window."""
         anchor = self._anchor
         screen = QGuiApplication.screenAt(anchor[0] if anchor else self.pos()) or QGuiApplication.primaryScreen()
         a = screen.availableGeometry()

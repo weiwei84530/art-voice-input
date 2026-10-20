@@ -122,6 +122,7 @@ QLineEdit:focus {{ border: 1px solid {t['acc']}; }}
 QComboBox {{ background: {t['tile2']}; border: 1px solid {t['line']}; border-radius: 5px; padding: 0 10px;
             min-height: 32px; font-size: 13.5px; }}
 QComboBox:hover {{ border-color: {t['acc']}; }}
+QComboBox[slim="true"], QLineEdit[slim="true"] {{ min-height: 28px; max-height: 28px; }}
 QComboBox::drop-down {{ border: none; width: 24px; }}
 QComboBox::down-arrow {{ image: url({_DOWN}); width: 12px; height: 12px; }}
 QComboBox QAbstractItemView {{ background: {t['tile']}; border: 1px solid {t['line']}; outline: none;

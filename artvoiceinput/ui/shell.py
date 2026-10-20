@@ -201,16 +201,26 @@ class Strip(QAbstractButton):
         self.setAccessibleName("回首頁")
         self.setGeometry(0, 0, ORG_PAGE, H)
         self.opacity = 0.0
-        self._over = False
+        self._h = 0.0              # the pointer over it, eased 0..1
+        self._anim = QVariantAnimation(self, duration=180, easingCurve=QEasingCurve.OutCubic)
+        self._anim.valueChanged.connect(self._hover)
+
+    def _hover(self, v):
+        self._h = float(v)
+        self.update()
+
+    def _go(self, end: float):
+        self._anim.stop()
+        self._anim.setStartValue(self._h)
+        self._anim.setEndValue(end)
+        self._anim.start()
 
     def enterEvent(self, e):
-        self._over = True
-        self.update()
+        self._go(1.0)
         QToolTip.showText(self.mapToGlobal(self.rect().center()) + QPointF(30, -14).toPoint(), "回首頁", self)
 
     def leaveEvent(self, e):
-        self._over = False
-        self.update()
+        self._go(0.0)
         QToolTip.hideText()
 
     def paintEvent(self, _):
@@ -219,10 +229,11 @@ class Strip(QAbstractButton):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setOpacity(self.opacity)
-        if self._over:
-            p.fillRect(self.rect(), QColor(0, 0, 0, 20))
-        c = QPointF(ORG_PAGE / 2 - (3 if self._over else 0), H / 2)
-        rad = 17 * (1.06 if self._over else 1)
+        h = self._h
+        if h > 0:
+            p.fillRect(self.rect(), QColor(0, 0, 0, round(20 * h)))
+        c = QPointF(ORG_PAGE / 2 - 3 * h, H / 2)
+        rad = 17 * (1 + 0.06 * h)
         for i, a in enumerate((26, 18, 10)):
             p.setPen(Qt.NoPen)
             p.setBrush(QColor(120, 10, 0, a))
@@ -237,14 +248,20 @@ class Strip(QAbstractButton):
 
 
 class FlyIcon(QWidget):
-    """The tile's icon on its way to the page title, and resting there."""
+    """The tile's icon on its way to the page title, and resting there. Its soft orange shadow fades in on the way
+    to the title and out on the way back (the tile's icon has none)."""
+    SHADOW = 80                # the shadow's alpha at the title
 
     def __init__(self, parent):
         super().__init__(parent)
         self.key = "mic"
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
-        fx = QGraphicsDropShadowEffect(self, blurRadius=18, offset=QPointF(0, 6), color=QColor(255, 69, 58, 150))
-        self.setGraphicsEffect(fx)
+        self.fx = QGraphicsDropShadowEffect(self, blurRadius=14, offset=QPointF(0, 4), color=QColor(255, 69, 58, 0))
+        self.setGraphicsEffect(self.fx)
+
+    def set_lift(self, k: float):
+        """0 at the tile, 1 at the title."""
+        self.fx.setColor(QColor(255, 69, 58, round(self.SHADOW * k)))
 
     def paintEvent(self, _):
         p = QPainter(self)
@@ -472,6 +489,7 @@ class Shell(QWidget):
         x1, y1, s1 = FLY_END
         s = lerp(s0, s1, fly)
         self.fly.setGeometry(round(lerp(x0, x1, fly)), round(lerp(y0, y1, fly)), round(s), round(s))
+        self.fly.set_lift(fly)
         self.fly.update()
 
     def _done(self):
