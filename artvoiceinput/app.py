@@ -42,7 +42,8 @@ from PySide6.QtCore import QLockFile, QObject, QPointF, QRectF, Qt, QTimer, Sign
 from PySide6.QtGui import QAction, QColor, QCursor, QGuiApplication, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from . import autostart, candidates, config, cues, edit, models, packs, paths, recordings, rules, sounds, spelling
+from . import (autostart, candidates, config, cues, edit, models, packs, paths, recordings, rules, sounds, spelling,
+               syllables)
 from .asr import SAMPLE_RATE, Recognizer
 from .config import Config
 from .floatbtn import Bubble, FloatButton
@@ -274,6 +275,7 @@ class App(QObject):
         # self.bg.submit(self._load_second_job)
         candidates.preload()   # the disfluency pass uses the dictionary
         sounds.preload_english()   # 選字's near sounds for English
+        syllables.preload()   # one character said alone that came out as English (App._as_chinese)
         if self.cfg.autostart:
             self._set_autostart()   # re-register so the entry follows the app if its folder was moved
         self._update_float()
@@ -1061,6 +1063,10 @@ class App(QObject):
         if spelled:
             log.info("spelling: %s", ", ".join(f"{a} -> {b}" for a, b in spelled))
             steps.append(("英文拼寫", before, formatted))
+        chinese = self._as_chinese(formatted, ctx)
+        if chinese:
+            steps.append(("英文轉中文", formatted, chinese))
+            formatted = chinese
         prefix = ctx.selection.before if ctx.selection else (ctx.caret[0] if ctx.caret else "")
         text = self.memory.apply(formatted, prefix, self.hotwords.levels())
         if text != formatted:
@@ -1069,6 +1075,35 @@ class App(QObject):
         if hits:
             steps.append((BANK_HITS, "、".join(hits), None))
         return text
+
+    def _as_chinese(self, text: str, ctx) -> str:
+        """One character said alone comes out of X-ASR as an English syllable (2026-10-21, the user's report: 啊 to
+        replace a selected 阿 came out as Ah, 的 added in a sentence as The): the utterance, one English word of 2-6
+        letters, not all capitals (AI, API) and no known term, becomes the likeliest character
+        (syllables.chinese_for) when it replaces one selected Chinese character (never that character again) or
+        goes next to Chinese at the caret. "" when not."""
+        word = text.strip()
+        if not re.fullmatch(r"[A-Za-z]{2,%d}" % syllables.MAX_LETTERS, word) or word.isupper():
+            return ""
+        if word.casefold() in {t.casefold() for t in self._known_terms(ctx.terms)}:
+            return ""
+        sel = ctx.selection
+        if sel is not None:
+            if not _is_cjk(sel.text.strip()) or len(sel.text.strip()) != 1:
+                return ""
+            before, after, exclude = sel.before, sel.after, sel.text.strip()
+        elif ctx.caret:
+            before, after, exclude = ctx.caret[0], ctx.caret[1], ""
+        else:
+            return ""
+        left, right = before.rstrip(" ")[-1:], after.lstrip(" ")[:1]
+        left, right = (left if _is_cjk(left) else ""), (right if _is_cjk(right) else "")
+        if sel is None and not (left or right):
+            return ""
+        found = syllables.chinese_for(word, left, right, limit=1, exclude=exclude)
+        if found:
+            log.info("english as chinese: %s -> %s (%s|%s)", word, found[0], left, right)
+        return found[0] if found else ""
 
     def _bank_hits(self, text: str) -> list[str]:
         """Words of the 詞庫 the recognizer was pulled toward or away from that are in the text: "Claude Code
@@ -2039,6 +2074,10 @@ def _delete_selection(sel) -> bool:
         return False
     backspace(len(sel.text), gap=0.02)
     return True
+
+
+def _is_cjk(text: str) -> bool:
+    return bool(text) and bool(re.match(r"[㐀-䶿一-鿿]", text))
 
 
 def _paste_over(sel, text: str) -> bool:

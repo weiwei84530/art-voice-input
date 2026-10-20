@@ -70,6 +70,7 @@ automatically; read it before reviving or redesigning something). Module docstri
 | `edit.py` | punctuation names (`symbol`), described characters (`described`), spelled letters (`spelled`) |
 | `candidates.py` | McBopomofo dictionary: `is_word`, `frequency`, `ranked`, `sounds_alike`, fuzzy pairs |
 | `sounds.py` | English near-sounding words (CMUdict + wordfreq, `dict/english.tsv.gz`) |
+| `syllables.py` | the Chinese character an English syllable may have been (啊 -> Ah, 的 -> The) |
 | `hotwords.py` / `memory.py` / `spelling.py` / `packs.py` | 詞庫 list, 選字記憶, English spelling/aliases, 詞包 |
 | `picker.py` | the 選字 menu |
 | `floatbtn.py` / `orbs.py` | floating button and bubble (`OrbButton`), the ten 按鈕樣式 looks |
@@ -188,6 +189,11 @@ sentence end → 嗎 questions → trailing punctuation.
   Number+letter join (二 B → 2B); after English a single numeral becomes a digit unless a classifier follows
   (GPT 四 → GPT 4, Python 三個月 stays); decimals digit by digit (零點零五 → 0.05). 點 → `.` only between digits or
   letters. 百分之X / X percent → X%.
+- One character said alone (2026-10-21, the user's report; `App._as_chinese`, after spelling, before 選字記憶): an
+  utterance that is one English word of 2-6 letters (not all capitals, no known term) replacing one selected Chinese
+  character, or next to Chinese at the caret, becomes the likeliest character (`syllables.chinese_for`: pinyin
+  spelling or CMUdict phonemes against Mandarin syllables, a character making a word with a neighbour first, never
+  the replaced one); 辨識紀錄 step 英文轉中文. 選字 and 選字記憶 are not involved (tried and reverted the same day).
 - English sentence end: . ? ! after English → 。？！ when the sentence has Chinese. 嗎。 → 嗎？ (only 嗎: 呢 / 吧 end
   statements too).
 - Trailing punctuation: kept, except when the caret's line has text on both sides (`selection.read_caret`; in
