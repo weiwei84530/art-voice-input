@@ -54,7 +54,7 @@ def _settle() -> None:
 def _set_clipboard(text: str) -> bool:
     global _owner
     if _owner is None:
-        _owner = _u32.CreateWindowExW(0, "STATIC", "VoiceInput clipboard", 0, 0, 0, 0, 0, None, None, None, None)
+        _owner = _u32.CreateWindowExW(0, "STATIC", "Art VoiceInput clipboard", 0, 0, 0, 0, 0, None, None, None, None)
     for _ in range(20):
         if _u32.OpenClipboard(_owner):
             break

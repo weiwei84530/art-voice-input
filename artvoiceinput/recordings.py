@@ -19,7 +19,7 @@ import numpy as np
 
 from .paths import DATA_DIR
 
-log = logging.getLogger("voiceinput")
+log = logging.getLogger("artvoiceinput")
 
 DIR = DATA_DIR / "recordings"
 INDEX = DIR / "index.jsonl"

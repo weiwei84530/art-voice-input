@@ -25,10 +25,10 @@ echo [3/4] Installing packages ...
 "%UV%" pip install --python .venv\Scripts\python.exe -r requirements.txt || goto :fail
 
 echo [4/4] Downloading default speech model ...
-.venv\Scripts\python.exe -m voiceinput.models || goto :fail
+.venv\Scripts\python.exe -m artvoiceinput.models || goto :fail
 
 echo.
-echo Done. Run start.bat to launch VoiceInput.
+echo Done. Run start.bat to launch Art VoiceInput.
 if "%~1"=="" pause
 exit /b 0
 

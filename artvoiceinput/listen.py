@@ -24,7 +24,7 @@ import sounddevice as sd
 from .asr import SAMPLE_RATE
 from .audio import resolve_device
 
-log = logging.getLogger("voiceinput")
+log = logging.getLogger("artvoiceinput")
 
 SILENCE = 0.3        # seconds of silence that end a piece
 LEAD = 0.5           # seconds of audio decoded before a piece

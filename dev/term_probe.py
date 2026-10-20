@@ -2,7 +2,7 @@
 
 Listens to the left mouse button globally. After each drag it prints, via UI Automation RangeFromPoint, the
 character and line under the press and release points (with the column inside that line), what Windows
-Terminal reports as its own selection, and the clipboard (herdr copies on select). Does not touch VoiceInput.
+Terminal reports as its own selection, and the clipboard (herdr copies on select). Does not touch Art VoiceInput.
 
     .venv\\Scripts\\python.exe dev\\term_probe.py [log file] [--click]
 
@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from voiceinput.selection import _uia, _proc_name  # noqa: E402
+from artvoiceinput.selection import _uia, _proc_name  # noqa: E402
 
 ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))  # physical pixels, like UIA
 _CHAR, _LINE, _START, _END = 0, 3, 0, 1

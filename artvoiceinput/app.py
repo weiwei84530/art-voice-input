@@ -1,4 +1,4 @@
-"""VoiceInput: single-process tray app. Listening is turned on and off from the interface (the floating button, the
+"""Art VoiceInput: single-process tray app. Listening is turned on and off from the interface (the floating button, the
 bubble by a click in a text box: show_float / show_bubble; the focus coming into a text box: auto_listen), or by pressing the one hotkey (any key or
 mouse button but the left one, modifiers allowed, the 一般 tab; 2026-10-16/17, the user's design: nothing else is bound
 to keys any more, and a press of it is always a tap: no hold or double tap given back to the key).
@@ -67,7 +67,7 @@ from .session import Session, foreground
 from .ui.window import SettingsWindow
 from .textfmt import format_text, to_traditional
 
-log = logging.getLogger("voiceinput")
+log = logging.getLogger("artvoiceinput")
 
 _SCREEN_TERM_SCORE = 1.5
 # Spoken commands (speech operations' phrases, punctuation names) are boosted only when the utterance is short: they
@@ -637,7 +637,7 @@ class App(QObject):
         has just been made (in it); a new one (another control or window) with auto_listen turns listening on, unless
         it was turned off by hand in this box (a click in it turns it on again); the floating button shows. The focus went where nothing can be typed (a web page's blank part, a button, the
         desktop): the bubble goes, and listening is turned off (when it was in a text box before: listening may be
-        turned on by hand anywhere). Unknown places and VoiceInput's own windows change nothing."""
+        turned on by hand anywhere). Unknown places and Art VoiceInput's own windows change nothing."""
         self._focus_busy = False
         bubble, floating, auto = self.cfg.show_bubble, self.cfg.show_float, self.cfg.auto_listen
         if not (bubble or floating or auto) or editable is None:
@@ -1508,7 +1508,7 @@ class App(QObject):
         self.record.emit({"time": time.strftime("%H:%M:%S"), "kind": "刪除", "main": sel.text})
 
     def undo(self, ctx=None):
-        """Main thread, 復原 (and 刪除剛輸入的文字): take back VoiceInput's last change while it is still right before
+        """Main thread, 復原 (and 刪除剛輸入的文字): take back Art VoiceInput's last change while it is still right before
         the caret: all of them while the caret has not moved, one each time; a draft's are its pauses' updates. After one,
         what is left of the draft (or of the draft the last commit typed) is a draft again, its text fixed (decoded
         again, the audio taken back would come back): speech goes on after it, and a command or the end of
@@ -1610,7 +1610,7 @@ class App(QObject):
                 continue
             if any(w == word or (is_latin(word) and w.casefold() == word.casefold()) for w in pack.words):
                 log.info("pack hint: %s in %s", word, pack.id)
-                self.tray.showMessage("VoiceInput", f"「{word}」收錄在詞包「{pack.name}」。到設定的詞庫頁勾選它，"
+                self.tray.showMessage("Art VoiceInput", f"「{word}」收錄在詞包「{pack.name}」。到設定的詞庫頁勾選它，"
                                       "同類的詞會更容易辨識。", self.icon_idle, 8000)
                 return
 
@@ -1650,7 +1650,7 @@ class App(QObject):
     #         log.exception("suspect check failed")
 
     def _notify(self, text: str):
-        self.tray.showMessage("VoiceInput", text, self.icon_idle, 4000)
+        self.tray.showMessage("Art VoiceInput", text, self.icon_idle, 4000)
 
     # --- popups: 選字 and the hotword notice ---
     def _close_menu(self):
@@ -1793,7 +1793,7 @@ class App(QObject):
     def on_status(self, text: str):
         self._status_text = text
         log.info("status: %s", text)
-        self.tray.setToolTip(f"VoiceInput — {text}")
+        self.tray.setToolTip(f"Art VoiceInput — {text}")
         self.settings.set_status(text)
 
     def on_record(self, entry: dict):
@@ -1920,7 +1920,7 @@ def _held(vk: int) -> bool:
 
 
 def _ours(hwnd: int) -> bool:
-    """The window is VoiceInput's own (its settings): an Enter there sends nothing."""
+    """The window is Art VoiceInput's own (its settings): an Enter there sends nothing."""
     import ctypes
     pid = ctypes.c_ulong()
     ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))

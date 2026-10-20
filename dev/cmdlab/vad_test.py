@@ -11,9 +11,9 @@ from common import OUT, REC, SR, commands, norm, read_wav, vad_pieces  # noqa: E
 
 
 def main():
-    from voiceinput.app import _COMMAND_SCORE, _WORDS, _bias, _one_command
-    from voiceinput.asr import Recognizer
-    from voiceinput.textfmt import format_text
+    from artvoiceinput.app import _COMMAND_SCORE, _WORDS, _bias, _one_command
+    from artvoiceinput.asr import Recognizer
+    from artvoiceinput.textfmt import format_text
     cmds = list(commands())
     cn = {norm(c): c for c in cmds}
     longest = max(map(len, cmds))

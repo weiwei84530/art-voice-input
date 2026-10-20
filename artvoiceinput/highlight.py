@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QWidget
 
 from . import selection
 
-log = logging.getLogger("voiceinput")
+log = logging.getLogger("artvoiceinput")
 
 # the 外觀 tab's colors (#AARRGGBB): highlighter yellow first (the default), selection blue last
 COLORS = [("#78FFE45C", "螢光黃"), ("#6E7CE08A", "淡綠"), ("#64FF8FC8", "粉紅"), ("#6EFFB35C", "淡橘"),

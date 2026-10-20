@@ -8,7 +8,7 @@ import sys
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))
 from common import CONTINUOUS_FROM, OUT, REC, SR, commands, norm, read_wav, vad_pieces, write_wav  # noqa: E402
-from voiceinput import edit  # noqa: E402
+from artvoiceinput import edit  # noqa: E402
 
 UNITS = __import__("re").compile(r"[㐀-䶿一-鿿]|[A-Za-z0-9]+")
 

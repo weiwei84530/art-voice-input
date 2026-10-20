@@ -11,17 +11,17 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 TMP = Path(tempfile.mkdtemp(prefix="vi-preview-"))
 
-from voiceinput import paths  # noqa: E402
+from artvoiceinput import paths  # noqa: E402
 
 for name in ("config.json", "hotword-list.json", "smart-picks.json"):
     if (paths.DATA_DIR / name).exists():
         shutil.copy(paths.DATA_DIR / name, TMP / name)
 paths.CONFIG_PATH = TMP / "config.json"
-from voiceinput import config  # noqa: E402
+from artvoiceinput import config  # noqa: E402
 
 config.CONFIG_PATH = paths.CONFIG_PATH
 config.DEBUG = True
-from voiceinput import packs  # noqa: E402
+from artvoiceinput import packs  # noqa: E402
 
 packs.DIR = TMP / "packs"
 if (paths.DATA_DIR / "packs").exists():
@@ -31,9 +31,9 @@ packs._BASE = packs.DIR / "shipped"
 from PySide6.QtCore import QTimer  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from voiceinput.hotwords import Hotwords  # noqa: E402
-from voiceinput.memory import Memory  # noqa: E402
-from voiceinput.ui.window import SettingsWindow  # noqa: E402
+from artvoiceinput.hotwords import Hotwords  # noqa: E402
+from artvoiceinput.memory import Memory  # noqa: E402
+from artvoiceinput.ui.window import SettingsWindow  # noqa: E402
 
 
 def main():
@@ -55,7 +55,7 @@ def main():
     win = SettingsWindow(cfg, Hotwords(TMP / "hotword-list.json"), Memory(TMP / "smart-picks.json"))
     win.load_values()
     if "--samplelog" in args:
-        from voiceinput.logbook import LogBook
+        from artvoiceinput.logbook import LogBook
         book = LogBook(lambda: None)
         book.single("選字", "應 → 影", "")
         book.new_session()

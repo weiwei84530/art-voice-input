@@ -149,7 +149,7 @@ class SysPage(QWidget):
         about = hbox(spacing=24)
         for k, val in (("版本", __version__), ("辨識引擎", "X-ASR · 本機")):
             about.addLayout(self._kv(k, val))
-        folder = button("%LOCALAPPDATA%\\VoiceInput", lambda: os.startfile(paths.DATA_DIR), link=True)
+        folder = button("%LOCALAPPDATA%\\ArtVoiceInput", lambda: os.startfile(paths.DATA_DIR), link=True)
         folder.setFont(theme.font(13, 600, num=True))
         about.addLayout(vbox(dim("資料夾"), folder, spacing=1))
         about.addStretch(1)
@@ -213,9 +213,9 @@ class SysPage(QWidget):
 
     # --- 設定檔 ---
     def _export(self):
-        name = f"VoiceInput 設定 {time.strftime('%Y-%m-%d')}.json"
+        name = f"Art VoiceInput 設定 {time.strftime('%Y-%m-%d')}.json"
         path, _ = QFileDialog.getSaveFileName(self, "匯出設定", str(Path.home() / "Documents" / name),
-                                              "VoiceInput 設定檔 (*.json)")
+                                              "Art VoiceInput 設定檔 (*.json)")
         if not path:
             return
         try:
@@ -227,7 +227,7 @@ class SysPage(QWidget):
 
     def _import_pick(self):
         path, _ = QFileDialog.getOpenFileName(self, "匯入設定", str(Path.home() / "Documents"),
-                                              "VoiceInput 設定檔 (*.json)")
+                                              "Art VoiceInput 設定檔 (*.json)")
         if path:
             self._import_file(path)
 

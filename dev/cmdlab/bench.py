@@ -32,8 +32,8 @@ def q(xs):
 
 def main():
     import sherpa_onnx
-    from voiceinput.app import _COMMAND_SCORE, _bias
-    from voiceinput.asr import Recognizer
+    from artvoiceinput.app import _COMMAND_SCORE, _bias
+    from artvoiceinput.asr import Recognizer
     samples = [json.loads(l) for l in (OUT / "samples.jsonl").open(encoding="utf-8")]
     pos = [s for s in samples if s["kind"] == "pos" and s["era"] == "cont"][::10][:60]
     audios = [read_wav(REC / s["wav"]) for s in pos]

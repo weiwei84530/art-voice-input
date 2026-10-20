@@ -1,4 +1,4 @@
-# VoiceInput
+# Art VoiceInput
 
 Offline push-to-talk voice input for Windows (macOS is not supported; see [docs/macos-port.md](docs/macos-port.md)). Hold **CapsLock**, speak, release — text is pasted into the focused app.
 Single process: one tray icon, settings window, floating indicator. Speech recognition via [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx).
@@ -12,7 +12,7 @@ If you move the folder, run the installer again (the venv records absolute paths
 
 User data lives outside the app folder, so it survives moving or reinstalling the app:
 
-`%LOCALAPPDATA%\VoiceInput` holds settings, logs and `models\`.
+`%LOCALAPPDATA%\ArtVoiceInput` holds settings, logs and `models\`.
 
 Data from the old layout (`config.json`, `models/` inside the app folder) is moved there automatically on first launch.
 
@@ -70,7 +70,7 @@ ASR (biased toward English terms on screen) → formatting (`textfmt.py`) → pa
 ## Layout
 
 ```
-voiceinput/
+artvoiceinput/
   app.py       tray, wiring, push-to-talk flow
   hotkey.py    hooks for the keys and buttons operations use (pynput, suppressed)
   rules.py     custom operations: triggers, gestures, situations, steps

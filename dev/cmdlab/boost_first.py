@@ -12,8 +12,8 @@ GATE = 1.6   # seconds of speech
 
 
 def main():
-    from voiceinput.app import _COMMAND_SCORE, _bias, _one_command
-    from voiceinput.asr import Recognizer
+    from artvoiceinput.app import _COMMAND_SCORE, _bias, _one_command
+    from artvoiceinput.asr import Recognizer
     cmds = list(commands())
     rec = Recognizer("xasr")
     boost = _bias([(w, _COMMAND_SCORE) for w in cmds])

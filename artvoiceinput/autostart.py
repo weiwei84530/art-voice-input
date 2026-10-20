@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .paths import APP_DIR
 
-APP_ID = "VoiceInput"
+APP_ID = "ArtVoiceInput"
 LAUNCHER = APP_DIR / "run.pyw"
 
 

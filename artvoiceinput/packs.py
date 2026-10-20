@@ -1,4 +1,4 @@
-"""Term packs (詞包, 2026-10-13): curated word lists shipped with the app (voiceinput/packs/<id>.txt), ticked on the
+"""Term packs (詞包, 2026-10-13): curated word lists shipped with the app (artvoiceinput/packs/<id>.txt), ticked on the
 詞庫 tab. Since 2026-10-14 the user edits them (the user's request): every launch copies the shipped packs missing from
 DATA_DIR/packs there (the installer's job, once there is one), and only those copies are read. An app update merges
 (the user's choice): the version last shipped is kept in DATA_DIR/packs/shipped, and terms a new version adds are
@@ -29,7 +29,7 @@ from pathlib import Path
 
 from .paths import DATA_DIR
 
-log = logging.getLogger("voiceinput")
+log = logging.getLogger("artvoiceinput")
 
 SHIPPED = Path(__file__).resolve().parent / "packs"
 DIR = DATA_DIR / "packs"

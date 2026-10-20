@@ -12,11 +12,11 @@ A_MAX_S = 3.0   # method A runs on short pieces only (as it would in the app)
 
 
 def main(limit=None):
-    from voiceinput import packs
-    from voiceinput.app import _COMMAND_SCORE, _WORDS, _bias, _one_command
-    from voiceinput.asr import Recognizer
-    from voiceinput.hotwords import Hotwords
-    from voiceinput.textfmt import format_text
+    from artvoiceinput import packs
+    from artvoiceinput.app import _COMMAND_SCORE, _WORDS, _bias, _one_command
+    from artvoiceinput.asr import Recognizer
+    from artvoiceinput.hotwords import Hotwords
+    from artvoiceinput.textfmt import format_text
     from xscore import XScorer
 
     cmds = list(commands())

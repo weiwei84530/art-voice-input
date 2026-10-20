@@ -91,7 +91,7 @@ class Muter:
             if vol.GetMute():
                 return
             MUTED_PATH.parent.mkdir(parents=True, exist_ok=True)
-            MUTED_PATH.write_text("muted by VoiceInput while listening", encoding="utf-8")
+            MUTED_PATH.write_text("muted by Art VoiceInput while listening", encoding="utf-8")
             vol.SetMute(True, None)
             self._ours = True
         except Exception:

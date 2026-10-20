@@ -6,7 +6,7 @@ import re
 
 import opencc
 
-log = logging.getLogger("voiceinput")
+log = logging.getLogger("artvoiceinput")
 
 _s2tw = opencc.OpenCC("s2tw")  # glyphs only; s2twp would also swap vocabulary (程序 -> 程式)
 _t2s = opencc.OpenCC("t2s")

@@ -23,7 +23,7 @@ def keywords(tokens: set) -> str:
     from pypinyin import Style, pinyin
     from pypinyin.contrib.tone_convert import to_finals_tone, to_initials
     lines = []
-    from voiceinput.textfmt import to_simplified
+    from artvoiceinput.textfmt import to_simplified
     for phrase in commands():
         toks = []
         # Simplified: pypinyin reads 換行 as huan xing, 换行 as huan hang

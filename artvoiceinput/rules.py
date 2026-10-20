@@ -3,7 +3,7 @@
 Since 2026-10-16 only spoken operations are set (the user's design: listening is turned on and off from the
 interface, and one hotkey, config.hotkey, taps it on and off; the key rows that also took back and deleted were
 removed). A rule is an utterance that is exactly a phrase and one step: a command (結束錄音 stop listening, 復原 take
-back VoiceInput's last change, 全選 / 複製 / 剪下 / 貼上), a key combination, text to type, or text typed on both
+back Art VoiceInput's last change, 全選 / 複製 / 剪下 / 貼上), a key combination, text to type, or text typed on both
 sides of the caret or selection (左右輸入文字). The engine still knows situations and several steps; key and mouse
 rules are only read from old configs, for the key that recorded (config.hotkey). Gestures (tap, double tap, hold)
 were removed 2026-10-17 with the hotkey's (the user's choice: a press of the hotkey is a tap).
@@ -123,7 +123,7 @@ def upgrade(rules: list[Rule], version: int) -> list[Rule]:
 
 
 # Spoken rows (2026-10-16, the user's choice: no built-in rows, every one editable): a phrase box (several phrases
-# separated by 、, one rule each) and one step: keys, text, 左右輸入文字, 復原 (VoiceInput's own, not Ctrl+Z), 結束錄音
+# separated by 、, one rule each) and one step: keys, text, 左右輸入文字, 復原 (Art VoiceInput's own, not Ctrl+Z), 結束錄音
 # or an edit command.
 PHRASES = re.compile(r"[、,，/／;；]+")
 

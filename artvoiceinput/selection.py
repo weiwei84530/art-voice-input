@@ -22,7 +22,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass, field
 
-log = logging.getLogger("voiceinput")
+log = logging.getLogger("artvoiceinput")
 
 _TERMINALS = {"windowsterminal.exe", "conhost.exe", "openconsole.exe", "wezterm-gui.exe", "alacritty.exe",
               "mintty.exe", "tabby.exe", "warp.exe"}

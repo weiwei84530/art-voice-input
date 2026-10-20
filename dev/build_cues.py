@@ -1,4 +1,4 @@
-r"""Builds voiceinput/cues/*.wav from the ElevenLabs mp3s in dev/sound-preview (2026-10-13): decoded, made mono,
+r"""Builds artvoiceinput/cues/*.wav from the ElevenLabs mp3s in dev/sound-preview (2026-10-13): decoded, made mono,
 loudness matched like the preview page at its default volume 0.6 (RMS 0.15 × 0.6 over the audible part, peak at
 most 0.95), the tail cut and written as 16-bit wav, which winsound plays without any package. An end sound keeps
 its tail down to 40 dB below the loudest 10 ms window (then a 15 ms fade); a start sound only down to 20 dB, then
@@ -19,10 +19,10 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from voiceinput.cues import SOUNDS  # noqa: E402
+from artvoiceinput.cues import SOUNDS  # noqa: E402
 
 SRC = ROOT / "dev" / "sound-preview"
-OUT = ROOT / "voiceinput" / "cues"
+OUT = ROOT / "artvoiceinput" / "cues"
 
 
 def _trim(x: np.ndarray, rate: int, db: float, fade_s: float) -> np.ndarray:

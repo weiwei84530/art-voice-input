@@ -28,7 +28,7 @@ from dataclasses import asdict, dataclass, field
 
 from .paths import DATA_DIR
 
-log = logging.getLogger("voiceinput")
+log = logging.getLogger("artvoiceinput")
 
 PATH = DATA_DIR / "hotword-list.json"
 MANUAL, PICKED = "manual", "picked"

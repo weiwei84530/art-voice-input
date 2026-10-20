@@ -38,7 +38,7 @@ from . import candidates
 from .paths import DATA_DIR
 from .reading import Token, reading_key, tokens
 
-log = logging.getLogger("voiceinput")
+log = logging.getLogger("artvoiceinput")
 
 PATH = DATA_DIR / "smart-picks.json"
 BOUNDARY = "^"

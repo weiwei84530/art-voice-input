@@ -30,7 +30,7 @@ def _split(syl):
 
 def _syls(text):
     from pypinyin import Style, lazy_pinyin
-    from voiceinput.textfmt import to_simplified
+    from artvoiceinput.textfmt import to_simplified
     return [_split(p) for p in lazy_pinyin(to_simplified("".join(_CJK.findall(text))), style=Style.NORMAL)]
 
 

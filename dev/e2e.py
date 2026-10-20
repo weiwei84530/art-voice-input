@@ -19,8 +19,8 @@ import numpy as np
 from PySide6.QtWidgets import QApplication
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from voiceinput import app as appmod, selection  # noqa: E402
-from voiceinput.session import foreground  # noqa: E402
+from artvoiceinput import app as appmod, selection  # noqa: E402
+from artvoiceinput.session import foreground  # noqa: E402
 
 S = sys.argv[1]
 TARGET = sys.argv[2] if len(sys.argv) > 2 else "notepad"

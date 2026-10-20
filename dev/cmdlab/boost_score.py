@@ -12,8 +12,8 @@ SCORES = [5, 6, 7, 8, 10]
 
 
 def main():
-    from voiceinput.app import _bias, _one_command
-    from voiceinput.asr import Recognizer
+    from artvoiceinput.app import _bias, _one_command
+    from artvoiceinput.asr import Recognizer
     cmds = list(commands())
     rec = Recognizer("xasr")
     speech = {json.loads(l)["wav"]: json.loads(l)["speech"] for l in (OUT / "boost_first.jsonl").open(encoding="utf-8")}

@@ -1,4 +1,4 @@
-# VoiceInput — notes for coding agents
+# Art VoiceInput — notes for coding agents
 
 Windows dictation app: sherpa-onnx speech recognition, typed into whatever has the focus, with spoken commands and
 mouse-driven fixes. This file holds the working rules, the current design and the lessons worth keeping. Why things
@@ -12,10 +12,13 @@ automatically; read it before reviving or redesigning something). Module docstri
   materially different designs.
 - Direction (2026-10-16): turning listening on and off belongs in the interface (floating button, bubble, focus),
   not on keys and mouse buttons.
-- After every commit, restart VoiceInput (start it even if it isn't running), always with `--debug`:
+- Any UI design change (settings window, floating button, bubble, glow, 選字 menu, popups): use the design plugin
+  skills (e.g. `design:design-critique`, `design:ux-copy`, `design:accessibility-review`) and
+  `frontend-design:frontend-design` while designing it.
+- After every commit, restart Art VoiceInput (start it even if it isn't running), always with `--debug`:
 
   ```powershell
-  $root = 'E:\Projects\voice-input'
+  $root = (git rev-parse --show-toplevel) -replace '/', '\'
   $procs = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*$root\run.pyw*" }
   if ($procs) {
       $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
@@ -24,7 +27,7 @@ automatically; read it before reviving or redesigning something). Module docstri
   Start-Process "$root\.venv\Scripts\pythonw.exe" -ArgumentList "`"$root\run.pyw`" --debug" -WorkingDirectory $root
   ```
 
-  Then check the tail of `%LOCALAPPDATA%\VoiceInput\voiceinput.log` for "就緒" / errors.
+  Then check the tail of `%LOCALAPPDATA%\ArtVoiceInput\artvoiceinput.log` for "就緒" / errors.
 - `--debug` (`config.DEBUG`, set by `app.main`) shows and enables the 一般 tab's 開發測試 rows (保存錄音,
   短停頓就執行指令); a release hides them and forces them off. Autostart registers the launch as this run was made.
 - When the user decides something, record it here briefly as the current design (one line of why when it is not
@@ -32,9 +35,13 @@ automatically; read it before reviving or redesigning something). Module docstri
 
 ## Platform, layout, models
 
+- Name (2026-10-20): 阿特語音輸入法, English `Art VoiceInput` in anything shown, `ArtVoiceInput` / `artvoiceinput`
+  as identifiers (data folder, autostart value, package, log, lock); repo `art-voice-input`. "VoiceInput" alone
+  never names the app (a fork used `%LOCALAPPDATA%\VoiceInput` and the same autostart value).
+
 - Windows only (2026-10-03, macOS failed: no hotkey worked). Don't add `sys.platform` branches;
   `docs/macos-port.md` lists what a port needs.
-- Code, `.tools/`, `.venv/` stay in the app folder; user data in `paths.DATA_DIR` (`%LOCALAPPDATA%\VoiceInput`):
+- Code, `.tools/`, `.venv/` stay in the app folder; user data in `paths.DATA_DIR` (`%LOCALAPPDATA%\ArtVoiceInput`):
   `config.json`, logs, lock, `models/`, `hotword-list.json`, `smart-picks.json`, `packs/`, `cache/`.
   `paths.migrate_legacy()` moves old in-folder data. Autostart is re-registered each launch. Planned, not started:
   exe + installer (PyInstaller + Inno Setup).
@@ -54,7 +61,7 @@ automatically; read it before reviving or redesigning something). Module docstri
 | `listen.py` | `Listener`: microphone + VAD, pieces, quick pieces, audio kept for drafts / 復原 (`hold`) |
 | `asr.py` | `Recognizer`: X-ASR, hotword biasing, `recognize_timed` (token times), `_pieces` (>30s audio) |
 | `textfmt.py` | `format_text` pipeline (below), `changes` for the log |
-| `session.py` | text VoiceInput typed before the caret, `history` of `Step`s for 復原 |
+| `session.py` | text Art VoiceInput typed before the caret, `history` of `Step`s for 復原 |
 | `output.py` | Win32 clipboard paste, key sending, clipboard restore and watch |
 | `selection.py` | UIA: selection, caret line, `focus_info`, `TermWatcher` (terminal mouse selections) |
 | `highlight.py` | draft mark rectangles (`draft_rects`) and `DraftMarks` windows |
@@ -84,7 +91,7 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
 - **Focus** (`App._watch_focus`, every 0.3s, `selection.focus_info`: editable?, identity, rect; a terminal always
   counts as editable). With auto_listen a text box turns listening on, leaving for a non-editable place turns it off;
   turned off by hand it stays off in that box (`_box_quiet`) until the focus leaves or a left click into the box
-  (`App._clicked`). VoiceInput's own windows and unknown controls change nothing.
+  (`App._clicked`). Art VoiceInput's own windows and unknown controls change nothing.
 - **Bubble** (`show_bubble`, default): fades in just right of a left click (not a drag) that put the focus in a text
   box (focus read 120ms after the click); goes on typing / wheel (at once) or focus leaving (fade). Keyboard focus
   shows nothing. Placed at the click because UIA caret positions are wrong in Notion, LINE, web pages.
@@ -148,7 +155,7 @@ and runs (nothing decoded when nothing was said since the last commit).
   節; 顯示的是 → 示). Spelled letters over a selected English word type that word (`edit.spelled`, counts as a pick).
 - Not carried over from press-and-talk yet: `period_to_comma` (selected 。 → ，+ utterance + 。; checkbox hidden,
   `app.py` ignores it) and trimming punctuation when replacing a selection.
-- **復原** (`Session.history`, unlimited while the caret hasn't moved): takes back VoiceInput's last change while it
+- **復原** (`Session.history`, unlimited while the caret hasn't moved): takes back Art VoiceInput's last change while it
   is right before the caret: typed text, a pause's update of the draft (one each), a mark, a new line, Space, text
   over a selection (selection comes back), a deleted selection, 剪下 / 貼上 (ordinary apps; paste of one line ≤300
   chars), a Backspace after the caret moved (`Session.known`; only if the caret's line still reads as expected,
@@ -194,7 +201,7 @@ sentence end → 嗎 questions → trailing punctuation.
   and the replaced one −25%. Typed words are top. English never below 0%. Single characters never listed. ✕ puts a
   word back to unlisted level. Biasing scores: +5 Chinese / +3 English at the top, −3 at the bottom. A Chinese word
   another one starts with is not sent (剪貼 made 剪貼簿 into 剪貼布).
-- **詞包** (`packs.py`, shipped `voiceinput/packs/<id>.txt`, user copies in DATA_DIR/packs read instead, edits apply at
+- **詞包** (`packs.py`, shipped `artvoiceinput/packs/<id>.txt`, user copies in DATA_DIR/packs read instead, edits apply at
   the next dictation; an update appends new shipped terms under a dated comment, `packs/shipped` keeps the last
   shipped copy). Seven packs (`packs.ORDER`), none ticked by default; ticked words bias at 150% unlisted. No version
   numbers, no common words as products, nothing the hotword encoding can't hold (UI/UX, 4K). A pick or typed word an
@@ -231,7 +238,7 @@ on; 保存錄音 / 短停頓就執行指令 on by default only with --debug.
 
 Settings window (`ui/`, the 2026-10 redesign; mockups on the claude.ai Design canvas
 https://claude.ai/artifact/8UWdBateenAsqfZKeHPeiG, style C): frameless 960x640, Windows 11 rounded corners. Home:
-the orange brand block (status, logo, 阿特語音輸入法, version from `voiceinput.__version__`) and six tiles, each icon
+the orange brand block (status, logo, 阿特語音輸入法, version from `artvoiceinput.__version__`) and six tiles, each icon
 bled large into the tile's bottom right (tilted 5°; hover lifts it up-right, turning clockwise). A tile opens its page
 (transition Fly): the block shrinks to a 56px strip that goes home, the icon flies to the page title. Pages: 麥克風
 (hotkey card, 點進輸入框時 radio, floating button + its two options; auto-off chips, stop_on_enter, device, mute), 外觀與聲音
@@ -259,7 +266,7 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
 - 按鈕樣式 (`orbs.py`, `button_look`): mic + ten orb looks in the glow's colors (蝕光 the latest), drawn on a canvas
   1.4x the mic (`orbs.SCALE`), frames cached per loop phase, only while shown; 30 fps (15 with 節流模式). Hover
   shrinks to 0.88 with a spring. 光環 / 虹膜 middles take clicks (alpha 1/255 disc: fully clear pixels pass clicks).
-- Sounds (`cues.py`, `voiceinput/cues/*.wav`, built by `dev/build_cues.py`): 12 sets, 無, 自定義; Blip default; the
+- Sounds (`cues.py`, `artvoiceinput/cues/*.wav`, built by `dev/build_cues.py`): 12 sets, 無, 自定義; Blip default; the
   start sound's length is silenced for the VAD. Played from the wav file (winsound can't play memory async).
 - ▶ 預覽 / ▶ 試聽 read 播放中… and are disabled while playing.
 
@@ -293,7 +300,7 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   DATA_DIR/recordings with index.jsonl; development only, to be removed before release, keep it inside that module,
   `App._keep`, the 開發測試 row and `save_recordings`). Saved recordings were decoded with that moment's 詞庫;
   press-and-talk ones (before 2026-10-14) still hold the start sound the app cut out.
-- Never let a test write the user's real data files while their VoiceInput runs.
+- Never let a test write the user's real data files while their Art VoiceInput runs.
 - `dev/e2e.py` types into real Notepad / Windows Terminal: only when the user is away (it once typed into their
   Notepad document).
 - Other probes: `dev/term_probe.py`, `dev/highlight_spike.py` / `.html`, `dev/pack_candidates.py`.

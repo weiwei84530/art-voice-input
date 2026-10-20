@@ -1,7 +1,7 @@
 # Command-recognition lab (dev only)
 
 Measures how well spoken commands said alone are recognized, on the user's saved recordings
-(`%LOCALAPPDATA%\VoiceInput\recordings`, read only). Needs `onnxruntime`, `kaldi-native-fbank` and `soundfile`
+(`%LOCALAPPDATA%\ArtVoiceInput\recordings`, read only). Needs `onnxruntime`, `kaldi-native-fbank` and `soundfile`
 besides the app's packages: use a separate venv with a `.pth` pointing at `.venv\Lib\site-packages` and the repo.
 Output goes to `CMDLAB_OUT` (default `dev/cmdlab/out`); keyword-spotter models to `CMDLAB_KWS` (short paths:
 sherpa-onnx fails beyond 260 characters).

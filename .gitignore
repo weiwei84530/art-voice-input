@@ -3,10 +3,10 @@
 models/
 __pycache__/
 config.json
-voiceinput.log
-.voiceinput.lock
+artvoiceinput.log
+.artvoiceinput.lock
 .env
-# ElevenLabs sound sources: only the mp3s voiceinput/cues.py uses are tracked (git add -f), with prompts.json;
+# ElevenLabs sound sources: only the mp3s artvoiceinput/cues.py uses are tracked (git add -f), with prompts.json;
 # preview pages and unused takes stay local
 dev/sound-preview/*
 !dev/sound-preview/prompts.json

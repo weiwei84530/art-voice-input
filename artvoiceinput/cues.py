@@ -9,7 +9,7 @@ import winsound
 from pathlib import Path
 
 
-log = logging.getLogger("voiceinput")
+log = logging.getLogger("artvoiceinput")
 
 DIR = Path(__file__).resolve().parent / "cues"
 # (id, name shown, start and end sources in dev/sound-preview): the 簡潔 UI and 柔和木質 sets, the user's choice;

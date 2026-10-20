@@ -1,4 +1,4 @@
-"""What VoiceInput knows about the text right before the caret.
+"""What Art VoiceInput knows about the text right before the caret.
 
 Every dictation is pasted at the caret. As long as the user has not pressed a key or clicked since, and the same
 window is in front, the text before the caret ends with exactly what we pasted (the "buffer"). Deleting the last
@@ -6,7 +6,7 @@ dictation is done by pressing Backspace up to the edit point and pasting the new
 terminals included (Claude Code), because it needs neither UI Automation nor a selection. Any key press or mouse
 click from the user ends the buffer: the caret may have moved.
 
-復原 (a double tap or saying it) takes back the last change VoiceInput made, one each time, all of them while the
+復原 (a double tap or saying it) takes back the last change Art VoiceInput made, one each time, all of them while the
 caret has not moved (unlimited since 2026-10-16, the user's request; 3 from 2026-10-14; one, the last dictation, from
 2026-10-04): typed
 text, a punctuation mark, a new line, text spoken over a selection (the selection comes back), a deleted

@@ -22,7 +22,7 @@ from pypinyin import Style, lazy_pinyin
 
 from .paths import DATA_DIR
 
-log = logging.getLogger("voiceinput")
+log = logging.getLogger("artvoiceinput")
 
 _DICT = Path(__file__).resolve().parent / "dict" / "words.tsv.gz"
 _CACHE = DATA_DIR / "cache" / "word_index.pkl"

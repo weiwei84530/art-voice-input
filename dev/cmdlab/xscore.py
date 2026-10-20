@@ -100,7 +100,7 @@ class XScorer:
 
     def ids(self, text: str) -> list | None:
         """Token ids of a Chinese phrase (characters as ▁X pieces, Simplified), None when one is missing."""
-        from voiceinput.textfmt import to_simplified
+        from artvoiceinput.textfmt import to_simplified
         out = []
         for ch in to_simplified(text):
             k = self.tok2id.get("▁" + ch)

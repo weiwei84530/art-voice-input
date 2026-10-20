@@ -19,7 +19,7 @@ from PySide6.QtGui import QColor, QGuiApplication, QPainter
 from PySide6.QtWidgets import QApplication, QWidget
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from voiceinput import selection  # noqa: E402
+from artvoiceinput import selection  # noqa: E402
 
 OUT = Path(sys.argv[1])
 MODE = sys.argv[2] if len(sys.argv) > 2 else "chrome"

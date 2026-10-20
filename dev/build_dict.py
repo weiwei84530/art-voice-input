@@ -1,4 +1,4 @@
-"""Build voiceinput/dict/words.tsv.gz from McBopomofo's Taiwanese word list (MIT licence).
+"""Build artvoiceinput/dict/words.tsv.gz from McBopomofo's Taiwanese word list (MIT licence).
 
   python dev/build_dict.py
 
@@ -13,7 +13,7 @@ from pathlib import Path
 
 COMMIT = "be6564acad6c4d3265c34a2e1a872d80f9db6068"
 BASE = f"https://raw.githubusercontent.com/openvanilla/McBopomofo/{COMMIT}/Source/Data/"
-OUT = Path(__file__).resolve().parent.parent / "voiceinput" / "dict" / "words.tsv.gz"
+OUT = Path(__file__).resolve().parent.parent / "artvoiceinput" / "dict" / "words.tsv.gz"
 
 
 def fetch(name: str) -> list[str]:

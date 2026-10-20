@@ -31,7 +31,7 @@ _TOKEN = re.compile(r"[㐀-䶿一-鿿]+|[A-Za-z']+")   # a Chinese run at once: 
 @lru_cache(maxsize=1)
 def _english():
     out = {}
-    with gzip.open(ROOT / "voiceinput" / "dict" / "english.tsv.gz", "rt", encoding="utf-8") as f:
+    with gzip.open(ROOT / "artvoiceinput" / "dict" / "english.tsv.gz", "rt", encoding="utf-8") as f:
         for line in f:
             w, _, pron = line.rstrip("\n").split("\t")
             out.setdefault(w, pron.split("|")[0])
@@ -41,7 +41,7 @@ def _english():
 def _pinyin_phones(ch):
     from pypinyin import Style, lazy_pinyin
     from pypinyin.contrib.tone_convert import to_finals, to_initials
-    from voiceinput.textfmt import to_simplified
+    from artvoiceinput.textfmt import to_simplified
     out = []
     for p in lazy_pinyin(to_simplified(ch), style=Style.NORMAL):
         ini, fin = to_initials(p, strict=False), to_finals(p, strict=False).replace("ü", "v")

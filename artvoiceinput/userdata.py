@@ -1,4 +1,4 @@
-"""A user's VoiceInput data in one file (the 一般 tab's 匯出 / 匯入 / 還原預設, 2026-10-17, the user's design): every
+"""A user's Art VoiceInput data in one file (the 一般 tab's 匯出 / 匯入 / 還原預設, 2026-10-17, the user's design): every
 setting (config.json, 自訂操作 included) and the 詞庫: the word list with its 英文強制替換 aliases (hotwords.py),
 選字記憶 (memory.py), which term packs are ticked and the user's copies of the pack files (packs.py).
 
@@ -16,7 +16,7 @@ from pathlib import Path
 from . import packs
 from .config import Config
 
-FORMAT = "voiceinput-data"
+FORMAT = "artvoiceinput-data"
 VERSION = 1
 LOCAL = ("mic", "autostart", "float_pos")
 
@@ -35,10 +35,10 @@ def export(path: Path, cfg, hotwords, memory) -> None:
 
 
 def load(path: Path) -> dict:
-    """The file's data; ValueError when it is not a VoiceInput export."""
+    """The file's data; ValueError when it is not an Art VoiceInput export."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(data, dict) or data.get("format") != FORMAT or not isinstance(data.get("settings"), dict):
-        raise ValueError("不是 VoiceInput 匯出的設定檔")
+        raise ValueError("不是 Art VoiceInput 匯出的設定檔")
     return data
 
 

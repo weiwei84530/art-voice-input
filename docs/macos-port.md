@@ -1,6 +1,6 @@
-# Porting VoiceInput to macOS
+# Porting Art VoiceInput to macOS
 
-Status (2026-10-03): VoiceInput is Windows only. The half-done macOS paths were removed in the commit after
+Status (2026-10-03): Art VoiceInput is Windows only. The half-done macOS paths were removed in the commit after
 `064f40c` (that commit still has them: `install.command`, `start.command`, the LaunchAgent in `autostart.py`, the
 `~/Library/Application Support` data folder, Cmd+V paste, a plain pynput listener in `hotkey.py`). This file lists
 what a real port needs, so the work can start without re-investigating.
@@ -62,7 +62,7 @@ the user install a driver.
 | Tray icon | `QSystemTrayIcon`, left click opens settings | Menu bar icon; a click shows the menu, so open settings from a menu item |
 | Dark taskbar icon | registry (`app._dark_taskbar`) | `NSApp.effectiveAppearance` or a template icon |
 | Launch at login | HKCU Run (`autostart.py`) | LaunchAgent plist (code in `064f40c`), or `SMAppService` for a bundle |
-| Data folder | `%LOCALAPPDATA%\VoiceInput` (`paths.py`) | `~/Library/Application Support/VoiceInput` |
+| Data folder | `%LOCALAPPDATA%\ArtVoiceInput` (`paths.py`) | `~/Library/Application Support/Art VoiceInput` |
 | Install / start | `install.bat`, `start.bat` | `install.command`, `start.command` in `064f40c` (uv, Python 3.12) |
 | Test audio | `dev/tts.ps1` (zh-TW Hanhan) | `say -v Meijia -o x.aiff` then convert to 16kHz wav |
 

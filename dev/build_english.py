@@ -1,4 +1,4 @@
-r"""Build voiceinput/dict/english.tsv.gz, the common English words 選字 offers as near sounds (2026-10-16).
+r"""Build artvoiceinput/dict/english.tsv.gz, the common English words 選字 offers as near sounds (2026-10-16).
 
   .venv\Scripts\python.exe dev\build_english.py <cmudict.dict> [count]
 
@@ -16,7 +16,7 @@ from pathlib import Path
 
 from wordfreq import top_n_list, zipf_frequency
 
-OUT = Path(__file__).resolve().parent.parent / "voiceinput" / "dict" / "english.tsv.gz"
+OUT = Path(__file__).resolve().parent.parent / "artvoiceinput" / "dict" / "english.tsv.gz"
 # never offered: a near sound of an ordinary word should not be an insult
 _BLOCK = {"shit", "fuck", "fucking", "fucked", "cunt", "bitch", "dick", "cock", "pussy", "slut", "whore", "nigger",
           "nigga", "fag", "faggot", "retard", "retarded", "asshole", "bastard", "damn", "piss", "tits", "boobs",

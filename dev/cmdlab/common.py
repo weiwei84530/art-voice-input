@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-DATA = Path(os.environ["LOCALAPPDATA"]) / "VoiceInput"
+DATA = Path(os.environ["LOCALAPPDATA"]) / "ArtVoiceInput"
 REC = DATA / "recordings"
 MODELS = DATA / "models"
 XASR = MODELS / "sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03"
@@ -20,7 +20,7 @@ _PUNCT = re.compile(r"[\s，。、！？；：,.!?;:…]+")
 
 
 def norm(text: str) -> str:
-    from voiceinput.textfmt import to_traditional
+    from artvoiceinput.textfmt import to_traditional
     return _PUNCT.sub("", to_traditional(text)).casefold()
 
 
@@ -30,7 +30,7 @@ def config() -> dict:
 
 def commands() -> dict:
     """phrase -> what it does, as the app's _command_words: enabled speech rules and punctuation names."""
-    from voiceinput import edit
+    from artvoiceinput import edit
     out = {}
     for r in config()["rules"]:
         if r.get("source") == "speech" and r.get("enabled", True) and r.get("phrase", "").strip():

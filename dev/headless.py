@@ -30,7 +30,7 @@ import numpy as np
 from PySide6.QtWidgets import QApplication
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from voiceinput import app as appmod, listen, output, rules, selection, session  # noqa: E402
+from artvoiceinput import app as appmod, listen, output, rules, selection, session  # noqa: E402
 
 S = sys.argv[1]
 HWND = 4242

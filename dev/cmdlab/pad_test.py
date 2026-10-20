@@ -16,8 +16,8 @@ VARIANTS = {"both0.3": (0.3, 0.3), "both0.5": (0.5, 0.5), "head0.3": (0.3, 0.0),
 
 
 def main():
-    from voiceinput.app import _bias, _one_command
-    from voiceinput.asr import Recognizer
+    from artvoiceinput.app import _bias, _one_command
+    from artvoiceinput.asr import Recognizer
     cmds = list(commands())
     rec = Recognizer("xasr")
     boost = _bias([(w, 5.0) for w in cmds])
