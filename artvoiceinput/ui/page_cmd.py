@@ -68,7 +68,9 @@ class Chip(QAbstractButton):
         return pos.x() > self.width() - 24
 
     def mouseMoveEvent(self, e):
-        self.setCursor(Qt.PointingHandCursor if self._on_x(e.position()) else Qt.IBeamCursor)
+        on_x = self._on_x(e.position())
+        self.setCursor(Qt.PointingHandCursor if on_x else Qt.IBeamCursor)
+        self.setToolTip("" if on_x else "點一下修改")   # nothing over the ×
         super().mouseMoveEvent(e)
 
     def mouseReleaseEvent(self, e):
@@ -675,6 +677,9 @@ class CmdPage(QWidget):
         return {n for n, c in count.items() if c > 1}
 
     def _draw(self, new_row: dict | None = None):
+        # rebuilt out of sight: the half-built table flashed
+        self.setUpdatesEnabled(False)
+        QTimer.singleShot(0, lambda: self.setUpdatesEnabled(True))
         lay = self.book_layout
         while lay.count():
             item = lay.takeAt(0)
@@ -687,7 +692,7 @@ class CmdPage(QWidget):
         grid.setSpacing(0)
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setColumnStretch(1, 1)
-        bad = self._dups()
+        bad = self._bad = self._dups()
         line, first = 0, True
         new_chips = None
         for gi, (name, hint) in enumerate(GROUPS):
@@ -755,12 +760,15 @@ class CmdPage(QWidget):
     def _punct(self, on: bool):
         self.cfg.punctuation_names = on
         self.win.save()
-        self._draw()
+        if self._dups() != getattr(self, "_bad", None):   # a punctuation name now clashes with a phrase, or no longer does
+            self._draw()
+        else:
+            _opacity(self.keys, 1.0 if on else 0.35)
 
     def _desc(self, on: bool):
         self.cfg.describe_char = on
         self.win.save()
-        self._draw()
+        _opacity(self.examples, 1.0 if on else 0.35)
 
 
 def _clear(layout):

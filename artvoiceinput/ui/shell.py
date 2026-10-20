@@ -124,8 +124,10 @@ class Tile(QAbstractButton):
         self.key, self.name, self.desc = key, name, ""
         self.hide_icon = False
         self.setCursor(Qt.PointingHandCursor)
+        self.setFocusPolicy(Qt.TabFocus)   # a click doesn't leave a focused (outlined) tile behind
         self.setFixedSize(TILE_W, TILE_H)
         self.setAccessibleName(name)
+        self._over = False         # the outline follows the pointer at once, not the 500ms hover animation
         self._h = 0.0
         self._anim = QVariantAnimation(self, duration=500)
         self._anim.valueChanged.connect(self._hover)
@@ -141,9 +143,11 @@ class Tile(QAbstractButton):
         self._anim.start()
 
     def enterEvent(self, e):
+        self._over = True
         self._go(1.0)
 
     def leaveEvent(self, e):
+        self._over = False
         self._go(0.0)
 
     def paintEvent(self, _):
@@ -170,7 +174,7 @@ class Tile(QAbstractButton):
         c.setAlphaF(lerp(0.16, 0.30, h))
         draw_icon(p, self.key, QRectF(-size / 2, -size / 2, size, size), c, 1.5)
         p.restore()
-        p.setPen(QPen(T("acc") if self._h > 0.02 or self.hasFocus() else T("line"), 1))
+        p.setPen(QPen(T("acc") if self._over or self.hasFocus() else T("line"), 1))
         p.setBrush(Qt.NoBrush)
         p.drawRoundedRect(r, 6, 6)
         # the small icon
