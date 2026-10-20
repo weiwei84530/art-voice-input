@@ -27,8 +27,8 @@ _CELL_WORD = (88, 28)
 _FONT_SINGLE, _FONT_WORD = 17, 14
 _WORD_MAX = 200   # a long English candidate widens its column up to this
 _RAIL_PAD = 5     # inside the rail of tabs
-_TAB_H = 32       # a tab: its name over its count
-_TAB_GAP = 2
+_TAB_H = 38       # a tab: its name over its count
+_TAB_GAP = 4
 _RAIL_MIN = 62
 
 
@@ -204,13 +204,13 @@ class Picker(QWidget):
                 p.setBrush(self._c("tile"))
                 p.drawRoundedRect(r, 5, 5)
                 p.setBrush(self._c("acc"))
-                p.drawRoundedRect(QRectF(r.x(), r.y() + 7, 3, r.height() - 14), 1.5, 1.5)
+                p.drawRoundedRect(QRectF(r.x(), r.y() + 8, 3, r.height() - 16), 1.5, 1.5)
             p.setFont(themes.font(12, 700 if on else 500))
             p.setPen(self._c("ink") if on else self._c("muted"))
-            p.drawText(QRectF(r.x() + 10, r.y() + 2, r.width() - 12, 16), Qt.AlignLeft | Qt.AlignVCenter, name)
+            p.drawText(QRectF(r.x() + 10, r.y() + 4, r.width() - 12, 16), Qt.AlignLeft | Qt.AlignVCenter, name)
             p.setFont(themes.font(10.5, 600, num=True))
             p.setPen(self._c("acct") if on else self._c("muted"))
-            p.drawText(QRectF(r.x() + 10, r.y() + 17, r.width() - 12, 13), Qt.AlignLeft | Qt.AlignVCenter,
+            p.drawText(QRectF(r.x() + 10, r.y() + 20, r.width() - 12, 14), Qt.AlignLeft | Qt.AlignVCenter,
                        f"{len(words)} 個")
 
     # --- the mouse ---

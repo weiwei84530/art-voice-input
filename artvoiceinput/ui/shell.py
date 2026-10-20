@@ -7,11 +7,11 @@ import ctypes
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QTransform
 from PySide6.QtWidgets import (QAbstractButton, QGraphicsDropShadowEffect, QGraphicsOpacityEffect, QLabel,
-                               QScrollArea, QStackedWidget, QToolTip, QVBoxLayout, QWidget)
+                               QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
 from .. import __version__
 from . import theme
-from .kit import T, Hub, draw_icon, logo_renderer
+from .kit import T, Hub, Tip, draw_icon, logo_renderer
 
 W, H = 960, 640
 ORG_HOME, ORG_PAGE = 380, 56
@@ -217,11 +217,11 @@ class Strip(QAbstractButton):
 
     def enterEvent(self, e):
         self._go(1.0)
-        QToolTip.showText(self.mapToGlobal(self.rect().center()) + QPointF(30, -14).toPoint(), "回首頁", self)
+        Tip.show_text(self.mapToGlobal(self.rect().center()) + QPointF(30, -14).toPoint(), "回首頁", self)
 
     def leaveEvent(self, e):
         self._go(0.0)
-        QToolTip.hideText()
+        Tip.hide_text(self)
 
     def paintEvent(self, _):
         if self.opacity <= 0:
@@ -426,6 +426,7 @@ class Shell(QWidget):
     def go_home(self):
         if self.current is None or self._anim.state() == QVariantAnimation.Running:
             return
+        Tip.hide_text(self.strip)
         tile = self.tiles[self.current]
         self._from = (TILE_X + 22, TILE_Y + tile.y() + (TILE_H - 34) // 2, 34)
         self.current = None

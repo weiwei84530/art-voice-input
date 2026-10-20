@@ -20,6 +20,7 @@ DARK = {"bg": "#1A1C1F", "tile": "#24272B", "tile2": "#2C2F34", "ink": "#EEF0F2"
         "ins": "#62D683", "dark": True}
 MODES = [("light", "亮色"), ("dark", "暗色"), ("system", "跟隨系統")]
 _DOWN = (Path(__file__).parent / "down.svg").as_posix()   # the drop-down's arrow
+_CHECK = (Path(__file__).parent / "check.svg").as_posix()  # the check box's tick
 
 
 def system_dark() -> bool:
@@ -131,7 +132,7 @@ QCheckBox {{ font-size: 13px; spacing: 8px; background: transparent; }}
 QCheckBox:disabled {{ color: {t['muted']}; }}
 QCheckBox::indicator {{ width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid {t['muted']};
             background: transparent; }}
-QCheckBox::indicator:checked {{ background: {t['acc']}; border-color: {t['acc']}; }}
+QCheckBox::indicator:checked {{ background: {t['acc']}; border-color: {t['acc']}; image: url({_CHECK}); }}
 QCheckBox::indicator:disabled {{ border-color: {t['line']}; }}
 QSlider::groove:horizontal {{ height: 4px; border-radius: 2px; background: {t['line']}; }}
 QSlider::sub-page:horizontal {{ height: 4px; border-radius: 2px; background: {t['acc']}; }}

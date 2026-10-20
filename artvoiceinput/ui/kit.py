@@ -1,10 +1,10 @@
 """Building blocks of the redesigned settings window: icons, the switch, cards, chips, segmented buttons, ⓘ."""
 from PySide6.QtCore import (Property, QByteArray, QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRect, QRectF,
-                            QSize, Qt, QTimer, Signal)
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPen, QPixmap
+                            QSize, Qt, QVariantAnimation, Signal)
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QGuiApplication, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (QAbstractButton, QButtonGroup, QFrame, QHBoxLayout, QLabel, QLayout, QPushButton,
-                               QSizePolicy, QToolTip, QVBoxLayout, QWidget)
+                               QSizePolicy, QVBoxLayout, QWidget)
 
 from . import theme
 
@@ -265,24 +265,104 @@ class Switch(QAbstractButton):
         super().focusInEvent(e)
 
 
+class Tip(QWidget):
+    """The settings window's own tooltip (ⓘ, 回首頁): fades in and out in 120ms. QToolTip's Windows fade looked
+    choppy, and it ignored a showText of the tip it was just hiding (same text, same widget)."""
+    _one = None
+    FADE_MS = 120
+
+    @classmethod
+    def ready(cls) -> "Tip":
+        """The one tip, laid out and painted once ahead: the first showing took ~300ms and stalled the fade."""
+        if cls._one is None:
+            cls._one = t = Tip()
+            t.text = "說明 ⓘ"
+            t._size()
+            t.grab()
+        return cls._one
+
+    @classmethod
+    def show_text(cls, pos: QPoint, text: str, owner: QWidget):
+        cls.ready()._show(pos, text, owner)
+
+    @classmethod
+    def hide_text(cls, owner: QWidget):
+        if cls._one is not None and cls._one.owner is owner:
+            cls._one._fade(0.0)
+
+    def __init__(self):
+        super().__init__(None, Qt.ToolTip | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.owner = None
+        self.text = ""
+        self._arming = False
+        self._op = 0.0             # our own record: windowOpacity() read back 1.0 at times (a one-frame flash)
+        self._anim = QVariantAnimation(self, easingCurve=QEasingCurve.OutCubic)
+        self._anim.valueChanged.connect(self._set_op)
+        self._anim.finished.connect(self._finished)
+
+    def _set_op(self, v):
+        if self._arming:   # setting a stopped animation's values reports its old end value
+            return
+        self._op = float(v)
+        self.setWindowOpacity(self._op)
+
+    def _show(self, pos: QPoint, text: str, owner: QWidget):
+        self.owner, self.text = owner, text
+        self._size()
+        screen = QGuiApplication.screenAt(pos) or QGuiApplication.primaryScreen()
+        a = screen.availableGeometry()
+        self.move(min(max(pos.x(), a.left()), a.right() - self.width()), min(pos.y(), a.bottom() - self.height()))
+        self.update()
+        if not self.isVisible():
+            self._anim.stop()
+            self._set_op(0.0)
+            self.show()
+        self._fade(1.0)
+
+    def _size(self):
+        r = QFontMetrics(theme.font(12)).boundingRect(QRect(0, 0, 300, 2000), Qt.TextWordWrap, self.text)
+        self.resize(r.width() + 20 + 1, r.height() + 14)
+
+    def _fade(self, end: float):
+        if not self.isVisible():
+            return
+        self._anim.stop()
+        self._arming = True
+        self._anim.setDuration(max(1, round(self.FADE_MS * abs(end - self._op))))
+        self._anim.setStartValue(self._op)
+        self._anim.setEndValue(end)
+        self._arming = False
+        self._anim.start()
+
+    def _finished(self):
+        if self._anim.endValue() == 0.0:
+            self.hide()
+            self.owner = None
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(Qt.NoPen)
+        p.setBrush(T("ink"))
+        p.drawRoundedRect(QRectF(self.rect()), 5, 5)
+        p.setPen(T("bg"))
+        p.setFont(theme.font(12))
+        p.drawText(QRectF(self.rect()).adjusted(10, 7, -10, -7), Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignVCenter,
+                   self.text)
+
+
 class Info(QLabel):
-    """ⓘ after a name: its explanation shows while the pointer is on it. QToolTip ignores a showText of the tip it
-    is just hiding (same text, same widget), so leaving and coming back quickly showed nothing: while the pointer is
-    here a timer shows the tip again whenever it is gone."""
+    """ⓘ after a name: its explanation shows (fading in) while the pointer is on it."""
 
     def __init__(self, tip: str):
         super().__init__()
         self.tip = tip
         self.setFixedSize(16, 16)
         self.setCursor(Qt.WhatsThisCursor)
-        self._keep = QTimer(self, interval=150)
-        self._keep.timeout.connect(self._show)
-
-    def _show(self):
-        if not self.underMouse():
-            self._keep.stop()
-        elif not QToolTip.isVisible() or QToolTip.text() != self.tip:
-            QToolTip.showText(self.mapToGlobal(QPoint(0, self.height() + 6)), self.tip, self)
+        Tip.ready()
 
     def paintEvent(self, _):
         p = QPainter(self)
@@ -296,12 +376,13 @@ class Info(QLabel):
         p.drawRoundedRect(QRectF(7.2, 6.6, 1.6, 5.6), 0.8, 0.8)
 
     def enterEvent(self, e):
-        QToolTip.showText(self.mapToGlobal(QPoint(0, self.height() + 6)), self.tip, self)
-        self._keep.start()
+        Tip.show_text(self.mapToGlobal(QPoint(0, self.height() + 6)), self.tip, self)
 
     def leaveEvent(self, e):
-        self._keep.stop()
-        QToolTip.hideText()
+        Tip.hide_text(self)
+
+    def hideEvent(self, e):
+        Tip.hide_text(self)
 
 
 def with_info(widget: QWidget, tip: str) -> QWidget:
