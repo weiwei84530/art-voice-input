@@ -197,9 +197,9 @@ class LogBook:
             tag, kind = "整句重聽", "fix"
             self._redos += 1
             if self._redos == 1:
-                why.append("停頓之後才知道前面該斷在哪、怎麼寫，所以每次停頓都把還沒定下來的句子重聽一次")
+                why.append("停頓之後才知道前面該斷在哪、怎麼寫，所以每次停頓都把還沒定稿的句子重聽一次")
         if locked:
-            tag = "；".join(t for t in (tag, f"「{_tail(locked)}」以前定下來") if t)
+            tag = "；".join(t for t in (tag, f"「{_tail(locked)}」以前定稿") if t)
             kind = kind or "lock"
             why.append("標點落在你停頓的地方，前面就固定了；之後停頓只重聽後面的句子，比較快")
         tech = tech_of(info.get("entry"), f"整句重聽 {info['redo_s']:.2f} 秒" if "redo_s" in info else "")
@@ -231,7 +231,7 @@ class LogBook:
                 (f"<span style='color:{_GRAY}'>→ {esc(what)}</span>" if what else "")
             tag = f"指令：{op.phrase}"
             why.append("整句只有這個詞，所以當指令執行" if not drafted else
-                       "指令會先把前面的草稿定下來" + ("，句尾沒有標點就補上" if marked else ""))
+                       "指令會先把前面的草稿定稿" + ("，句尾沒有標點就補上" if marked else ""))
             copy = after if drafted else ""
         else:
             change = settled_html(before, after + typed) if drafted else ins(typed)
@@ -254,8 +254,8 @@ class LogBook:
     def frozen(self, typed: str):
         """The caret moved away from the draft: it stays as typed, shown as its start … its end (the user's
         design, 2026-10-15), copied whole."""
-        self._row("（游標移到別處）", settled_html(typed, typed), "照畫面上的字定下來", "note",
-                  _tip(["你點了別的地方、選取或打了字，草稿就照畫面上的樣子定下來；之後講的話從新的游標位置開始"], ""),
+        self._row("（游標移到別處）", settled_html(typed, typed), "定稿", "note",
+                  _tip(["你點了別的地方、選取或打了字，草稿就照畫面上的樣子定稿；之後講的話從新的游標位置開始"], ""),
                   typed)
 
     def undo(self, took: str, back: str, revived: str):

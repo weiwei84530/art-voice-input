@@ -3,11 +3,12 @@
 Design G2 (2026-10-20, the user's pick of the redesign's menus, made compact): the candidates as a plain list, the
 tabs (by how close they sound: 同音 / 不同聲調 / 模糊音 for Chinese, 近音字 / 詞庫 / 大小寫 for English) in a rail on
 the right, each a name over its count, the open one marked by an orange bar on its left. The pointer over a tab opens
-it. Candidates fill a grid top to bottom,
-then left to right: 4 columns for a single character, 2 for words. The word that is there now leads the first tab,
-bold with an orange mark, so the user sees what is chosen (a click on it keeps it); tab counts leave it out. Light or dark with the settings window (config.theme, ui/theme.py). Rows are answered
-with the mouse only (decided 2026-09-29: short spoken answers like 對 / 第二個 were often misheard). There is no
-timeout: the app closes the menu when the user's next click or key is somewhere else.
+it. Candidates fill a grid top to bottom, then left to right: 3 columns of 5 for a single character (in about the
+words' size), 2 of 5 for words. The word that is there now leads the first tab, bold with an orange mark, so the user
+sees what is chosen (a click on it keeps it); tab counts leave it out. Light or dark with the settings window
+(config.theme, ui/theme.py). Rows are answered with the mouse only (decided 2026-09-29: short spoken answers like
+對 / 第二個 were often misheard). There is no timeout: the app closes the menu when the user's next click or key is
+somewhere else.
 """
 import ctypes
 
@@ -18,13 +19,13 @@ from PySide6.QtWidgets import QWidget
 from .ui import theme as themes
 
 _GWL_EXSTYLE, _WS_EX_NOACTIVATE, _WS_EX_TOPMOST = -20, 0x08000000, 0x8
-SINGLE = (4, 4)   # columns, rows per tab for one Chinese character
+SINGLE = (3, 5)   # columns, rows per tab for one Chinese character (the user's choice: 15, rows like words')
 WORDS = (2, 5)    # for words and English
 _SHADOW = 12      # room around the menu for its shadow
 _PAD = 5          # inside the menu, around the candidates
-_CELL_SINGLE = (40, 32)
+_CELL_SINGLE = (42, 28)
 _CELL_WORD = (88, 28)
-_FONT_SINGLE, _FONT_WORD = 17, 14
+_FONT_SINGLE, _FONT_WORD = 15, 14
 _WORD_MAX = 200   # a long English candidate widens its column up to this
 _RAIL_PAD = 5     # inside the rail of tabs
 _TAB_H = 38       # a tab: its name over its count

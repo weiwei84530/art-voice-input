@@ -224,7 +224,6 @@ class App(QObject):
         self._apply_look()   # clicks on these are not caret moves
         self._box = None                         # the text box the focus is in, its identity
         self._click = None                       # (point, time) of a click the bubble may show by
-        self._bubble_back = False                # the bubble showed when listening started: it comes back after
         self._box_auto = False                   # listening was turned on by the focus
         self._focus_busy = False
         self._focus_pool = ThreadPoolExecutor(max_workers=1)   # its UI Automation reads (one COM object per thread)
@@ -492,8 +491,7 @@ class App(QObject):
             self.listener.still(wait)   # the start sound is not speech; muting waits for its end
         self._heard_at = time.monotonic()
         self._update_float("start")
-        self._bubble_back = self.bubble.isVisible() and not self.bubble.leaving
-        self.bubble.burst()   # grows and fades out with the glow fading in
+        self.bubble.burst()   # grows and fades out with the glow fading in; back only at the next click
         self._marks_timer.start()
         if self.cfg.mute_while_recording:
             QTimer.singleShot(int(wait * 1000), lambda: self.muter.mute() if self._listening else None)
@@ -525,6 +523,7 @@ class App(QObject):
             show = (self._box is not None or not self.cfg.float_text_only) \
                 and (not self._listening or self.cfg.float_keep)
         b.setToolTip("關閉麥克風" if self._listening else "開啟麥克風")
+        b.set_active(self._listening and show)
         if show:
             if event == "stop" and (not b.isVisible() or b.leaving):
                 b.come_back()
@@ -538,9 +537,7 @@ class App(QObject):
     def _float_clicked(self):
         """Main thread: the floating button turns listening on, as a tap of the key would (the text goes to the
         window that has the focus: the button never takes it); kept on screen while listening (float_keep), it
-        jumps at a click and turns listening off."""
-        if self.cfg.float_keep:
-            self.float_btn.jump()
+        turns listening off (it is smaller and plays faster while listening)."""
         if self._listening:
             self._stop_listen()
             return
@@ -692,8 +689,8 @@ class App(QObject):
         self._marks_timer.stop()
         self.marks.hide()
         self._update_float("stop")
-        if self.cfg.show_bubble and self._box is not None and self._bubble_back:
-            self.bubble.come_back_here()   # back in its place as the glow fades out
+        # the bubble doesn't come back: it shows again at the next click into a text box (the user's request,
+        # 2026-10-20)
         # the end sound marks the microphone going off, nothing about the text (the user's choice, 2026-10-16: the
         # 文字輸入完成時 option was removed)
         self.muter.restore()

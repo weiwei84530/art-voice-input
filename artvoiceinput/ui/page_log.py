@@ -2,7 +2,7 @@
 it was off) is a node with its time and length; each event under it shows its time, a colored dot and tag for its kind,
 what changed on the screen (new text green, removed struck through red), a yellow ! when the 詞庫 may have shaped it
 and a copy button for a finished sentence. What was heard and why are the row's tooltip. Filters by kind."""
-from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QCursor, QPainter
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
@@ -115,11 +115,11 @@ class Entry(QWidget):
         body.setTextInteractionFlags(Qt.NoTextInteraction)
         h.addWidget(body, 1)
         if r.get("bank"):
-            bang = QLabel("!")
+            # the 詞庫 tile's book: good news (the user's settings at work), not a warning
+            bang = QLabel()
+            bang.setFixedSize(22, 22)
             bang.setAlignment(Qt.AlignCenter)
-            bang.setFixedSize(18, 18)
-            bang.setFont(theme.font(12, 700, num=True))
-            bang.setStyleSheet("background: #FFC23D; color: #3A2A00; border-radius: 9px;")
+            bang.setPixmap(icon("bank", T("acc"), 16, 1.9).pixmap(QSize(16, 16), 2.0))
             bang.setToolTip("\n".join(["詞庫可能影響了這句："] + r["bank"]))
             bang.setProperty("quick_tip", True)
             h.addWidget(bang, 0, Qt.AlignTop)

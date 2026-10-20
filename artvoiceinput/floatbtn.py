@@ -5,13 +5,13 @@ screen the pointer is on at that same place (the user has three screens).
 Both draw the look picked on the 外觀 tab (orbs.py: the microphone, or one of nine energy orbs in the glow's
 colors), animated only while shown.
 
-Motions (`OrbButton`, 2026-10-16, the user's design): one look at rest, no hover color. The pointer over it shrinks it
-a little, springing (the user's pick of smooth, bouncing and springy, compared on the 外觀 tab for a few hours). When listening starts it grows quickly
-and fades out as the glow fades in (`glow.FADE_MS`); when listening ends it shrinks back from that size and fades in
-as the glow fades out. With `float_keep` (錄音時隱藏按鈕 unticked) the floating button stays: a click makes it jump a little and
-come back, and while listening a click turns listening off. Its window has room around the button (`_ROOM`) for the
-orb's light and for growing; the room is transparent, so clicks there go through. The button's place is the middle
-of it.
+Motions (`OrbButton`, the user's design of 2026-10-16, turned around 2026-10-20): one look at rest, no hover color, the
+orb's loop played slowly (`orbs.IDLE_SPEED`). The pointer over it grows it a little, springing. When listening
+starts it grows quickly and fades out as the glow fades in (`glow.FADE_MS`); when listening ends it shrinks back
+from that size and fades in as the glow fades out. With `float_keep` (錄音時隱藏按鈕 unticked) the floating button
+stays: while listening it is smaller (`_ACTIVE`) and its loop plays faster (`orbs.ACTIVE_SPEED`), so it reads as
+recording, and a click turns listening off. Its window has room around the button (`_ROOM`) for the orb's light and
+for growing; the room is transparent, so clicks there go through. The button's place is the middle of it.
 With 未偵測到輸入區域時隱藏 unticked (`float_text_only`, the 一般 tab) the floating
 button shows wherever the focus is. 按鈕大小 (`button_scale`, 75-125%) scales both buttons.
 """
@@ -22,11 +22,12 @@ from PySide6.QtGui import QColor, QCursor, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
 from .glow import FADE_MS
-from .orbs import OrbPlayer
+from .orbs import ACTIVE_SPEED, IDLE_SPEED, OrbPlayer
 
 _SIZE = 44      # the floating button at 100%
 _ROOM = 2.2      # the window, times the button: the orb's light grown on a click still fits
-_HOVER = 0.88    # the size under the pointer
+_HOVER = 1.12    # the size under the pointer, times the size at rest
+_ACTIVE = 0.88   # the size while listening (kept on screen)
 _BURST = 1.5     # the size it grows to as it fades out
 _GWL_EXSTYLE, _WS_EX_NOACTIVATE, _WS_EX_TOPMOST = -20, 0x08000000, 0x8
 
@@ -70,7 +71,9 @@ class OrbButton(QWidget):
         self.k = 1.0
         self.alpha = 1.0
         self.leaving = False   # growing and fading out: hidden at the end
-        self._then = None      # the next scale after this one (a jump: up, then back)
+        self.active = False    # listening while shown: smaller, playing faster
+        self._over = False
+        self._then = None      # the next scale after this one
         self._grow = QVariantAnimation(self)
         self._grow.valueChanged.connect(self._set_k)
         self._grow.finished.connect(self._grown)
@@ -118,6 +121,20 @@ class OrbButton(QWidget):
         self._grow.setEasingCurve(curve)
         self._grow.start()
 
+    def _rest(self) -> float:
+        """The size it settles at: smaller while listening, grown under the pointer."""
+        return (_ACTIVE if self.active else 1.0) * (_HOVER if self._over else 1.0)
+
+    def set_active(self, on: bool):
+        """Listening (on) or not, while it stays on screen: it shrinks and plays faster, or comes back."""
+        if on == self.active:
+            return
+        self.active = on
+        self.orb.set_speed(ACTIVE_SPEED if on else IDLE_SPEED)
+        if self.isVisible() and not self.leaving:
+            curve, ms = _hover_curve()
+            self._scale_to(self._rest(), ms, curve)
+
     def _grown(self):
         if self._then:
             k, ms, curve = self._then
@@ -148,9 +165,9 @@ class OrbButton(QWidget):
             return
         self.leaving = False
         if not self.isVisible():
-            self.k, self.alpha = 1.0, 0.0
+            self.k, self.alpha = self._rest(), 0.0
             self._appear()
-        self._scale_to(1.0, ms, QEasingCurve(QEasingCurve.OutCubic))
+        self._scale_to(self._rest(), ms, QEasingCurve(QEasingCurve.OutCubic))
         self._fade_to(1.0, ms)
 
     def fade_out(self, ms: int = 160):
@@ -175,14 +192,8 @@ class OrbButton(QWidget):
         if not self.isVisible():
             self.k, self.alpha = _BURST, 0.0
             self._appear()
-        self._scale_to(1.0, FADE_MS, QEasingCurve(QEasingCurve.OutCubic))
+        self._scale_to(self._rest(), FADE_MS, QEasingCurve(QEasingCurve.OutCubic))
         self._fade_to(1.0, FADE_MS)
-
-    def jump(self):
-        """A click that does not hide it: up a little, quickly, and back with a bounce."""
-        back = QEasingCurve(QEasingCurve.OutBack)
-        back.setOvershoot(2.0)
-        self._scale_to(1.22, 110, QEasingCurve(QEasingCurve.OutCubic), then=(1.0, 320, back))
 
     # --- events
     def showEvent(self, e):
@@ -193,16 +204,19 @@ class OrbButton(QWidget):
         self._grow.stop()
         self._fade.stop()
         self.leaving = False
+        self._over = False
 
     def enterEvent(self, e):
+        self._over = True
         if not self.leaving:
             curve, ms = _hover_curve()
-            self._scale_to(_HOVER, ms, curve)
+            self._scale_to(self._rest(), ms, curve)
 
     def leaveEvent(self, e):
+        self._over = False
         if not self.leaving:
             curve, ms = _hover_curve()
-            self._scale_to(1.0, ms, curve)
+            self._scale_to(self._rest(), ms, curve)
 
     def paintEvent(self, e):
         p = QPainter(self)
@@ -292,12 +306,6 @@ class Bubble(_OnTop):
 
     def _resized(self):
         self._place()
-
-    def come_back_here(self):
-        """Listening ended: back in its place, shrinking from the grown size as the glow fades out."""
-        if self._at is not None:
-            self._place()
-            self.come_back()
 
 
 def _logical(x: int, y: int):

@@ -178,12 +178,13 @@ appmod.FloatButton.appear = lambda self: print("      [浮動按鈕 顯示]")   
 appmod.FloatButton.vanish = lambda self: print("      [浮動按鈕 隱藏]")
 appmod.FloatButton.burst = lambda self: print("      [浮動按鈕 放大淡出]")
 appmod.FloatButton.come_back = lambda self: print("      [浮動按鈕 縮回淡入]")
-appmod.FloatButton.jump = lambda self: print("      [浮動按鈕 彈一下]")
+_set_active = appmod.FloatButton.set_active
+appmod.FloatButton.set_active = lambda self, on: (
+    print(f"      [浮動按鈕 {'縮小加速' if on else '恢復'}]") if on != self.active else None, _set_active(self, on))
 appmod.Bubble.burst = lambda self: (print("      [語音氣泡 放大淡出]"), self.hide())
 appmod.focus_info = lambda: (None, None)   # the real focus is the user's: focus: steps say what it is
-_show_at, _come_back = appmod.Bubble.show_at, appmod.Bubble.come_back_here
+_show_at = appmod.Bubble.show_at
 appmod.Bubble.show_at = lambda self, pt: (print(f"      [語音氣泡 在 {pt}]"), _show_at(self, pt))
-appmod.Bubble.come_back_here = lambda self: (print("      [語音氣泡 縮回淡入]"), _come_back(self))
 A = appmod.App(qapp)
 A.tray.hide()
 A.tray.showMessage = lambda title, text, *a: print(f"      [通知] {title}: {text}")
@@ -376,6 +377,8 @@ try:
             continue
         if step.startswith("set:"):
             name, value = step[4:].split("=")
+            if isinstance(getattr(A.cfg, name), bool) and value.lower() in ("true", "false"):
+                value = str(int(value.lower() == "true"))   # bool("False") is True
             setattr(A.cfg, name, type(getattr(A.cfg, name))(int(value) if value.isdigit() else value))
             print(f"[設定 {name} = {getattr(A.cfg, name)!r}]（只改記憶體，不存檔）")
             continue

@@ -7,8 +7,8 @@ import time
 
 from PySide6.QtCore import QEasingCurve, QPointF, QRect, QRectF, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QFontMetricsF, QPainter, QPainterPath, QPainterPathStroker, QPen, QTransform
-from PySide6.QtWidgets import (QAbstractButton, QGraphicsDropShadowEffect, QGraphicsOpacityEffect, QLabel,
-                               QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QAbstractButton, QApplication, QGraphicsDropShadowEffect, QGraphicsOpacityEffect,
+                               QLabel, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
 from .. import __version__
 from . import theme
@@ -56,10 +56,10 @@ def lerp(a, b, k):
 
 class Brand(QWidget):
     """The orange block: a large faint logo bleeding off the bottom right, the status, the logo, the name and the
-    version. `fade` 0..1 hides the text and logo (sliding left) as the block shrinks. The logo, name and version
+    version. `fade` 0..1 hides the text and logo (sliding left) as the block shrinks. The logo and the names
     carry the same solid shadow (three dark red silhouettes, a little larger each, shifted down: from design H5, the
-    user's pick 2026-10-20; the lines below the version and the status line have none); the status dot pulses (a ring
-    of light spreading out) while ready."""
+    user's pick 2026-10-20; the version, the lines below it and the status line have none); the status dot pulses (a
+    ring of light spreading out) while ready."""
     PULSE_S = 1.8                  # one ring
     SHADOW = QColor("#780A00")
 
@@ -153,7 +153,7 @@ class Brand(QWidget):
         p.setOpacity(a)
         p.setFont(theme.font(56, 700, num=True))
         vw = p.fontMetrics().horizontalAdvance(__version__)
-        self._text(p, QRectF(x, 496, 300, 64), Qt.AlignLeft | Qt.AlignBottom, __version__, 5, 2)
+        self._text(p, QRectF(x, 496, 300, 64), Qt.AlignLeft | Qt.AlignBottom, __version__)
         p.setFont(theme.font(13))
         p.setOpacity(a * 0.9)
         self._text(p, QRectF(x + vw + 10, 496, 100, 58), Qt.AlignLeft | Qt.AlignBottom, "版本")
@@ -409,6 +409,9 @@ class Shell(QWidget):
         self.setWindowTitle("阿特語音輸入法 設定")
         self.setAttribute(Qt.WA_StyledBackground)
         self.setFont(theme.font(13))
+        # a style sheet rule with a font-size gives its widget the application's font (Segoe UI, Chinese from
+        # 正黑體, grainy next to Noto Sans TC): the application's font is ours too
+        QApplication.setFont(theme.font(13))
         self.setFocusPolicy(Qt.ClickFocus)
         self.pages = {}            # key -> PageFrame
         self.tiles = {}

@@ -87,7 +87,7 @@ def qss(t: dict) -> str:
 * {{ color: {t['ink']}; }}
 QWidget#page, QWidget#scrollBody, QScrollArea, QScrollArea > QWidget > QWidget {{ background: transparent; }}
 QLabel {{ background: transparent; }}
-QLabel[dim="true"] {{ color: {t['muted']}; font-size: 12.5px; }}
+QLabel[dim="true"] {{ color: {t['muted']}; font-size: 12px; }}
 QLabel[h2="true"] {{ font-size: 24px; font-weight: 700; }}
 QLabel[h3="true"] {{ font-size: 15px; font-weight: 700; }}
 QLabel[sh="true"] {{ font-size: 13px; font-weight: 700; color: {t['muted']}; }}
@@ -129,7 +129,7 @@ QComboBox::drop-down {{ border: none; width: 24px; }}
 QComboBox::down-arrow {{ image: url({_DOWN}); width: 12px; height: 12px; }}
 QComboBox QAbstractItemView {{ background: {t['tile']}; border: 1px solid {t['line']}; outline: none;
             selection-background-color: {t['accbg']}; selection-color: {t['ink']}; padding: 4px; }}
-QCheckBox {{ font-size: 13px; spacing: 8px; background: transparent; }}
+QCheckBox {{ font-size: 14px; font-weight: 500; spacing: 8px; background: transparent; }}
 QCheckBox:disabled {{ color: {t['muted']}; }}
 QCheckBox::indicator {{ width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid {t['muted']};
             background: transparent; }}

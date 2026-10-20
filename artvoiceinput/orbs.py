@@ -24,6 +24,7 @@ from PySide6.QtGui import (QColor, QConicalGradient, QImage, QLinearGradient, QP
 
 FPS = 15        # 節流模式
 FINE_FPS = 30
+IDLE_SPEED, ACTIVE_SPEED = 0.6, 1.6   # times each look's loop: at rest, and while listening (the user's choice)
 SCALE = 1.4     # canvas / the microphone button's size
 LOOKS = {"mic": "麥克風（原始）", "flow": "流光", "breath": "呼吸光核", "halo": "光環", "plasma": "電漿",
          "tokamak": "約束場", "corona": "日冕", "iris": "虹膜", "liquid": "液態金屬", "nebula": "星雲",
@@ -431,9 +432,11 @@ class OrbPlayer:
         self.colors = ["#3d7bff", "#a259ff", "#ff4fa3", "#ff9f43", "#29d3ff"]
         self.lite = False
         self.hover = False
+        self.speed = IDLE_SPEED
         self._frames: list = []
         self._key = None
         self._t0 = time.monotonic()
+        self._p0 = 0.0          # the phase at _t0 (kept when the speed changes, so the loop doesn't jump)
         self._timer = QTimer(widget, interval=1000 // FINE_FPS, timeout=widget.update)
 
     def set_look(self, look: str, colors: list, lite: bool = False):
@@ -459,8 +462,15 @@ class OrbPlayer:
     def stop(self):
         self._timer.stop()
 
-    def _phase(self) -> float:
-        return ((time.monotonic() - self._t0) / _LOOPS[self.look]) % 1.0
+    def set_speed(self, speed: float):
+        now = time.monotonic()
+        self._p0 = self._phase(now)
+        self._t0 = now
+        self.speed = speed
+
+    def _phase(self, now: float | None = None) -> float:
+        t = (now if now is not None else time.monotonic()) - self._t0
+        return (self._p0 + t * self.speed / _LOOPS.get(self.look, 1.0)) % 1.0
 
     def paint(self, p: QPainter) -> bool:
         """Draw the current frame; False for the microphone look (the widget draws its own)."""

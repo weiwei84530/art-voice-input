@@ -99,11 +99,13 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
   floating button, bubble and 選字 menu (never in front) and unknown controls change nothing.
 - **Bubble** (`show_bubble`, default): fades in just right of a left click (not a drag) that put the focus in a text
   box (focus read 120ms after the click); goes on typing / wheel (at once) or focus leaving (fade). Keyboard focus
-  shows nothing. Placed at the click because UIA caret positions are wrong in Notion, LINE, web pages.
+  shows nothing. Listening started from it or anywhere else bursts it away; it doesn't come back when listening ends,
+  only at the next click into a text box (2026-10-20). Placed at the click because UIA caret positions are wrong in Notion, LINE, web pages.
 - **Floating button** (`show_float`; 未偵測到輸入區域時隱藏 `float_text_only` and 錄音時隱藏按鈕
   = not `float_keep`, both unticked by default; `float_pos`): never takes focus, draggable; fades in (180ms) and out
   (160ms) as the focus comes and goes.
-  Starting to listen grows it to 1.5 and fades it out in `glow.FADE_MS`; ending reverses it.
+  Starting to listen grows it to 1.5 and fades it out in `glow.FADE_MS`; ending reverses it. Kept on screen
+  (`float_keep`) it shrinks to 0.88 while listening and its orb plays faster (2026-10-20).
 - **Pieces**: the microphone opens unseen; silero VAD ends a piece at 0.3s silence (0.5s lead-in, 0.25s tail kept).
   Sample numbers continue across sessions (a reset made queued jobs read the new session's audio: text typed twice);
   the new session's state is reset by a worker job queued after the old ones. Audio is kept as chunks and trimmed
@@ -197,7 +199,7 @@ sentence end → 嗎 questions → trailing punctuation.
 - **選字 menu** (`picker.py`): opens by itself while listening (`App._auto_pick`) after a mouse drag or double click
   that selects ≤4 Chinese characters or ≤3 English words (read 80ms after release). Tabs by closeness of sound
   (pointer over a tab opens it), design G2 made compact (the user's pick, not G3): a plain list with the tabs in a
-  rail on the right (name over count), light or dark with `config.theme`; grid 4x4 (one character) or 2x5, only as
+  rail on the right (name over count), light or dark with `config.theme`; grid 3x5 (one character, about the words' size) or 2x5, only as
   many columns as the fullest tab needs; the word there now leads the first tab, bold with an orange mark (a click
   on it keeps it; counts leave it out); no timeout, any click or key closes it. Chinese (`candidates.ranked`): 同音, 不同聲調, 模糊音 (`candidates._FUZZY`: zh/z,
   sh/s, an/ang, en/eng, r/l, ㄩㄣ/ㄧㄣ, ㄈ/ㄏㄨ, ㄋ/ㄌ …; fuzzy-only words from frequency 3, `app._FUZZY_MIN`; 詞庫
@@ -246,8 +248,8 @@ on.
 Settings window (`ui/`, the 2026-10 redesign; mockups on the claude.ai Design canvas
 https://claude.ai/artifact/8UWdBateenAsqfZKeHPeiG, style C): frameless 960x640, Windows 11 rounded corners. Home:
 the orange brand block (status with a pulsing dot while ready, logo, 阿特語音輸入法, version from
-`artvoiceinput.__version__`; logo, name and version carry the logo's solid shadow, from design H5; the status line
-and the lines below the version have none) and six tiles, each icon
+`artvoiceinput.__version__`; logo and names carry the logo's solid shadow, from design H5; the version, the status line
+and the lines below have none) and six tiles, each icon
 bled large into the tile's bottom right (tilted 5°; hover lifts it up-right, turning clockwise). A tile opens its page
 (transition Fly): the block shrinks to a 56px strip that goes home, the icon flies to the page title. Pages: 麥克風
 (hotkey card, 點進輸入框時 radio, floating button + its two options; auto-off chips, stop_on_enter, device with 測試麥克風 (`audio.LevelProbe`, its own stream; meter design I1:
@@ -261,6 +263,9 @@ order), 辨識紀錄 (design 1: timeline, filters 全部 / 文字 / 指令 / 選
 about). `config.theme` drives the settings window and the 選字 menu;
 the floating button, bubble and glow are colored and not themed. `dev/settings_preview.py [page] [--dark]
 [shot.png]` shows the window on a temp copy of the user's data.
+- One typeface, Noto Sans TC (Bahnschrift for numbers): the window sets the application's font, since a style
+  sheet font-size gave a widget Segoe UI / 正黑體 (grainy, the user's report 2026-10-20). Gray lines 12px, checkboxes
+  14px medium like the radio rows' names.
 - Each setting's help is an ⓘ after its name (`ui.kit.Info`), not tooltips. Where an ⓘ doesn't fit (icon buttons,
   swatches, phrase chips, dates, the 回首頁 strip) a hint shows after the pointer rests 1s (`kit.TipRouter`);
   辨識紀錄's row tips come at Qt's usual time (`quick_tip`). All are `kit.Tip` (120ms fade), never Qt's tooltip.
@@ -268,8 +273,8 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   replaces settings except `userdata.LOCAL` (mic, autostart, float place) and merges the 詞庫 (file wins); 還原預設
   resets everything including the 詞庫.
 - 辨識紀錄 (`logbook.py`, `set_log`): one row per event, grouped per listening session, newest first, heard vs the
-  screen's change as a diff, details in the tooltip; copy icon on rows that settled text; yellow ! when the 詞庫 may
-  have shaped the text (`logbook.bank_of`).
+  screen's change as a diff, details in the tooltip; copy icon on rows that settled text; an orange book (the 詞庫 tile's) when the 詞庫
+  may have shaped the text (`logbook.bank_of`; good news, not a warning). Text fixed as typed is 定稿.
 - 詞庫 tab: four collapsible sections, one open (`hotword_section`): 詞包, 詞庫列表, 選字記憶 (shown as
   這個ying3片是 → 這個影片是), 英文強制替換; each with its own remembered 排序.
 - Glow (`glow.py`, off by default): styles with editable parameters (`glow_edits`, 已編輯 + 恢復預設), up to 6 colors,
@@ -277,7 +282,8 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   moving motions at 48 fps unless 節流模式 (柔光 24). 流星's position is summed per frame (`EdgeGlow._lap`).
 - 按鈕樣式 (`orbs.py`, `button_look`): mic + ten orb looks in the glow's colors (蝕光 the latest), drawn on a canvas
   1.4x the mic (`orbs.SCALE`), frames cached per loop phase, only while shown; 30 fps (15 with 節流模式). Hover
-  shrinks to 0.88 with a spring. 光環 / 虹膜 middles take clicks (alpha 1/255 disc: fully clear pixels pass clicks).
+  grows to 1.12 with a spring; orbs play at 0.6x their loop at rest, 1.6x while listening (`orbs.IDLE_SPEED` /
+  `ACTIVE_SPEED`, 2026-10-20). 光環 / 虹膜 middles take clicks (alpha 1/255 disc: fully clear pixels pass clicks).
 - Sounds (`cues.py`, `artvoiceinput/cues/*.wav`, built by `dev/build_cues.py`): 12 sets, 無, 自定義; Blip default; the
   start sound's length is silenced for the VAD. Played from the wav file (winsound can't play memory async).
 - ▶ 預覽 / ▶ 試聽 read 播放中… and are disabled while playing.
