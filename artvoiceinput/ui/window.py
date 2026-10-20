@@ -97,7 +97,8 @@ class SettingsWindow(Shell):
         self.mic_page.hotkey_captured(spec)
 
     def showEvent(self, e):
-        self.show_home_now()
+        if not e.spontaneous():   # opened again, not restored from the taskbar (that keeps the page)
+            self.show_home_now()
         super().showEvent(e)
 
     def hideEvent(self, e):

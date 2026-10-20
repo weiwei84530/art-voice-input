@@ -518,14 +518,15 @@ class Shell(QWidget):
         self.setFocus(Qt.OtherFocusReason)
 
     def show_home_now(self):
-        """Home at once (the window opened again)."""
-        if self.current is None:
+        """Home at once (the window opened again), also from the middle of a transition. Not through _frame: the
+        opacity effects it sets were deleted by the last transition's end (it raised there and left the window half
+        way, the brand block wide over the page, 2026-10-21)."""
+        if self.current is None and self._anim.state() != QVariantAnimation.Running:
             return
-        self.tiles[self.current].hide_icon = False
         self.current = None
         self._anim.stop()
         self._dir = -1
-        self._frame(1.0)
+        self.home.show()
         self._done()
 
     def _run(self, direction: int):

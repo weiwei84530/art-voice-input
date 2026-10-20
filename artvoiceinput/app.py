@@ -2057,6 +2057,8 @@ def main():
         handlers=[logging.FileHandler(paths.LOG_PATH, encoding="utf-8"),
                   logging.StreamHandler()],
     )
+    # an exception in a Qt event handler or slot is only printed, and pythonw prints nowhere: logged instead
+    sys.excepthook = lambda kind, value, tb: log.error("uncaught", exc_info=(kind, value, tb))
     packs.install()
     config.DEBUG = "--debug" in sys.argv[1:]
     log.info("launched%s", " in debug mode" if config.DEBUG else "")
