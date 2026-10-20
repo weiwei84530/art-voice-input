@@ -5,7 +5,7 @@ and 說「詞的字」, each with a switch. A phrase said for two things is mark
 from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (QAbstractButton, QComboBox, QGraphicsOpacityEffect, QGridLayout, QHBoxLayout, QLineEdit,
-                               QVBoxLayout, QWidget)
+                               QSizePolicy, QVBoxLayout, QWidget)
 
 from .. import rules
 from ..edit import SYMBOLS
@@ -274,6 +274,15 @@ class Act(QWidget):
         p.drawText(QRectF(self.rect()).adjusted(0, 0, 0, -1 if self.kind == "key" else 0), Qt.AlignCenter, self.text)
 
 
+def _note(text: str):
+    """What a rule does, after its controls: wraps onto a second line rather than pushing the row past the window
+    (左右包住's note did, 2026-10-21)."""
+    n = dim(text, wrap=True)
+    n.setMinimumWidth(60)
+    n.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+    return n
+
+
 class KeyField(QLineEdit):
     """Click, then press a key combination: shown as text (Ctrl+Shift+Z). Waiting for the keys (focused) it is tinted
     and says so; otherwise it looks like any field, empty or not."""
@@ -341,10 +350,11 @@ class RuleRow(QWidget):
                 th.addWidget(v)
             th.addWidget(Act(kind, what))
             if note:
-                th.addWidget(dim(note))
+                th.addWidget(_note(note), 1)
         else:
             self._custom(th)
-        th.addStretch(1)
+        if not any(th.stretch(i) for i in range(th.count())):   # a note takes the room left itself
+            th.addStretch(1)
         h.addWidget(then, 1)
         if not row["builtin"]:
             x = button("", self.removed.emit, ib=True)
@@ -400,7 +410,7 @@ class RuleRow(QWidget):
                     bar = label("｜")
                     bar.setStyleSheet(f"color: {T('muted').name()};")
                     th.addWidget(bar)
-            th.addWidget(dim("游標停在中間；有選取時包住選取的字"))
+            th.addWidget(_note("游標停在中間；有選取時包住選取的字"), 1)
 
     def _phrases(self, phrases):
         self.row["phrases"] = list(phrases)
