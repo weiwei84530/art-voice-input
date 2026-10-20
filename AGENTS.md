@@ -245,10 +245,12 @@ on.
 Settings window (`ui/`, the 2026-10 redesign; mockups on the claude.ai Design canvas
 https://claude.ai/artifact/8UWdBateenAsqfZKeHPeiG, style C): frameless 960x640, Windows 11 rounded corners. Home:
 the orange brand block (status with a pulsing dot while ready, logo, 阿特語音輸入法, version from
-`artvoiceinput.__version__`; all but the status line carry the logo's solid shadow, design H5) and six tiles, each icon
+`artvoiceinput.__version__`; logo, name and version carry the logo's solid shadow, from design H5; the status line
+and the lines below the version have none) and six tiles, each icon
 bled large into the tile's bottom right (tilted 5°; hover lifts it up-right, turning clockwise). A tile opens its page
 (transition Fly): the block shrinks to a 56px strip that goes home, the icon flies to the page title. Pages: 麥克風
-(hotkey card, 點進輸入框時 radio, floating button + its two options; auto-off chips, stop_on_enter, device, mute), 外觀與聲音
+(hotkey card, 點進輸入框時 radio, floating button + its two options; auto-off chips, stop_on_enter, device with 測試麥克風 (`audio.LevelProbe`, its own stream; meter design I1:
+24 segments, the last six warmer, a falling peak tick; stops when the page hides), mute), 外觀與聲音
 (live preview, button looks, glow tiles + motions, 自訂 fold for colors / sliders / edges, mark color, 節流模式,
 sounds), 語音指令 (design C4: "當我說 [chips] 就 [what]" grouped with an orange bar per group, phrase chips edited in
 place, 自訂 rows choose 按下按鍵 / 打出文字 / 左右包住, 新增一句; a phrase said for two things, punctuation names

@@ -56,10 +56,10 @@ def lerp(a, b, k):
 
 class Brand(QWidget):
     """The orange block: a large faint logo bleeding off the bottom right, the status, the logo, the name and the
-    version. `fade` 0..1 hides the text and logo (sliding left) as the block shrinks. The logo, name, version and
-    small lines carry the same solid shadow (three dark red silhouettes, a little larger each, shifted down: design
-    H5, the user's pick 2026-10-20); the status line has none, its dot pulses (a ring of light spreading out) while
-    ready."""
+    version. `fade` 0..1 hides the text and logo (sliding left) as the block shrinks. The logo, name and version
+    carry the same solid shadow (three dark red silhouettes, a little larger each, shifted down: from design H5, the
+    user's pick 2026-10-20; the lines below the version and the status line have none); the status dot pulses (a ring
+    of light spreading out) while ready."""
     PULSE_S = 1.8                  # one ring
     SHADOW = QColor("#780A00")
 
@@ -73,6 +73,9 @@ class Brand(QWidget):
         self._pulse = QTimer(self, interval=33)
         self._pulse.timeout.connect(self._tick)
         self._t0 = time.monotonic()
+        # the dot at the middle of the status text's ink (Chinese sits below the line box's middle: 28)
+        fm = QFontMetricsF(theme.font(12.5, 500))
+        self._dot_y = 28 + (fm.ascent() - fm.descent()) / 2 + fm.tightBoundingRect("就緒").center().y()
 
     def showEvent(self, e):
         self._pulse.start()
@@ -82,7 +85,7 @@ class Brand(QWidget):
 
     def _tick(self):
         if self.fade < 1 and self.status == "就緒" and self.window().isVisible():
-            self.update(QRect(34 + 3 - 14, 28 - 14, 28, 28))   # only the dot
+            self.update(QRect(34 + 3 - 14, round(self._dot_y) - 14, 28, 28))   # only the dot
 
     def _text(self, p, rect: QRectF, align, text: str, shift: float = 0, grow: float = 0):
         """Text, over its solid shadow when shift is given."""
@@ -127,7 +130,7 @@ class Brand(QWidget):
         p.translate(-40 * SWIFT(self.fade), 0)
         x = 34
         white = QColor("#FFFFFF")
-        dot = QPointF(x + 3.5, 28)
+        dot = QPointF(x + 3.5, self._dot_y)
         p.setPen(Qt.NoPen)
         if self.status == "就緒":
             k = ((time.monotonic() - self._t0) / self.PULSE_S) % 1.0
@@ -146,14 +149,14 @@ class Brand(QWidget):
         # bottom-up: footnote, version, English name, name, logo
         p.setFont(theme.font(13))
         p.setOpacity(a * 0.92)
-        self._text(p, QRectF(x, 572, 330, 20), Qt.AlignLeft | Qt.AlignVCenter, "語音在這台電腦上辨識，不會上傳", 2, 1)
+        self._text(p, QRectF(x, 572, 330, 20), Qt.AlignLeft | Qt.AlignVCenter, "語音在這台電腦上辨識，不會上傳")
         p.setOpacity(a)
         p.setFont(theme.font(56, 700, num=True))
         vw = p.fontMetrics().horizontalAdvance(__version__)
         self._text(p, QRectF(x, 496, 300, 64), Qt.AlignLeft | Qt.AlignBottom, __version__, 5, 2)
         p.setFont(theme.font(13))
         p.setOpacity(a * 0.9)
-        self._text(p, QRectF(x + vw + 10, 496, 100, 58), Qt.AlignLeft | Qt.AlignBottom, "版本", 2, 1)
+        self._text(p, QRectF(x + vw + 10, 496, 100, 58), Qt.AlignLeft | Qt.AlignBottom, "版本")
         p.setOpacity(a)
         p.setFont(theme.font(22, 600, num=True))
         self._text(p, QRectF(x, 438, 330, 30), Qt.AlignLeft | Qt.AlignVCenter, "Art VoiceInput", 3, 1.5)

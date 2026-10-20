@@ -1,6 +1,6 @@
 """麥克風: the ways to turn listening on (hotkey, clicking into a text box, the floating button), when it turns off,
 and the device."""
-from PySide6.QtCore import QRectF, Qt, Signal
+from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QBrush, QColor, QConicalGradient, QIntValidator, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import (QAbstractButton, QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
                                QLineEdit, QVBoxLayout, QWidget)
@@ -15,6 +15,63 @@ NEARS = [("", "不使用", "點進輸入框時什麼都不做"),
          ("listen", "自動開麥克風", "點進輸入框時直接開麥克風")]
 OFFS = [(0, "不自動關閉")] + [(m, f"{m} 分鐘") for m in (1, 3, 5, 10, 30)]
 CUSTOM_MINUTES = (1, 240, 15)   # the 自訂 chip: lowest, highest, first offered
+TEST_IDLE = "按「測試麥克風」後說幾句話，看看音量有沒有跟著動"
+TEST_LISTENING = "正在聽，說幾句話試試看"
+TEST_HEARD_TEXT = "聽得到你的聲音，燈格跟著說話亮起來就沒問題"
+TEST_HEARD = 0.45   # a level this high (about -33 dBFS) counts as having heard speech
+
+
+class LevelMeter(QWidget):
+    """測試麥克風's meter, design I1 (2026-10-20, the user's pick): 24 segments lit from the left, the last six warmer
+    (too loud), a tick at the recent peak that falls back slowly."""
+    SEGMENTS = 24
+
+    def __init__(self):
+        super().__init__()
+        self.setFixedHeight(18)
+        self.level = 0.0          # 0..1, eased
+        self.peak = 0.0
+        self.on = False
+        self.setAccessibleName("麥克風音量")
+
+    def set(self, level: float, on: bool = True):
+        self.on = on
+        # quick to rise, slower to fall, like a VU meter
+        self.level = level if level > self.level else self.level * 0.82 + level * 0.18
+        self.peak = max(self.level, self.peak - 0.012)
+        self.update()
+
+    def reset(self):
+        self.level = self.peak = 0.0
+        self.on = False
+        self.update()
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        p.setPen(QPen(T("line"), 1))
+        p.setBrush(T("tile2"))
+        p.drawRoundedRect(r, 4, 4)
+        inner = r.adjusted(3, 3, -3, -3)
+        gap = 3
+        n = self.SEGMENTS
+        w = (inner.width() - gap * (n - 1)) / n
+        lit = round(self.level * n)
+        p.setPen(Qt.NoPen)
+        for i in range(n):
+            seg = QRectF(inner.x() + i * (w + gap), inner.y(), w, inner.height())
+            if self.on and i < lit:
+                p.setBrush(QColor("#E0182D" if i >= n - 2 else "#FF8A3D" if i >= n - 6 else theme.ACCENT))
+            else:
+                p.setBrush(T("line"))
+            p.drawRoundedRect(seg, 2, 2)
+        if self.on and self.peak > 0.02:
+            x = inner.x() + min(self.peak, 1.0) * inner.width()
+            c = T("ink")
+            c.setAlphaF(0.55)
+            p.setBrush(c)
+            p.drawRoundedRect(QRectF(min(x, inner.right() - 3), inner.y(), 3, inner.height()), 1.5, 1.5)
 
 
 class MinutesChip(QFrame):
@@ -25,7 +82,7 @@ class MinutesChip(QFrame):
     def __init__(self):
         super().__init__(objectName="minchip")
         self.setAttribute(Qt.WA_StyledBackground)
-        self.setFixedHeight(28)
+        self.setFixedHeight(30)   # as high as the other chips (28 cut the 自訂 chip's bottom edge)
         h = QHBoxLayout(self)
         h.setContentsMargins(0, 0, 0, 0)
         h.setSpacing(4)
@@ -42,7 +99,7 @@ class MinutesChip(QFrame):
         h.addWidget(self.chip)
         h.addWidget(self.box)
         h.addWidget(self.unit)
-        self.setStyleSheet("QFrame#minchip[on=\"true\"] { background: %s; border-radius: 14px; }"
+        self.setStyleSheet("QFrame#minchip[on=\"true\"] { background: %s; border-radius: 15px; }"
                            " QLineEdit#minutes { background: rgba(255,255,255,56); color: #FFFFFF; border: none;"
                            " border-radius: 4px; padding: 0; min-height: 0; selection-background-color: #FFFFFF;"
                            " selection-color: %s; } QLabel { color: #FFFFFF; background: transparent; }"
@@ -323,7 +380,18 @@ class MicPage(QWidget):
         for name in audio.list_input_devices():
             self.mic.addItem(name, name)
         self.mic.currentIndexChanged.connect(self._mic)
-        c.addWidget(self.mic)
+        self.test_button = button("測試麥克風", self._test)
+        dev_row = hbox(self.mic, self.test_button, spacing=8)
+        dev_row.setStretch(0, 1)
+        c.addLayout(dev_row)
+        self.meter = LevelMeter()
+        c.addWidget(self.meter)
+        self.test_hint = dim(TEST_IDLE, wrap=True)
+        c.addWidget(self.test_hint)
+        self.probe = audio.LevelProbe()
+        self._heard = False
+        self._test_timer = QTimer(self, interval=33)
+        self._test_timer.timeout.connect(self._test_tick)
         c.addWidget(sep())
         self.mute_switch = Switch(name="錄音時靜音電腦音效")
         self.mute_switch.toggled.connect(self._mute)
@@ -474,3 +542,51 @@ class MicPage(QWidget):
     def _mic(self):
         self.cfg.mic = self.mic.currentData()
         self.win.save()
+        if self.probe.running:   # the test goes on with the newly picked microphone
+            self._test_start()
+
+    # --- 測試麥克風 ---
+    def _test(self):
+        if self.probe.running:
+            self._test_stop()
+        else:
+            self._test_start()
+
+    def _test_start(self):
+        try:
+            self.probe.start(self.cfg.mic)
+        except Exception as e:
+            self.probe.stop()
+            self._test_show(False)
+            self.test_hint.setText(f"打不開這支麥克風：{e}")
+            prop(self.test_hint, dim=False, warn=True)
+            return
+        self._heard = False
+        self._test_show(True)
+        self._test_timer.start()
+
+    def _test_stop(self):
+        self._test_timer.stop()
+        self.probe.stop()
+        self._test_show(False)
+
+    def _test_show(self, on: bool):
+        self.test_button.setText("停止測試" if on else "測試麥克風")
+        prop(self.test_button, testing=on)
+        prop(self.test_hint, dim=True, warn=False)
+        self.test_hint.setText(TEST_LISTENING if on else TEST_IDLE)
+        if not on:
+            self.meter.reset()
+
+    def _test_tick(self):
+        level = self.probe.read()
+        self.meter.set(level)
+        if not self._heard and level > TEST_HEARD:
+            self._heard = True
+            self.test_hint.setText(TEST_HEARD_TEXT)
+
+    def hideEvent(self, e):
+        """Leaving the page (or the window closing) ends the test: the microphone isn't kept open unseen."""
+        if self.probe.running:
+            self._test_stop()
+        super().hideEvent(e)
