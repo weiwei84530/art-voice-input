@@ -279,10 +279,19 @@ class Act(QWidget):
 def _hold(w: QWidget):
     """Rebuilt out of sight: the whole window waits a moment, the scroll area too (the page alone was not enough:
     the table shrank for a moment and the view jumped)."""
+    if not w.isVisible():   # nothing to hide (a theme change restyles this page unseen)
+        return
     top = w.window()
     if top.updatesEnabled():
         top.setUpdatesEnabled(False)
-        QTimer.singleShot(40, lambda: top.setUpdatesEnabled(True))
+        QTimer.singleShot(40, lambda: _release(top))
+
+
+def _release(top: QWidget):
+    # re-enabled, the window was not always painted again: a theme picked on 系統 showed only after going home
+    # (2026-10-21)
+    top.setUpdatesEnabled(True)
+    top.update()
 
 
 def _note(text: str):

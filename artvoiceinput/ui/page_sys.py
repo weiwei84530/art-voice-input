@@ -3,19 +3,39 @@ import os
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QPainter, QPen
-from PySide6.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QMessageBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (QFileDialog, QGraphicsOpacityEffect, QGridLayout, QHBoxLayout, QLabel, QMessageBox,
+                               QVBoxLayout, QWidget)
 
 from .. import __version__, paths, userdata
 from . import theme
-from .kit import (Choice, Info, Switch, T, button, card, dim, draw_icon, hbox, icon, label, sep, set_calm, titled,
+from .kit import (Choice, Info, Switch, T, button, calm, card, dim, draw_icon, hbox, icon, label, sep, set_calm, titled,
                   vbox)
 
 
 def _state(on: bool, text: str) -> str:
     """A switch's note, led by the state it describes (開： / 關：, 2026-10-21, the user's request)."""
     return f"<b>{'開' if on else '關'}：</b>{text}"
+
+
+def _crossfade(win: QWidget):
+    """The window as it looks now laid over it and faded out (220ms) while the new colors come in under it; not
+    with 節流模式."""
+    if calm() or not win.isVisible():
+        return
+    cover = QLabel(win)
+    cover.setPixmap(win.grab())
+    cover.setGeometry(win.rect())
+    cover.setAttribute(Qt.WA_TransparentForMouseEvents)
+    fx = QGraphicsOpacityEffect(cover, opacity=1.0)
+    cover.setGraphicsEffect(fx)
+    cover.show()
+    cover.raise_()
+    anim = QPropertyAnimation(fx, b"opacity", cover, duration=220, startValue=1.0, endValue=0.0,
+                              easingCurve=QEasingCurve.InOutQuad)
+    anim.finished.connect(cover.deleteLater)
+    anim.start()
 
 
 class Drop(QWidget):
@@ -155,6 +175,7 @@ class SysPage(QWidget):
                 val.setAlignment(Qt.AlignLeft | Qt.AlignTop)
             about.addWidget(dim(k), 0, col, Qt.AlignLeft | Qt.AlignBottom)
             about.addWidget(val, 1, col, Qt.AlignLeft | Qt.AlignVCenter)
+        folder.setFont(theme.font(13.5, 600, num=True))   # the long path a little smaller (2026-10-21)
         about.setColumnStretch(3, 1)
         row("關於", "阿特語音輸入法 Art VoiceInput", about, last=True)
         v.addWidget(frm)
@@ -189,6 +210,7 @@ class SysPage(QWidget):
     def _mode(self, mode: str):
         self.cfg.theme = mode
         self.win.save()
+        _crossfade(self.window())   # before the new colors: the old look fades away over them
         self.win.theme.set_mode(mode)
         self._mode_note()
 

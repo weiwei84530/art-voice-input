@@ -279,7 +279,9 @@ place, 自訂 rows choose 按下按鍵 / 打出文字 / 左右包住, 新增一�
 included, is marked; 說標點的名字 and 說「詞的字」 cards below), 詞庫 (design 1: segmented tabs with counts, search,
 order), 辨識紀錄 (design 1: timeline, filters 全部 / 文字 / 指令 / 選字與復原, 清除紀錄 → `App._clear_log`), 系統
 (design 3: 外觀模式 亮色 / 暗色 / 跟隨系統 with sun / moon / computer icons, autostart, 節流模式, settings file
-drop zone, about; switch notes start with 開： / 關：, about's values one size). 節流模式 (`orb_lite`) also calms this window (`kit.calm`): pages switch at once, no hover,
+drop zone, about; switch notes start with 開： / 關：, about's values one size, the folder path a little smaller;
+a mode picked cross-fades the window from a snapshot in 220ms, not with 節流模式). Segmented controls' picked card
+slides (`kit._SegPill`). 節流模式 (`orb_lite`) also calms this window (`kit.calm`): pages switch at once, no hover,
 switch or slide animations, the ready dot and state pills hold still, the preview's glow stands still. `config.theme` drives the settings window and the 選字 menu;
 the floating button, bubble and glow are colored and not themed. `dev/settings_preview.py [page] [--dark]
 [shot.png]` shows the window on a temp copy of the user's data.

@@ -115,8 +115,7 @@ QPushButton[chip="true"][small="true"] {{ min-height: 24px; max-height: 24px; bo
               font-size: 12.5px; }}
 QPushButton[seg="true"] {{ background: transparent; border: none; border-radius: 5px; color: {t['muted']};
               min-height: 30px; padding: 0 12px; }}
-QPushButton[seg="true"]:checked {{ background: {t['tile']}; color: {t['ink']}; font-weight: 700;
-              border: 1px solid {t['line']}; }}
+QPushButton[seg="true"]:checked {{ color: {t['ink']}; font-weight: 700; }}
 QPushButton[seg="true"][big="true"] {{ min-height: 36px; padding: 0 16px; font-size: 13.5px; }}
 QFrame#segbox {{ background: {t['tile2']}; border: 1px solid {t['line']}; border-radius: 7px; }}
 QPushButton[ib="true"] {{ background: transparent; border: none; min-width: 28px; max-width: 28px; min-height: 28px;
