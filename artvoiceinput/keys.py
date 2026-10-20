@@ -93,6 +93,10 @@ NAMES = {"Enter": 0x0D, "Tab": 0x09, "Esc": 0x1B, "Space": 0x20, "Backspace": 0x
 NAMES.update({chr(c): c for c in range(ord("A"), ord("Z") + 1)})
 NAMES.update({str(d): 0x30 + d for d in range(10)})
 NAMES.update({f"F{i}": 0x6F + i for i in range(1, 25)})
+# mouse buttons in a spoken operation's keys (2026-10-21, the user's request; the left one is the click that picks the
+# field): their VK codes, sent as mouse input by output.press_chord
+MOUSE_VKS = {"滑鼠右鍵": 0x02, "滑鼠中鍵": 0x04, "滑鼠側鍵（下）": 0x05, "滑鼠側鍵（上）": 0x06}
+NAMES.update(MOUSE_VKS)
 _VK_NAMES = {vk: name for name, vk in NAMES.items()}
 
 # Keys sent with KEYEVENTF_EXTENDEDKEY (otherwise Windows takes them for the keypad's)

@@ -193,11 +193,22 @@ def press_key(vk: int, n: int) -> None:
     ctypes.windll.user32.SendInput(len(events), events, ctypes.sizeof(_INPUT))
 
 
+# mouse button VK -> (MOUSEEVENTF down flag, its up flag, mouseData): right, middle, X1, X2
+_MOUSE = {0x02: (0x0008, 0x0010, 0), 0x04: (0x0020, 0x0040, 0), 0x05: (0x0080, 0x0100, 1),
+          0x06: (0x0080, 0x0100, 2)}
+
+
 def press_chord(*vks: int) -> None:
-    """Press keys together (Shift+Enter: press_chord(0x10, 0x0D)) in one SendInput call."""
+    """Press keys together (Shift+Enter: press_chord(0x10, 0x0D)) in one SendInput call; a mouse button's VK
+    (keys.MOUSE_VKS) is clicked where the pointer is."""
     _settle()
     events = (_INPUT * (2 * len(vks)))()
     for i, (vk, up) in enumerate([(vk, 0) for vk in vks] + [(vk, 2) for vk in reversed(vks)]):
+        if vk in _MOUSE:
+            down_flag, up_flag, data = _MOUSE[vk]
+            events[i].type = 0   # INPUT_MOUSE
+            events[i].mi = _MOUSEINPUT(0, 0, data, up_flag if up else down_flag, 0, None)
+            continue
         events[i].type = 1   # INPUT_KEYBOARD
         events[i].ki = _KEYBDINPUT(vk, 0, up | (1 if vk in EXTENDED else 0), 0, None)
     ctypes.windll.user32.SendInput(len(events), events, ctypes.sizeof(_INPUT))
@@ -219,7 +230,7 @@ class _KEYBDINPUT(ctypes.Structure):
                 ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong))]
 
 
-class _MOUSEINPUT(ctypes.Structure):   # only sizes the union like the real INPUT
+class _MOUSEINPUT(ctypes.Structure):
     _fields_ = [("dx", wt.LONG), ("dy", wt.LONG), ("mouseData", wt.DWORD), ("dwFlags", wt.DWORD),
                 ("time", wt.DWORD), ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong))]
 

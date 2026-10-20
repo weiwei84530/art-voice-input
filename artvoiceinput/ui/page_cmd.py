@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QAbstractButton, QComboBox, QGraphicsOpacityEffec
 
 from .. import rules
 from ..edit import SYMBOLS
-from ..keys import combo_text, is_modifier
+from ..keys import MOUSE_VKS, combo_text, is_modifier
 from ..rules import Rule, Step
 from . import theme
 from .kit import Info, Keycap, Switch, T, button, card, dim, draw_icon, hbox, icon, label
@@ -284,8 +284,8 @@ def _note(text: str):
 
 
 class KeyField(QLineEdit):
-    """Click, then press a key combination: shown as text (Ctrl+Shift+Z). Waiting for the keys (focused) it is tinted
-    and says so; otherwise it looks like any field, empty or not."""
+    """Click, then press a key combination or a mouse button but the left (Ctrl+Shift+Z, 滑鼠右鍵): shown as text.
+    Waiting for the keys (focused) it is tinted and says so; otherwise it looks like any field, empty or not."""
     captured = Signal(str)
     IDLE, WAIT = "點這裡設定按鍵", "請按下按鍵…"
 
@@ -303,19 +303,29 @@ class KeyField(QLineEdit):
         if e.type() == QEvent.KeyPress:   # here, not keyPressEvent: Tab would move the focus first
             vk = e.nativeVirtualKey()
             if not is_modifier(vk):
-                mods = e.modifiers()
-                names = [n for n, flag in (("Ctrl", Qt.ControlModifier), ("Shift", Qt.ShiftModifier),
-                                           ("Alt", Qt.AltModifier), ("Win", Qt.MetaModifier)) if mods & flag]
-                text = combo_text(names, vk)
-                if text:
-                    self.setText(text)
-                    self.captured.emit(text)
+                self._take(e.modifiers(), vk)
+            return True
+        if e.type() == QEvent.MouseButtonPress and self.hasFocus():
+            name = {Qt.RightButton: "滑鼠右鍵", Qt.MiddleButton: "滑鼠中鍵", Qt.BackButton: "滑鼠側鍵（下）",
+                    Qt.ForwardButton: "滑鼠側鍵（上）"}.get(e.button())
+            if name:
+                self._take(e.modifiers(), MOUSE_VKS[name])
+                return True
+        if e.type() == QEvent.ContextMenu:   # the right button is a key here
             return True
         if e.type() == QEvent.FocusIn:
             self.setPlaceholderText(self.WAIT)
         elif e.type() == QEvent.FocusOut:
             self.setPlaceholderText(self.IDLE)
         return super().event(e)
+
+    def _take(self, mods, vk: int):
+        names = [n for n, flag in (("Ctrl", Qt.ControlModifier), ("Shift", Qt.ShiftModifier),
+                                   ("Alt", Qt.AltModifier), ("Win", Qt.MetaModifier)) if mods & flag]
+        text = combo_text(names, vk)
+        if text:
+            self.setText(text)
+            self.captured.emit(text)
 
 
 class RuleRow(QWidget):
@@ -326,6 +336,7 @@ class RuleRow(QWidget):
     def __init__(self, row: dict, bad: set, stop_on_enter: bool):
         super().__init__()
         self.row = row
+        self.rebuild = False   # its controls must change (another kind of action picked)
         self.setMinimumHeight(50)
         self.setMouseTracking(True)
         h = QHBoxLayout(self)
@@ -421,6 +432,7 @@ class RuleRow(QWidget):
             return
         self.row["type"] = kind
         self.row["value"] = ["", ""] if kind == rules.WRAP else ""
+        self.rebuild = True
         self.changed.emit()
 
     def _value(self, v):
@@ -692,9 +704,11 @@ class CmdPage(QWidget):
         return {n for n, c in count.items() if c > 1}
 
     def _draw(self, new_row: dict | None = None):
-        # rebuilt out of sight: the half-built table flashed
-        self.setUpdatesEnabled(False)
-        QTimer.singleShot(0, lambda: self.setUpdatesEnabled(True))
+        # rebuilt out of sight: the half-built table flashed. The whole window waits, the scroll area too (the page
+        # alone was not enough: the table shrank for a moment and the view jumped)
+        top = self.window()
+        top.setUpdatesEnabled(False)
+        QTimer.singleShot(40, lambda: top.setUpdatesEnabled(True))
         lay = self.book_layout
         while lay.count():
             item = lay.takeAt(0)
@@ -720,8 +734,7 @@ class CmdPage(QWidget):
             for i, row in enumerate(rows):
                 w = RuleRow(row, bad, self.cfg.stop_on_enter)
                 w.setProperty("first", first and i == 0)
-                w.changed.connect(self._changed)
-                w.removed.connect(lambda r=row: self._remove(r))
+                self._hook(w)
                 grid.addWidget(w, line + i, 1)
                 if row is new_row:
                     new_chips = w.chips
@@ -737,6 +750,7 @@ class CmdPage(QWidget):
             line += span
             first = False
         lay.addLayout(grid)
+        self._grid = grid
         dups = sorted(bad & {rules.normalize(p) for r in self.rows for p in r["phrases"]})
         text = f"「{dups[0]}」同時是兩個指令的說法，說出來只會執行其中一個，請改掉一個。" if dups else ""
         self.banner.set(text)
@@ -758,9 +772,31 @@ class CmdPage(QWidget):
         self.cfg.rules = out
         self.win.save()
 
-    def _changed(self):
+    def _hook(self, w):
+        w.changed.connect(lambda w=w: self._changed(w))
+        w.removed.connect(lambda r=w.row: self._remove(r))
+
+    def _changed(self, w):
+        """A row changed: saved; the table is drawn again only when a phrase clash appears or goes, a row whose kind
+        of action changed is replaced alone, anything else already shows (redrawing flashed, 2026-10-21)."""
         self._save()
-        QTimer.singleShot(0, self._draw)
+        if self._dups() != self._bad:
+            QTimer.singleShot(0, self._draw)
+        elif w.rebuild:
+            QTimer.singleShot(0, lambda: self._replace(w))
+
+    def _replace(self, w):
+        if self._grid.indexOf(w) < 0:
+            return
+        new = RuleRow(w.row, self._bad, self.cfg.stop_on_enter)
+        new.setProperty("first", w.property("first"))
+        self._hook(new)
+        new.setParent(w.parentWidget())
+        new.setGeometry(w.geometry())
+        self._grid.replaceWidget(w, new)
+        new.show()
+        w.hide()
+        w.deleteLater()
 
     def _remove(self, row):
         self.rows.remove(row)
