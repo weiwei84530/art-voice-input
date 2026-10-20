@@ -2,11 +2,17 @@
 the 一般 tab, the first pair by default). ElevenLabs sound effects generated for the app (dev/sound-preview), turned
 into loudness-matched wav by dev/build_cues.py and played with winsound, which needs no package. Played from the
 file: winsound cannot play asynchronously from memory (RuntimeError; the first version was silent, 2026-10-13).
+A volume below 100% (提示音's 音量, 2026-10-21) plays a scaled copy written once to DATA_DIR/cache/cues; winsound
+has no volume of its own.
 """
 import logging
+import array
 import threading
+import wave
 import winsound
 from pathlib import Path
+
+from .paths import DATA_DIR
 
 
 log = logging.getLogger("artvoiceinput")
@@ -30,6 +36,8 @@ SOUNDS = [
     ("music_box", "Music Box", "wood-start-6.mp3", "wood-stop-6.mp3"),
 ]
 DEFAULT = SOUNDS[0][0]
+VOLUME_RANGE = (10, 100)   # 音量, percent
+_SCALED = DATA_DIR / "cache" / "cues"
 _cache: dict[str, bytes] = {}
 _lock = threading.Lock()
 
@@ -55,12 +63,34 @@ def duration(cue_id: str, kind: str) -> float:
     return (len(data) - 44) / (2 * rate)
 
 
-def play(cue_id: str, kind: str):
-    """kind: start / stop; cue_id "" plays nothing. Asynchronous; a new sound cuts the one playing."""
+def _file(cue_id: str, kind: str, volume: int) -> Path:
+    """The wav to play: the shipped one, or a copy of it at volume% (16-bit samples)."""
+    src = DIR / f"{cue_id}-{kind}.wav"
+    if volume >= 100:
+        return src
+    out = _SCALED / f"{cue_id}-{kind}-{volume}.wav"
+    if not out.exists():
+        with wave.open(str(src), "rb") as w:
+            params, frames = w.getparams(), w.readframes(w.getnframes())
+        samples = array.array("h", frames)
+        for i, s in enumerate(samples):
+            samples[i] = s * volume // 100
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_suffix(".tmp")
+        with wave.open(str(tmp), "wb") as w:
+            w.setparams(params)
+            w.writeframes(samples.tobytes())
+        tmp.replace(out)
+    return out
+
+
+def play(cue_id: str, kind: str, volume: int = 100):
+    """kind: start / stop; cue_id "" plays nothing; volume in percent. Asynchronous; a new sound cuts the one
+    playing."""
     if not cue_id or not _data(cue_id, kind):
         return
     try:
-        winsound.PlaySound(str(DIR / f"{cue_id}-{kind}.wav"),
-                           winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
-    except RuntimeError:
+        path = _file(cue_id, kind, min(max(int(volume), VOLUME_RANGE[0]), 100))
+        winsound.PlaySound(str(path), winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
+    except (RuntimeError, OSError, wave.Error):
         log.exception("playing %s-%s failed", cue_id, kind)

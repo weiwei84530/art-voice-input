@@ -125,6 +125,7 @@ QPushButton[ib="true"]:hover {{ background: {t['tile2']}; color: {t['acct']}; }}
 QLineEdit {{ background: {t['tile2']}; border: 1px solid {t['line']}; border-radius: 5px; padding: 0 10px;
             min-height: 30px; font-size: 13.5px; selection-background-color: {t['acc']}; }}
 QLineEdit:focus {{ border: 1px solid {t['acc']}; }}
+QLineEdit[keys="true"]:focus {{ background: {t['accbg']}; }}
 QComboBox {{ background: {t['tile2']}; border: 1px solid {t['line']}; border-radius: 5px; padding: 0 10px;
             min-height: 32px; font-size: 13.5px; }}
 QComboBox:hover {{ border-color: {t['acc']}; }}

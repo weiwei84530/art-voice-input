@@ -4,7 +4,7 @@ order: 詞包 to switch on, 詞庫列表 (each word's 優先度 as a bar from �
 import os
 
 from pypinyin import lazy_pinyin
-from PySide6.QtCore import QPoint, QRectF, Qt
+from PySide6.QtCore import QEasingCurve, QPoint, QRectF, Qt, QVariantAnimation
 from PySide6.QtGui import QPainter, QPen
 from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QLineEdit, QSizePolicy, QVBoxLayout,
                                QWidget)
@@ -13,10 +13,10 @@ from .. import hotwords as hw
 from .. import packs
 from ..memory import BOUNDARY
 from . import theme
-from .kit import Choice, Switch, T, Tip, button, card, dim, draw_icon, icon, label
+from .kit import Choice, Switch, T, Tip, button, calm, card, dim, draw_icon, icon, label
 
 TABS = [("packs", "詞包", "勾選的詞包，裡面的詞會優先辨識；「編輯詞」用記事本打開，存檔後下次說話就生效"),
-        ("words", "詞庫列表", "每個詞出現的機會：選字選到會提高，被換掉會降低；0% 不影響辨識"),
+        ("words", "詞庫列表", "每個詞出現的機會：選字選到會提高，被換掉會降低，也可以按 − / + 自己調，一次 25%；0% 不影響辨識"),
         ("picks", "選字記憶", "選過的單字：聽到同樣的讀音、前後字也一樣時自動換"),
         ("aliases", "英文替換", "聽到左邊的拼法，一律寫成右邊")]
 SORTS = {"words": ("hotword_sort", [("weight", "優先度（高→低）"), ("name", "名稱 A→Z"), ("name_desc", "名稱 Z→A"),
@@ -25,7 +25,6 @@ SORTS = {"words": ("hotword_sort", [("weight", "優先度（高→低）"), ("na
                                  ("reading_desc", "讀音 Z→A")]),
          "aliases": ("alias_sort", [("date", "日期（新→舊）"), ("date_old", "日期（舊→新）"), ("name", "名稱 A→Z"),
                                     ("name_desc", "名稱 Z→A")])}
-SOURCES = {hw.MANUAL: "自己加的", hw.PICKED: "選字"}
 _SHOWN = 6   # a pack's first terms shown
 
 
@@ -69,6 +68,22 @@ class Bar(QWidget):
         self.d = pct - hw.NEUTRAL
         self.setFixedHeight(16)
         self.setMinimumWidth(120)
+        self._anim = QVariantAnimation(self, duration=260, easingCurve=QEasingCurve.OutCubic)
+        self._anim.valueChanged.connect(self._at)
+
+    def set_pct(self, pct: int):
+        """Slides to the new 優先度 (at once with 節流模式)."""
+        self._anim.stop()
+        if calm():
+            self._at(pct - hw.NEUTRAL)
+            return
+        self._anim.setStartValue(float(self.d))
+        self._anim.setEndValue(float(pct - hw.NEUTRAL))
+        self._anim.start()
+
+    def _at(self, v):
+        self.d = float(v)
+        self.update()
 
     def paintEvent(self, _):
         p = QPainter(self)
@@ -271,7 +286,7 @@ class BankPage(QWidget):
         head.lay.addWidget(_fixed(self._h("詞"), 150))
         scale = QWidget()
         sl = QHBoxLayout(scale)
-        sl.setContentsMargins(0, 0, 0, 0)
+        sl.setContentsMargins(34, 0, 34, 0)   # over the bar, between its −/+
         sl.addWidget(self._h("← 少出現"))
         sl.addStretch(1)
         sl.addWidget(self._h("多出現 →"))
@@ -279,7 +294,7 @@ class BankPage(QWidget):
         h = self._h("優先度")
         h.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         head.lay.addWidget(_fixed(h, 56))
-        head.lay.addWidget(_fixed(self._h("來源"), 120))
+        head.lay.addWidget(_fixed(self._h("日期"), 64))
         head.lay.addSpacing(28)
         self.list.addWidget(head)
         items = self._sorted_words()
@@ -291,17 +306,25 @@ class BankPage(QWidget):
             w = label(h.word)
             w.setFont(theme.font(14, 500))
             r.lay.addWidget(_fixed(w, 150))
-            r.lay.addWidget(Bar(h.pct), 1)
-            pct = label(_shown(h.pct))
+            bar = Bar(h.pct)
+            pct = label("")
             pct.setFont(theme.font(14, 600, num=True))
             pct.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            if h.pct < hw.NEUTRAL:
-                pct.setStyleSheet(f"color: {T('muted').name()};")
+            down, up = self._step_button("minus", "降低 25%"), self._step_button("plus", "提高 25%")
+            parts = (h.word, bar, pct, down, up)
+            down.clicked.connect(lambda _=False, parts=parts: self._step(parts, -hw.PICK_STEP))
+            up.clicked.connect(lambda _=False, parts=parts: self._step(parts, hw.PICK_STEP))
+            self._show_pct(parts, h.pct)
+            slider = QHBoxLayout()
+            slider.setSpacing(6)
+            slider.addWidget(down)
+            slider.addWidget(bar, 1)
+            slider.addWidget(up)
+            r.lay.addLayout(slider, 1)
             r.lay.addWidget(_fixed(pct, 56))
-            src = dim(f"{SOURCES.get(h.source, '')} · {h.added[5:10].replace('-', '/')}" if h.added
-                      else SOURCES.get(h.source, ""))
-            src.setToolTip(h.added)
-            r.lay.addWidget(_fixed(src, 120))
+            date = dim(h.added[5:10].replace("-", "/") if h.added else "")
+            date.setToolTip(h.added)
+            r.lay.addWidget(_fixed(date, 64))
             r.lay.addWidget(_x_button(lambda _=False, word=h.word: self._remove_word(word), "移除，優先度回到預設"))
             self.list.addWidget(r)
             n += 1
@@ -400,7 +423,28 @@ class BankPage(QWidget):
             items.sort(key=lambda h: h.added, reverse=order == "date")
         return items
 
+    @staticmethod
+    def _step_button(name: str, tip: str):
+        b = button("", None, ib=True)
+        b.setIcon(icon(name, T("muted"), 14, 2.2))
+        b.setToolTip(tip)
+        return b
+
+    @staticmethod
+    def _show_pct(parts, value: int):
+        word, _, pct, down, up = parts
+        pct.setText(_shown(value))
+        pct.setStyleSheet(f"color: {T('muted').name()};" if value < hw.NEUTRAL else "")
+        down.setEnabled(value > hw.floor(word))
+        up.setEnabled(value < hw.TOP)
+
     # --- changes ---
+    def _step(self, parts, delta: int):
+        """−/+: the row changes in place (no re-sort under the pointer); the list's order catches up next time."""
+        value = self.win.hotwords.step(parts[0], delta)
+        parts[1].set_pct(value)
+        self._show_pct(parts, value)
+
     def _toggle_pack(self, pack_id: str, on: bool):
         ids = [i for i in self.cfg.packs if i != pack_id] + ([pack_id] if on else [])
         self.cfg.packs = ids

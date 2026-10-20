@@ -479,9 +479,23 @@ class Shell(QWidget):
         _round_corners(self)
 
     # --- moving the window: drag any empty place ---
+    # The system move starts once the pointer has moved: started on a plain click, it left Qt's hover state stuck
+    # (no ⓘ answered until the pointer left the window).
+    _press_at = None
+
     def mousePressEvent(self, e):
-        if e.button() == Qt.LeftButton and self.windowHandle() is not None:
-            self.windowHandle().startSystemMove()
+        if e.button() == Qt.LeftButton:
+            self._press_at = e.globalPosition().toPoint()
+
+    def mouseMoveEvent(self, e):
+        at = self._press_at
+        if at is not None and (e.globalPosition().toPoint() - at).manhattanLength() >= QApplication.startDragDistance():
+            self._press_at = None
+            if self.windowHandle() is not None:
+                self.windowHandle().startSystemMove()
+
+    def mouseReleaseEvent(self, e):
+        self._press_at = None
 
     # --- the transition ---
     def open_page(self, key: str):

@@ -82,6 +82,7 @@ class Config:
     packs: list = field(default_factory=list)
     start_sound: str = "blip"     # cues.py id played when the recording indicator shows, "" for none
     stop_sound: str = "blip"      # cues.py id played when the recording ends, "" for none
+    cue_volume: int = 100         # 提示音's 音量, percent (cues.VOLUME_RANGE)
     # development only, to be removed before release (recordings.py): on exactly when launched with --debug
     save_recordings: bool = field(default_factory=lambda: DEBUG)
     rules: list = field(default_factory=lambda: rules.defaults(dev=DEBUG))   # custom operations (rules.Rule)

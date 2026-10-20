@@ -275,14 +275,17 @@ class Act(QWidget):
 
 
 class KeyField(QLineEdit):
-    """Click, then press a key combination: shown as text (Ctrl+Shift+Z)."""
+    """Click, then press a key combination: shown as text (Ctrl+Shift+Z). Waiting for the keys (focused) it is tinted
+    and says so; otherwise it looks like any field, empty or not."""
     captured = Signal(str)
+    IDLE, WAIT = "點這裡設定按鍵", "請按下按鍵…"
 
     def __init__(self, text: str):
         super().__init__(text)
         self.setReadOnly(True)
-        self.setPlaceholderText("點這裡後按下按鍵")
+        self.setPlaceholderText(self.IDLE)
         self.setProperty("slim", True)
+        self.setProperty("keys", True)
         self.setFixedWidth(150)
         self.setCursor(Qt.PointingHandCursor)
         self.setFont(theme.font(13.5, 600, num=True))
@@ -299,6 +302,10 @@ class KeyField(QLineEdit):
                     self.setText(text)
                     self.captured.emit(text)
             return True
+        if e.type() == QEvent.FocusIn:
+            self.setPlaceholderText(self.WAIT)
+        elif e.type() == QEvent.FocusOut:
+            self.setPlaceholderText(self.IDLE)
         return super().event(e)
 
 
@@ -369,8 +376,6 @@ class RuleRow(QWidget):
         th.addWidget(kind)
         if row["type"] == rules.KEYS:
             f = KeyField(row["value"] or "")
-            if not row["value"]:
-                f.setStyleSheet(f"QLineEdit {{ border: 1px solid {T('acc').name()}; }}")
             f.captured.connect(lambda t: self._value(t))
             th.addWidget(f)
         elif row["type"] == rules.TEXT:
@@ -395,7 +400,7 @@ class RuleRow(QWidget):
                     bar = label("｜")
                     bar.setStyleSheet(f"color: {T('muted').name()};")
                     th.addWidget(bar)
-            th.addWidget(dim("游標停在中間"))
+            th.addWidget(dim("游標停在中間；有選取時包住選取的字"))
 
     def _phrases(self, phrases):
         self.row["phrases"] = list(phrases)

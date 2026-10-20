@@ -1,5 +1,7 @@
 """麥克風: the ways to turn listening on (hotkey, clicking into a text box, the floating button), when it turns off,
 and the device."""
+import time
+
 from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIntValidator, QPainter, QPen
 from PySide6.QtWidgets import (QAbstractButton, QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
@@ -253,6 +255,7 @@ class MicPage(QWidget):
         super().__init__()
         self.win, self.cfg = win, win.cfg
         self._capturing = False
+        self._cancelled_at = 0.0
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(8)
@@ -419,6 +422,10 @@ class MicPage(QWidget):
 
     # --- 快捷鍵 (App._capture_hotkey takes the next press) ---
     def _capture_clicked(self):
+        # the left press on 取消 already cancelled the capture (the hook sees it first); its click must not start
+        # another one
+        if not self._capturing and time.monotonic() - self._cancelled_at < 1.0:
+            return
         self._capturing = not self._capturing
         self._show_hotkey()
         self.win.capture_hotkey.emit(self._capturing)
@@ -428,6 +435,8 @@ class MicPage(QWidget):
         if not self._capturing:
             return
         self._capturing = False
+        if not spec:
+            self._cancelled_at = time.monotonic()
         if spec:
             self.cfg.hotkey = spec
             self.win.save()

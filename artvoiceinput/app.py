@@ -487,7 +487,7 @@ class App(QObject):
         self.tray.setIcon(self.icon_rec)
         self.settings.set_listening(True)
         self.glow.show(self._pointer_screen())
-        cues.play(self.cfg.start_sound, "start")
+        cues.play(self.cfg.start_sound, "start", self.cfg.cue_volume)
         wait = cues.duration(self.cfg.start_sound, "start")
         if wait:
             wait += _CUE_LATENCY
@@ -699,7 +699,7 @@ class App(QObject):
         # 文字輸入完成時 option was removed)
         self.muter.restore()
         if self.cfg.stop_sound:
-            cues.play(self.cfg.stop_sound, "stop")
+            cues.play(self.cfg.stop_sound, "stop", self.cfg.cue_volume)
         end = self.listener.now
 
         def finished():   # worker thread, after the last piece: the rest of the draft is committed, then the steps

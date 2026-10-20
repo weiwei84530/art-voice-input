@@ -217,7 +217,8 @@ sentence end → 嗎 questions → trailing punctuation.
 - **詞庫 list** (`hotwords.py`, `hotword-list.json`; code says hotwords, UI says 詞庫 / 優先度): 優先度 shown as
   stored − 100 (0% nothing, +100% top, negative red). A pick of 2+ characters or English moves the picked word +25%
   and the replaced one −25%. Typed words are top. English replaced by English goes down too, to −50% at most (2026-10-21, TTS-measured: `hotwords` docstring); English for Chinese or back lowers no English; case forms are separate hotwords. Single characters never listed. ✕ puts a
-  word back to unlisted level. Biasing scores: +5 Chinese / +3 English at the top, −3 at the bottom. A Chinese word
+  word back to unlisted level; −/+ beside its bar move it 25% (sliding), and a word so set stays listed even at 0%
+  (`kept`, 2026-10-21); the list shows no source (選字 / typed), only the date. Biasing scores: +5 Chinese / +3 English at the top, −3 at the bottom. A Chinese word
   another one starts with is not sent (剪貼 made 剪貼簿 into 剪貼布).
 - **詞包** (`packs.py`, shipped `artvoiceinput/packs/<id>.txt`, user copies in DATA_DIR/packs read instead, edits apply at
   the next dictation; an update appends new shipped terms under a dated comment, `packs/shipped` keeps the last
@@ -278,7 +279,7 @@ place, 自訂 rows choose 按下按鍵 / 打出文字 / 左右包住, 新增一�
 included, is marked; 說標點的名字 and 說「詞的字」 cards below), 詞庫 (design 1: segmented tabs with counts, search,
 order), 辨識紀錄 (design 1: timeline, filters 全部 / 文字 / 指令 / 選字與復原, 清除紀錄 → `App._clear_log`), 系統
 (design 3: 外觀模式 亮色 / 暗色 / 跟隨系統 with sun / moon / computer icons, autostart, 節流模式, settings file
-drop zone, about). 節流模式 (`orb_lite`) also calms this window (`kit.calm`): pages switch at once, no hover,
+drop zone, about; switch notes start with 開： / 關：, about's values one size). 節流模式 (`orb_lite`) also calms this window (`kit.calm`): pages switch at once, no hover,
 switch or slide animations, the ready dot and state pills hold still, the preview's glow stands still. `config.theme` drives the settings window and the 選字 menu;
 the floating button, bubble and glow are colored and not themed. `dev/settings_preview.py [page] [--dark]
 [shot.png]` shows the window on a temp copy of the user's data.
@@ -305,7 +306,8 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   listening (0.88 under the pointer read as no shrink) nor after a click until the pointer leaves; orbs play at 0.6x their loop at rest, 1.6x while listening (`orbs.IDLE_SPEED` /
   `ACTIVE_SPEED`, 2026-10-20). 光環 / 虹膜 middles take clicks (alpha 1/255 disc: fully clear pixels pass clicks).
 - Sounds (`cues.py`, `artvoiceinput/cues/*.wav`, built by `dev/build_cues.py`): 12 sets, 無, 自定義; Blip default; the
-  start sound's length is silenced for the VAD. Played from the wav file (winsound can't play memory async).
+  start sound's length is silenced for the VAD. 音量 (`cue_volume` 10-100%, a slider in the 提示音 title row,
+  2026-10-21): scaled copies in `cache/cues`. Played from the wav file (winsound can't play memory async).
 - ▶ 預覽 / ▶ 試聽 read 播放中… and are disabled while playing.
 
 ## Lessons and experiment results

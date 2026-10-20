@@ -216,7 +216,7 @@ class LookTile(QAbstractButton):
         self.key, self.name = key, name
         self.setCheckable(True)
         self.setCursor(Qt.PointingHandCursor)
-        self.setFixedHeight(64)
+        self.setFixedHeight(67)   # the orb's canvas whole: drawn from y -3 it cut the top row's glow
         self.setAccessibleName(name)
         self.colors = palette(None)
         self._pm = None
@@ -236,18 +236,18 @@ class LookTile(QAbstractButton):
             p.drawRoundedRect(r, 6, 6)
         if self.key == "mic":
             p.save()
-            p.translate(r.center().x() - 17, 4)
+            p.translate(r.center().x() - 17, 7)
             p.scale(34 / _MIC_SIZE, 34 / _MIC_SIZE)
             _paint_mic(p)
             p.restore()
         else:
             if self._pm is None:
                 self._pm = draw_orb(self.key, 48, self.devicePixelRatioF(), 0.3, 0.0, self.colors)
-            p.drawPixmap(QPointF(r.center().x() - 24, -3), self._pm)
+            p.drawPixmap(QPointF(r.center().x() - 24, 0), self._pm)
         p.setPen(T("ink") if self.isChecked() else T("muted"))
         p.setFont(theme.font(11.5, 700 if self.isChecked() else 400))
         name = self.name.replace("（原始）", "")
-        p.drawText(QRectF(0, 44, r.width(), 18), Qt.AlignCenter, name)
+        p.drawText(QRectF(0, 47, r.width(), 18), Qt.AlignCenter, name)
 
 
 class GlowTile(QAbstractButton):
@@ -520,9 +520,21 @@ class LookPage(QWidget):
         c.layout().setSpacing(10)
         self.listen_button = button("▶ 試聽", self._play_sounds)
         self._sound_done = QTimer(self, singleShot=True, timeout=self._show_sounds)
-        self._set_timer = QTimer(self, singleShot=True, timeout=lambda: cues.play(self._set_timer.property("cue"), "stop"))
+        self._set_timer = QTimer(self, singleShot=True, timeout=lambda: cues.play(self._set_timer.property("cue"), "stop",
+                                                                                  self.cfg.cue_volume))
+        # 音量 in the title row (2026-10-21, the user's request; the page has no room for another row)
+        self.volume = QSlider(Qt.Horizontal, minimum=cues.VOLUME_RANGE[0], maximum=cues.VOLUME_RANGE[1],
+                              singleStep=10, pageStep=10)
+        self.volume.setFixedWidth(150)
+        self.volume.setCursor(Qt.PointingHandCursor)
+        self.volume.valueChanged.connect(self._volume_moved)
+        self.volume.sliderReleased.connect(self._volume_done)
+        self.volume_text = label("")
+        self.volume_text.setFont(theme.font(14, 600, num=True))
+        self.volume_text.setFixedWidth(44)
         c.addLayout(hbox(label("提示音", h3=True), Info("開始音在麥克風打開時、結束音在關掉時播放。同一組的開始音與結束音"
-                                                     "一起選；選「自定義」可分別挑選"), None, self.listen_button, spacing=6))
+                                                     "一起選；選「自定義」可分別挑選"), None, label("音量", b14=True),
+                         self.volume, self.volume_text, 14, self.listen_button, spacing=6))
         sets = [(cid, text) for cid, text, *_ in cues.SOUNDS] + [("", "無"), (None, "自定義")]
         self.sound_sets = Choice(sets)
         self.sound_sets.picked.connect(self._sound_set)
@@ -563,6 +575,10 @@ class LookPage(QWidget):
         self.scale.blockSignals(True)
         self.scale.setValue(cfg.button_scale)
         self.scale.blockSignals(False)
+        self.volume.blockSignals(True)
+        self.volume.setValue(cfg.cue_volume)
+        self.volume.blockSignals(False)
+        self.volume_text.setText(f"{self.volume.value()}%")
         self._scale_text(cfg.button_scale)
         self.motions.set(cfg.glow_motion)
         for box, cid in ((self.start_box, cfg.start_sound), (self.stop_box, cfg.stop_sound)):
@@ -610,6 +626,22 @@ class LookPage(QWidget):
         self._show_orb()
         if not self.scale.isSliderDown():
             self.win.save()
+
+    def _volume_moved(self, value: int):
+        self.volume_text.setText(f"{value}%")
+        self.cfg.cue_volume = value
+        if not self.volume.isSliderDown():   # keys, wheel or a click on the groove: one step, heard at once
+            self._volume_done()
+
+    def _volume_done(self):
+        """The new volume saved and heard (the start sound; not while listening)."""
+        self.cfg.cue_volume = self.volume.value()
+        self.win.save()
+        cue = self.cfg.start_sound or self.cfg.stop_sound
+        if cue and not self.listening:
+            kind = "start" if self.cfg.start_sound else "stop"
+            cues.play(cue, kind, self.cfg.cue_volume)
+            self._playing(cues.duration(cue, kind))
 
     def _scale_done(self):
         self.cfg.button_scale = self.scale.value()
@@ -801,7 +833,7 @@ class LookPage(QWidget):
         setattr(self.cfg, f"{kind}_sound", box.currentData())
         self.win.save()
         if box.currentData() and not self.listening:
-            cues.play(box.currentData(), kind)
+            cues.play(box.currentData(), kind, self.cfg.cue_volume)
             self._playing(cues.duration(box.currentData(), kind))
         self._show_sounds()
 
@@ -820,7 +852,7 @@ class LookPage(QWidget):
         """The start sound, a pause, the end sound."""
         self._set_timer.stop()
         start, stop = self.cfg.start_sound, self.cfg.stop_sound
-        cues.play(start, "start")
+        cues.play(start, "start", self.cfg.cue_volume)
         total = cues.duration(start, "start") if start else 0
         if stop:
             wait = (total + _SET_PAUSE) if start else 0

@@ -13,6 +13,11 @@ from .kit import (Choice, Info, Switch, T, button, card, dim, draw_icon, hbox, i
                   vbox)
 
 
+def _state(on: bool, text: str) -> str:
+    """A switch's note, led by the state it describes (開： / 關：, 2026-10-21, the user's request)."""
+    return f"<b>{'開' if on else '關'}：</b>{text}"
+
+
 class Drop(QWidget):
     """A dashed box a settings file is dropped on (or clicked, to pick one)."""
     dropped = Signal(str)
@@ -88,12 +93,15 @@ class SysPage(QWidget):
         v.addWidget(self.note)
         frm, rows = card(margins=(22, 0, 22, 0), spacing=0)
 
-        def row(title, sub, body, last=False):
+        def row(title, sub, body, last=False, info=None):
             r = QHBoxLayout()
             r.setContentsMargins(0, 18, 0, 18)
             r.setSpacing(24)
             t = titled(title, sub, 14.5, 700)
             t.setFixedWidth(210)
+            if info is not None:   # the ⓘ after the name
+                t.layout().removeWidget(t.title)
+                t.layout().insertLayout(0, hbox(t.title, Info(info), None, spacing=6))
             r.addWidget(t, 0, Qt.AlignTop)
             if isinstance(body, QWidget):
                 r.addWidget(body, 1)
@@ -116,11 +124,9 @@ class SysPage(QWidget):
         self.lite = Switch(name="節流模式")
         self.lite.toggled.connect(self._lite)
         self.lite_note = label("")
-        row("節流模式", "省 CPU：按鈕和光暈畫得簡單，這個視窗不播動畫",
-            hbox(self.lite, self.lite_note, Info(
-                "開啟後：能量球每秒 15 張、光暈較粗略，螢幕邊緣光暈的波浪、流星、漣漪每秒 24 張；這個設定視窗直接切換頁面，"
-                "不播滑過、燈號閃爍和預覽的動畫。關閉時能量球每秒 30 張、會移動的光暈每秒 48 張，比較順，但 CPU 用量約多七成"),
-                None, spacing=10))
+        row("節流模式", "省 CPU：按鈕和光暈畫得簡單，這個視窗不播動畫", hbox(self.lite, self.lite_note, None, spacing=10),
+            info="開啟後：能量球每秒 15 張、光暈較粗略，螢幕邊緣光暈的波浪、流星、漣漪每秒 24 張；這個設定視窗直接切換頁面，"
+                 "不播滑過、燈號閃爍和預覽的動畫。關閉時能量球每秒 30 張、會移動的光暈每秒 48 張，比較順，但 CPU 用量約多七成")
         drop = Drop()
         drop.dropped.connect(self._import_file)
         drop.clicked.connect(self._import_pick)
@@ -128,19 +134,20 @@ class SysPage(QWidget):
         reset = button("還原成預設值", self._reset, link=True)
         row("設定檔", "所有設定與詞庫存成一個檔案，換電腦時帶走",
             vbox(drop, 10, hbox(export, None, reset, spacing=8), spacing=0))
-        # names on one line, values on the next, each value centered on the same line (the folder link is a
-        # button, taller than a label: it sat higher, 2026-10-21)
+        # names on one line, values on the next, all values alike (the folder link was a button: the buttons'
+        # style-sheet size made it smaller, 2026-10-21)
         about = QGridLayout()
         about.setHorizontalSpacing(24)
         about.setVerticalSpacing(1)
-        folder = button("%LOCALAPPDATA%\\ArtVoiceInput", lambda: os.startfile(paths.DATA_DIR), link=True)
-        folder.setFont(theme.font(13, 600, num=True))
-        folder.setFixedHeight(24)
+        folder = label("%LOCALAPPDATA%\\ArtVoiceInput")
+        folder.setCursor(Qt.PointingHandCursor)
+        folder.mouseReleaseEvent = lambda e: os.startfile(paths.DATA_DIR) if e.button() == Qt.LeftButton else None
+        self.folder = folder
         for col, (k, val) in enumerate((("版本", __version__), ("辨識引擎", "X-ASR · 本機"), ("資料夾", folder))):
             if isinstance(val, str):
                 val = label(val)
-                val.setFont(theme.font(15, 600, num=True))
-                val.setFixedHeight(24)
+            val.setFont(theme.font(15, 600, num=True))
+            val.setFixedHeight(24)
             about.addWidget(dim(k), 0, col, Qt.AlignLeft | Qt.AlignBottom)
             about.addWidget(val, 1, col, Qt.AlignLeft | Qt.AlignVCenter)
         about.setColumnStretch(3, 1)
@@ -150,6 +157,7 @@ class SysPage(QWidget):
         self.restyle()
 
     def restyle(self):
+        self.folder.setStyleSheet(f"color: {T('acct').name()}; text-decoration: underline;")
         ink = T("ink")
         for key, name in (("light", "sun"), ("dark", "moon"), ("system", "pc")):
             self.modes.buttons[key].setIcon(icon(name, ink, 16, 1.8))
@@ -195,7 +203,7 @@ class SysPage(QWidget):
         self.win.look_page.refresh_orb()
 
     def _lite_note(self):
-        self.lite_note.setText("已開啟，動畫從簡" if self.cfg.orb_lite else "動畫完整播放")
+        self.lite_note.setText(_state(self.cfg.orb_lite, "動畫從簡" if self.cfg.orb_lite else "動畫完整播放"))
 
     # --- autostart ---
     def _auto(self, on: bool):
@@ -204,7 +212,7 @@ class SysPage(QWidget):
         self._auto_note()
 
     def _auto_note(self):
-        self.auto_note.setText("下次開機會自動啟動" if self.cfg.autostart else "要自己打開")
+        self.auto_note.setText(_state(self.cfg.autostart, "下次開機會自動啟動" if self.cfg.autostart else "要自己打開"))
 
     # --- 設定檔 ---
     def _export(self):

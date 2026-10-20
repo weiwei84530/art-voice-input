@@ -5,8 +5,9 @@ toward the word, 0% pushes hardest away from it; the scores behind the percentag
 - typed (source "manual"): a word typed on the 詞庫 tab (in the 選字 menu until 2026-10-16); 200%, never changed by picks.
 - 選字: picking a word of two or more characters (or English) in the menu raises it by 25% and lowers the word it
   replaced by 25% (30% until 2026-10-17; the user's request: steps that add up to 100%), so swapping 程式 and 城市 back and forth returns both to 100% (where they leave the list).
-- ✕ on the 詞庫 tab puts a word back where it would be unlisted; the −/+ buttons that moved a word by 10% were
-  removed 2026-10-14 (the user's choice: priority comes from picks and typing only).
+- ✕ on the 詞庫 tab puts a word back where it would be unlisted. −/+ beside a word's bar move it by 25% (back
+  2026-10-21, the user's request; 10% buttons were removed 2026-10-14); a word set so stays listed even at 100%
+  (`kept`).
 - words of ticked term packs (packs.py) count as being at the pack's percentage without being listed; a pick or a
   replacement lists one, moved from there, and the listed percentage wins (back at the pack's, it leaves the list).
 Scores: 200% is +5 for Chinese (+3 for English), 0% is −3. Measured with TTS (dev experiments): with
@@ -74,6 +75,7 @@ class Hotword:
     added: str = ""          # when it was first added, YYYY-MM-DD HH:MM:SS (the date alone before 2026-10-14)
     aliases: list = field(default_factory=list)   # misheard English spellings rewritten as this word (spelling.py)
     alias_added: dict = field(default_factory=dict)   # alias -> when it was learned (2026-10-14; before: the word's)
+    kept: bool = False       # set with −/+ on the 詞庫 tab: listed at any percentage
 
 
 def _now() -> str:
@@ -106,7 +108,8 @@ class Hotwords:
                 pct = d["pct"] if "pct" in d else _from_weight(word, float(d.get("weight", 0)), source)
                 # entries from before dates were kept (2026-10-11) were all added that day
                 self.items.append(Hotword(word, int(pct), source, d.get("added") or "2026-10-11",
-                                          list(d.get("aliases", [])), dict(d.get("alias_added", {}))))
+                                          list(d.get("aliases", [])), dict(d.get("alias_added", {})),
+                                          bool(d.get("kept", False))))
         except (OSError, ValueError, TypeError, KeyError):
             pass
 
@@ -123,7 +126,7 @@ class Hotwords:
             if not eligible(word):
                 continue
             h = Hotword(word, int(d.get("pct", TOP)), d.get("source", MANUAL), d.get("added") or _now(),
-                        list(d.get("aliases", [])), dict(d.get("alias_added", {})))
+                        list(d.get("aliases", [])), dict(d.get("alias_added", {})), bool(d.get("kept", False)))
             with self._lock:
                 old = self.find(word)
                 if old is not None:
@@ -190,8 +193,19 @@ class Hotwords:
         elif h.source == MANUAL:
             return
         h.pct = max(floor(word), min(TOP, h.pct + delta))
-        if h.pct == self.base(word) and not h.aliases:
+        if h.pct == self.base(word) and not h.aliases and not h.kept:
             self.items.remove(h)
+
+    def step(self, word: str, delta: int) -> int:
+        """−/+ on the 詞庫 tab: a listed word moved by delta, kept on the list wherever it lands. Returns its
+        percentage."""
+        h = self.find(word)
+        if h is None:
+            return self.base(word)
+        h.pct = max(floor(word), min(TOP, h.pct + delta))
+        h.kept = True
+        self.save()
+        return h.pct
 
     def picked(self, old: str, new: str):
         """A pick in 選字 replaced old with new: new gains 25%, old loses 25%."""
@@ -249,7 +263,7 @@ class Hotwords:
     def listed(self) -> list[Hotword]:
         """The words the 詞庫 list shows: those whose 優先度 differs from where they would be unlisted (one kept only
         for its aliases is not shown)."""
-        return [h for h in self.items if h.pct != self.base(h.word)]
+        return [h for h in self.items if h.pct != self.base(h.word) or h.kept]
 
     def remove(self, word: str):
         """✕ on the 詞庫 tab: the word goes back to where it would be unlisted (100%, or its term pack's); its
@@ -258,7 +272,7 @@ class Hotwords:
         if h is None:
             return
         if h.aliases:
-            h.pct, h.source = self.base(word), PICKED
+            h.pct, h.source, h.kept = self.base(word), PICKED, False
         else:
             self.items.remove(h)
         self.save()
