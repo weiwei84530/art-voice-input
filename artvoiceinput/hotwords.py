@@ -13,10 +13,14 @@ Scores: 200% is +5 for Chinese (+3 for English), 0% is −3. Measured with TTS (
 max_active_paths 12, Chinese hotwords at 5 hit 16/16 targets with no false hits, at 6 台北是一個美麗的城市 became
 程式, at 8 even English broke (2026-10-11); 程式 130% / 城市 70% (+1.5 / −0.9) already turns 寫了一個新的城市 into
 程式 and every pair up to 200% / 0% leaves 台北是一個美麗的城市 alone, while −5 made it 城池 (2026-10-13).
-English stays at 100% or above: a negative English word only changed its case (clock -> Clock), and negative
-misheard spellings made English worse (Deep Seek fell back to Deepsec, 2026-10-13). Instead, a misheard English
-spelling replaced in 選字 or by typing (Dipsick -> DeepSeek) is kept as an alias of the word and rewritten after
-recognition (spelling.py); picking the alias back removes it.
+English replaced by English in 選字 is lowered like Chinese, but not below 50% (2026-10-21, the user's request,
+measured with TTS on 13 English-for-English picks: the wanted word at +50% won 9 times alone, 11 with the heard form
+at -50%, block -> bug and read me -> README only so; no other sentence got worse; nothing was measured below 50%,
+where lowering one form at most changed its case, clock -> Clock, and every form at 0% made words up, clack,
+pickon). English replaced by Chinese, or Chinese by English, lowers no English word (not measured; until
+2026-10-21 English stayed at 100% or above). A misheard English spelling replaced in 選字 or by typing
+(Dipsick -> DeepSeek, which no score fixed) is also kept as an alias of the word and rewritten after recognition
+(spelling.py); picking the alias back removes it.
 Single characters never become hotwords: they are handled by the smart picks (memory.py).
 """
 import json
@@ -37,6 +41,7 @@ _LATIN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 .'+#&_-]*$")
 NEUTRAL, TOP = 100, 200
 PICK_STEP = 25
 _TOP_ZH, _TOP_EN, _BOTTOM = 5.0, 3.0, -3.0
+EN_FLOOR = 50   # English is lowered this far at most
 
 
 def is_chinese(word: str) -> bool:
@@ -44,8 +49,8 @@ def is_chinese(word: str) -> bool:
 
 
 def floor(word: str) -> int:
-    """English cannot go below 100%."""
-    return 0 if is_chinese(word) else NEUTRAL
+    """English cannot go below EN_FLOOR."""
+    return 0 if is_chinese(word) else EN_FLOOR
 
 
 def eligible(word: str) -> bool:
@@ -199,7 +204,7 @@ class Hotwords:
         self._learn_alias(old, new)
         if new in moved:
             self._move(new, PICK_STEP)
-        if old in moved:
+        if old in moved and (is_chinese(old) or _LATIN.match(new)):   # English lowered only for English
             self._move(old, -PICK_STEP)
         log.info("hotwords after pick %s -> %s: %s", old, new,
                  [(h.word, h.pct) for h in self.items if h.word in moved])

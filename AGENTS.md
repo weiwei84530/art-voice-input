@@ -207,7 +207,7 @@ sentence end → 嗎 questions → trailing punctuation.
   (`memory.variants`).
 - **詞庫 list** (`hotwords.py`, `hotword-list.json`; code says hotwords, UI says 詞庫 / 優先度): 優先度 shown as
   stored − 100 (0% nothing, +100% top, negative red). A pick of 2+ characters or English moves the picked word +25%
-  and the replaced one −25%. Typed words are top. English never below 0%. Single characters never listed. ✕ puts a
+  and the replaced one −25%. Typed words are top. English replaced by English goes down too, to −50% at most (2026-10-21, TTS-measured: `hotwords` docstring); English for Chinese or back lowers no English; case forms are separate hotwords. Single characters never listed. ✕ puts a
   word back to unlisted level. Biasing scores: +5 Chinese / +3 English at the top, −3 at the bottom. A Chinese word
   another one starts with is not sent (剪貼 made 剪貼簿 into 剪貼布).
 - **詞包** (`packs.py`, shipped `artvoiceinput/packs/<id>.txt`, user copies in DATA_DIR/packs read instead, edits apply at

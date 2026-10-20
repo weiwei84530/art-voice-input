@@ -162,12 +162,13 @@ class Recognizer:
 
 def _hotword_spec(pieces: set, words: list[tuple[str, float]]) -> str:
     """sherpa-onnx per-stream hotwords ("a/b c :3/…") from (word, score) pairs. Words the vocab cannot encode are
-    dropped: a single bad word makes sherpa-onnx skip the whole list."""
+    dropped: a single bad word makes sherpa-onnx skip the whole list. English forms differing in case are separate
+    hotwords (a 選字 pick of Notion over notion raises one and lowers the other, 2026-10-21)."""
     from .textfmt import to_simplified
     out, seen = [], set()
     for word, score in words:
         word = word.strip()
-        if not word or word.casefold() in seen:
+        if not word:
             continue
         if _LATIN_TERM.match(word):
             spec = word
@@ -176,7 +177,9 @@ def _hotword_spec(pieces: set, words: list[tuple[str, float]]) -> str:
             if not all(("▁" + ch) in pieces for ch in simp):
                 continue
             spec = " ".join(simp)
-        seen.add(word.casefold())
+        if spec in seen:
+            continue
+        seen.add(spec)
         out.append(spec if score == _HOTWORD_SCORE else f"{spec} :{score:g}")
     return "/".join(out)
 
