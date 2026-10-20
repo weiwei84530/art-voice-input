@@ -133,7 +133,7 @@ class Entry(QWidget):
             h.addWidget(b, 0, Qt.AlignTop)
         tip = [x for x in (f"聽到：{r['heard']}" if r["heard"] else "", r["tag"], r["tip"]) if x]
         self.setToolTip("\n".join(tip))
-        self.setProperty("quick_tip", True)   # shown at Qt's usual time, not after kit.TipRouter's second
+        self.setProperty("quick_tip", True)   # shown as soon as the pointer comes, not after kit.TipRouter's second
 
     def enterEvent(self, e):
         self.update()

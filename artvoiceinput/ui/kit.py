@@ -391,8 +391,9 @@ class Tip(QWidget):
 
 class TipRouter(QObject):
     """Every tooltip (setToolTip) of a window shown as a Tip: after the pointer rests DELAY on the widget (the user's
-    choice, 2026-10-20, for icon buttons, swatches, chips … where an ⓘ beside them doesn't fit), or at Qt's usual
-    time for a widget marked quick_tip (辨識紀錄's rows, ! and copy). Qt's own tooltip never shows there."""
+    choice, 2026-10-20, for icon buttons, swatches, chips … where an ⓘ beside them doesn't fit), or at once for a
+    widget marked quick_tip (辨識紀錄's rows, book and copy: a page read by sweeping the pointer, 2026-10-21); leaving
+    one inside another quick_tip widget shows the outer one's again. Qt's own tooltip never shows there."""
     DELAY = 1000
 
     def __init__(self, window: QWidget):
@@ -415,7 +416,9 @@ class TipRouter(QObject):
                 Tip.show_text(e.globalPos() + QPoint(12, 18), w.toolTip(), w)
             return True
         if t == QEvent.Enter:
-            if obj.toolTip() and not obj.property("quick_tip"):
+            if obj.toolTip() and obj.property("quick_tip"):
+                Tip.show_text(QCursor.pos() + QPoint(12, 18), obj.toolTip(), obj)
+            elif obj.toolTip():
                 self.target = obj
                 self.timer.start()
         else:
@@ -423,6 +426,12 @@ class TipRouter(QObject):
                 self.timer.stop()
                 self.target = None
             Tip.hide_text(obj)
+            if t == QEvent.Leave and obj.property("quick_tip"):
+                w = obj.parentWidget()
+                while w is not None and not (w.property("quick_tip") and w.toolTip()):
+                    w = w.parentWidget()
+                if w is not None and w.underMouse():
+                    Tip.show_text(QCursor.pos() + QPoint(12, 18), w.toolTip(), w)
         return False
 
     def _fire(self):

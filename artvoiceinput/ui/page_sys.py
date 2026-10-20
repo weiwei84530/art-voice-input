@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QPainter, QPen
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QMessageBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QMessageBox, QVBoxLayout, QWidget
 
 from .. import __version__, paths, userdata
 from . import theme
@@ -128,23 +128,26 @@ class SysPage(QWidget):
         reset = button("還原成預設值", self._reset, link=True)
         row("設定檔", "所有設定與詞庫存成一個檔案，換電腦時帶走",
             vbox(drop, 10, hbox(export, None, reset, spacing=8), spacing=0))
-        about = hbox(spacing=24)
-        for k, val in (("版本", __version__), ("辨識引擎", "X-ASR · 本機")):
-            about.addLayout(self._kv(k, val))
+        # names on one line, values on the next, each value centered on the same line (the folder link is a
+        # button, taller than a label: it sat higher, 2026-10-21)
+        about = QGridLayout()
+        about.setHorizontalSpacing(24)
+        about.setVerticalSpacing(1)
         folder = button("%LOCALAPPDATA%\\ArtVoiceInput", lambda: os.startfile(paths.DATA_DIR), link=True)
         folder.setFont(theme.font(13, 600, num=True))
-        about.addLayout(vbox(dim("資料夾"), folder, spacing=1))
-        about.addStretch(1)
+        folder.setFixedHeight(24)
+        for col, (k, val) in enumerate((("版本", __version__), ("辨識引擎", "X-ASR · 本機"), ("資料夾", folder))):
+            if isinstance(val, str):
+                val = label(val)
+                val.setFont(theme.font(15, 600, num=True))
+                val.setFixedHeight(24)
+            about.addWidget(dim(k), 0, col, Qt.AlignLeft | Qt.AlignBottom)
+            about.addWidget(val, 1, col, Qt.AlignLeft | Qt.AlignVCenter)
+        about.setColumnStretch(3, 1)
         row("關於", "阿特語音輸入法 Art VoiceInput", about, last=True)
         v.addWidget(frm)
         v.addStretch(1)
         self.restyle()
-
-    @staticmethod
-    def _kv(k, val):
-        b = label(val)
-        b.setFont(theme.font(15, 600, num=True))
-        return vbox(dim(k), b, spacing=1)
 
     def restyle(self):
         ink = T("ink")

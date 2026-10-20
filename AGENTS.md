@@ -257,10 +257,10 @@ bled large into the tile's bottom right (tilted 5°; hover lifts it up-right, tu
 it; no orange outline on cards (outlines answer the pointer only); each card's state pill (`kit.Pill`) is solid
 orange and breathes while on, all pills in step with the clock; auto-off chips, stop_on_enter, device with 測試麥克風
 (`audio.LevelProbe`, its own stream; meter design I1: 24 segments, the last six warmer, a falling peak tick; stops
-when the page hides), mute), 外觀與聲音 (2026-10-21: the preview and the glow card stay put so an edit is seen
-while made; whose 自訂顏色、速度與邊緣 slides its editor in its place (design A1, `kit.Slides`): names in one column,
-controls from the sliders' left, values after the sliders, small edge chips, 回到光暈樣式 where the chip was, 恢復預設
-across; below, scrolling: button looks beside the mark colors (design A3, named), sounds across; while listening
+when the page hides), mute), 外觀與聲音 (on one screen, no scrolling: preview beside the mark colors (design A3,
+named), button looks beside the glow, whose 自訂顏色、速度與邊緣 slides its editor in its place in the same card
+(design A1, `kit.Slides`; the page around it stays put): names in one column, controls from the sliders' left, values
+after the sliders, small edge chips, 回到光暈樣式 where the chip was, 恢復預設 across; sounds across; while listening
 ▶ 預覽 / ▶ 試聽 read 錄音中無法使用 and picks play nothing), 語音指令 (design C4: "當我說 [chips] 就 [what]" grouped with an orange bar per group, phrase chips edited in
 place, 自訂 rows choose 按下按鍵 / 打出文字 / 左右包住, 新增一句; a phrase said for two things, punctuation names
 included, is marked; 說標點的名字 and 說「詞的字」 cards below), 詞庫 (design 1: segmented tabs with counts, search,
@@ -276,7 +276,7 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   14px medium like the radio rows' names.
 - Each setting's help is an ⓘ after its name (`ui.kit.Info`), not tooltips. Where an ⓘ doesn't fit (icon buttons,
   swatches, phrase chips, dates, the 回首頁 strip) a hint shows after the pointer rests 1s (`kit.TipRouter`);
-  辨識紀錄's row tips come at Qt's usual time (`quick_tip`). All are `kit.Tip` (120ms fade), never Qt's tooltip.
+  辨識紀錄's row tips show as soon as the pointer comes (`quick_tip`, 2026-10-21: a page read by sweeping). All are `kit.Tip` (120ms fade), never Qt's tooltip.
 - 設定檔 (`userdata.py`): 匯出 writes all settings and the 詞庫 (list, aliases, 選字記憶, pack files) to one JSON; 匯入
   replaces settings except `userdata.LOCAL` (mic, autostart, float place) and merges the 詞庫 (file wins); 還原預設
   resets everything including the 詞庫.
@@ -290,7 +290,8 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   moving motions at 48 fps unless 節流模式 (柔光 24). 流星's position is summed per frame (`EdgeGlow._lap`).
 - 按鈕樣式 (`orbs.py`, `button_look`): mic + ten orb looks in the glow's colors (蝕光 the latest), drawn on a canvas
   1.4x the mic (`orbs.SCALE`), frames cached per loop phase, only while shown; 30 fps (15 with 節流模式). Hover
-  grows to 1.12 with a spring (the preview's sample: only over the look, its widget is far bigger); orbs play at 0.6x their loop at rest, 1.6x while listening (`orbs.IDLE_SPEED` /
+  grows to 1.12 with a spring (the preview's sample: only over the look, its widget is far bigger), not while
+  listening (0.88 under the pointer read as no shrink) nor after a click until the pointer leaves; orbs play at 0.6x their loop at rest, 1.6x while listening (`orbs.IDLE_SPEED` /
   `ACTIVE_SPEED`, 2026-10-20). 光環 / 虹膜 middles take clicks (alpha 1/255 disc: fully clear pixels pass clicks).
 - Sounds (`cues.py`, `artvoiceinput/cues/*.wav`, built by `dev/build_cues.py`): 12 sets, 無, 自定義; Blip default; the
   start sound's length is silenced for the VAD. Played from the wav file (winsound can't play memory async).

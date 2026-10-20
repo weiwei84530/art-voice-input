@@ -73,6 +73,7 @@ class OrbButton(QWidget):
         self.leaving = False   # growing and fading out: hidden at the end
         self.active = False    # listening while shown: smaller, playing faster
         self._over = False
+        self._clicked = False  # clicked and the pointer still on it: no hover growth until it leaves
         self._then = None      # the next scale after this one
         self._grow = QVariantAnimation(self)
         self._grow.valueChanged.connect(self._set_k)
@@ -80,6 +81,7 @@ class OrbButton(QWidget):
         self._fade = QVariantAnimation(self)
         self._fade.valueChanged.connect(self._set_alpha)
         self._fade.finished.connect(self._faded)
+        self.clicked.connect(self._after_click)
 
     def _fit(self):
         side = round(self.bsize * self.room)
@@ -122,8 +124,17 @@ class OrbButton(QWidget):
         self._grow.start()
 
     def _rest(self) -> float:
-        """The size it settles at: smaller while listening, grown under the pointer."""
-        return (_ACTIVE if self.active else 1.0) * (_HOVER if self._over else 1.0)
+        """The size it settles at: smaller while listening, else grown under the pointer, but not right after a
+        click (the shrink read as nothing under the pointer, 0.88 x 1.12, and it came back grown: 2026-10-21)."""
+        if self.active:
+            return _ACTIVE
+        return _HOVER if self._over and not self._clicked else 1.0
+
+    def _after_click(self):
+        self._clicked = True
+        if not self.leaving:
+            curve, ms = _hover_curve()
+            self._scale_to(self._rest(), ms, curve)
 
     def set_active(self, on: bool):
         """Listening (on) or not, while it stays on screen: it shrinks and plays faster, or comes back."""
@@ -204,7 +215,7 @@ class OrbButton(QWidget):
         self._grow.stop()
         self._fade.stop()
         self.leaving = False
-        self._over = False
+        self._over = self._clicked = False
 
     def enterEvent(self, e):
         self._over = True
@@ -213,7 +224,7 @@ class OrbButton(QWidget):
             self._scale_to(self._rest(), ms, curve)
 
     def leaveEvent(self, e):
-        self._over = False
+        self._over = self._clicked = False
         if not self.leaving:
             curve, ms = _hover_curve()
             self._scale_to(self._rest(), ms, curve)
