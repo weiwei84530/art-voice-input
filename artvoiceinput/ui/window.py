@@ -81,6 +81,9 @@ class SettingsWindow(Shell):
         else:
             self.sys_page.notice(text)
 
+    def set_listening(self, on: bool):
+        self.look_page.set_listening(on)
+
     def set_log(self, sessions):
         self.log_page.set_log(sessions)
         self.tiles["log"].desc = self.log_page.summary()

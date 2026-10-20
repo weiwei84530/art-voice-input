@@ -480,7 +480,8 @@ class Choice(QWidget):
     """One of several buttons checked: chips (rounded, orange when picked) or a segmented control."""
     picked = Signal(object)
 
-    def __init__(self, items, value=None, kind: str = "chip", big: bool = False, wrap_cols: int = 0):
+    def __init__(self, items, value=None, kind: str = "chip", big: bool = False, wrap_cols: int = 0,
+                 small: bool = False):
         super().__init__()
         self.group = QButtonGroup(self, exclusive=True)
         self.buttons = {}
@@ -504,6 +505,8 @@ class Choice(QWidget):
             b.setProperty(kind, True)
             if big:
                 b.setProperty("big", True)
+            if small:
+                b.setProperty("small", True)
             if rest and rest[0] is not None:
                 b.setIcon(rest[0])
             self.group.addButton(b)

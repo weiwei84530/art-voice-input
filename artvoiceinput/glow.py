@@ -91,9 +91,9 @@ def style_for(style_id: str, edits: dict | None) -> Style | None:
 MOTIONS = {"soft": "柔光", "wave": "波浪", "comet": "流星", "ripple": "漣漪"}
 _REACH = {"soft": 1.0, "wave": 1.9, "comet": 1.5, "ripple": 1.0}   # strip depth, times the style's
 # which edges glow (the 外觀 tab, 2026-10-16, the user's request): id -> (label, top, bottom, left, right)
-EDGES = {"all": ("上下左右", True, True, True, True), "tb": ("只有上下", True, True, False, False),
-         "lr": ("只有左右", False, False, True, True), "top": ("只有上", True, False, False, False),
-         "bottom": ("只有下", False, True, False, False)}
+EDGES = {"all": ("上下左右", True, True, True, True), "tb": ("上下", True, True, False, False),
+         "lr": ("左右", False, False, True, True), "top": ("上", True, False, False, False),
+         "bottom": ("下", False, True, False, False)}
 
 
 def _strength(level: int) -> float:

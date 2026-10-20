@@ -93,6 +93,8 @@ QLabel[h3="true"] {{ font-size: 15px; font-weight: 700; }}
 QLabel[sh="true"] {{ font-size: 13px; font-weight: 700; color: {t['muted']}; }}
 QLabel[b14="true"] {{ font-size: 14px; font-weight: 500; }}
 QLabel[warn="true"] {{ color: {t['acct']}; font-size: 12.5px; font-weight: 500; }}
+QLabel[badge="true"] {{ background: {t['accbg']}; color: {t['acct']}; font-size: 11px; font-weight: 500;
+                     border-radius: 4px; padding: 1px 6px; }}
 QFrame#card {{ background: {t['tile']}; border: 1px solid {t['line']}; border-radius: 6px; }}
 QFrame#card QLabel, QFrame#card QFrame {{ border: none; }}
 QFrame#card QFrame#branch {{ border: none; border-left: 2px solid {t['line']}; background: transparent; }}
@@ -109,6 +111,8 @@ QPushButton[link="true"] {{ background: transparent; border: none; color: {t['ac
               text-decoration: underline; }}
 QPushButton[chip="true"] {{ min-height: 28px; max-height: 28px; border-radius: 14px; padding: 0 12px; }}
 QPushButton[chip="true"]:checked {{ background: {t['acc']}; color: #FFFFFF; border: 1px solid {t['acc']}; }}
+QPushButton[chip="true"][small="true"] {{ min-height: 24px; max-height: 24px; border-radius: 12px; padding: 0 10px;
+              font-size: 12.5px; }}
 QPushButton[seg="true"] {{ background: transparent; border: none; border-radius: 5px; color: {t['muted']};
               min-height: 30px; padding: 0 12px; }}
 QPushButton[seg="true"]:checked {{ background: {t['tile']}; color: {t['ink']}; font-weight: 700;

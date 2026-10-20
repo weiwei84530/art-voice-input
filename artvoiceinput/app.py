@@ -483,6 +483,7 @@ class App(QObject):
         self._listen_shown = True
         self.book.new_session()
         self.tray.setIcon(self.icon_rec)
+        self.settings.set_listening(True)
         self.glow.show(self._pointer_screen())
         cues.play(self.cfg.start_sound, "start")
         wait = cues.duration(self.cfg.start_sound, "start")
@@ -685,6 +686,7 @@ class App(QObject):
         self.book.end_session()
         log.info("listen: off")
         self.tray.setIcon(self.icon_idle)
+        self.settings.set_listening(False)
         self.glow.hide()
         self._marks_timer.stop()
         self.marks.hide()
