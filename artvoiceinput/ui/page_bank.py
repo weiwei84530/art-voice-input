@@ -295,7 +295,7 @@ class BankPage(QWidget):
         h.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         head.lay.addWidget(_fixed(h, 56))
         head.lay.addWidget(_fixed(self._h("日期"), 64))
-        head.lay.addSpacing(28)
+        head.lay.addSpacing(28 + head.lay.spacing())   # the ✕ and the gap before it
         self.list.addWidget(head)
         items = self._sorted_words()
         n = 0
@@ -342,7 +342,7 @@ class BankPage(QWidget):
         head.lay.addSpacing(24)
         head.lay.addWidget(self._h("自動寫成"), 1)
         head.lay.addWidget(_fixed(self._h("記住於"), 60))
-        head.lay.addSpacing(28)
+        head.lay.addSpacing(28 + head.lay.spacing())   # the ✕ and the gap before it
         self.list.addWidget(head)
         n = 0
         for e in rows:
@@ -380,7 +380,7 @@ class BankPage(QWidget):
         head.lay.addSpacing(24)
         head.lay.addWidget(self._h("一律寫成"), 1)
         head.lay.addWidget(_fixed(self._h("日期"), 60))
-        head.lay.addSpacing(28)
+        head.lay.addSpacing(28 + head.lay.spacing())   # the ✕ and the gap before it
         self.list.addWidget(head)
         n = 0
         for alias, word, added in rows:

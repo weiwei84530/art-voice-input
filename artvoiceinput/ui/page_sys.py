@@ -122,6 +122,7 @@ class SysPage(QWidget):
         # 節流模式 (moved here from 外觀與聲音, 2026-10-20, the user's request): the orbs and the glow draw less, and
         # this window skips its animations (kit.calm)
         self.lite = Switch(name="節流模式")
+        self.lite.slides = True
         self.lite.toggled.connect(self._lite)
         self.lite_note = label("")
         row("節流模式", "省 CPU：按鈕和光暈畫得簡單，這個視窗不播動畫", hbox(self.lite, self.lite_note, None, spacing=10),

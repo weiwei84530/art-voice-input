@@ -317,6 +317,9 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   characters space-separated; one unencodable word drops the whole list (check against tokens.txt; `bpe.vocab`
   exported from `bpe.model` by a small protobuf reader). 20k+ words: 熱詞 → 熱刺 (accuracy hurts before speed).
   English boosts: +4 little help, +5 breaks (DeepSeek → Deep) → spelling replacement after recognition instead.
+  Two hotwords sounding alike and starting with the same character cancel out: 自訂 +5 beside 自定 at any score
+  (even +0.01) wrote 自定 as with no biasing, so such a lowered word is not sent (`app._bias`, 2026-10-21; 自訂 beside
+  自動 -3 and 程式 beside 城市 -3 were fine; 自訂 +5 beside 自動 +5 also lost one, not handled).
 - **Command lab** (`dev/cmdlab`, 929 commands + 571 text pieces from the user's recordings): plain path 96.7%,
   padded boosted-first 98.7% (misses 31 → 10), 0 false triggers. X-ASR turns a command into English when the audio
   starts or ends without silence. Rejected: second X-ASR scoring (+260MB, confuses 換行/問號), keyword spotters

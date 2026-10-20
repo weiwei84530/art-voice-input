@@ -2060,16 +2060,24 @@ def _joined(a: str, b: str) -> str:
     return a + (" " if _space_between(a, b) else "") + b
 
 
+def _sound(word: str) -> str:
+    return reading_key(word)
+
+
 def _bias(words: list[tuple[str, float]]) -> list[tuple[str, float]]:
     """Biasing words without a Chinese word another one starts with: with 剪貼 and 剪貼簿 both listed, X-ASR wrote 剪貼布
     (the short one is matched first and takes the boost; dev experiment 2026-10-11). English keeps both: dropping
     Gemini for Gemini CLI left Gemini unboosted (the user's recordings, 2026-10-13: 14/14 at 3 with both or alone,
     10/14 with Gemini CLI alone). The first of duplicates wins.
     A lowered word (negative score) sharing a start with another word is left out, so it never costs that one its
-    boost or its place (城市 lowered next to 城市規劃)."""
+    boost or its place (城市 lowered next to 城市規劃). So is a lowered word sounding like a raised one that starts with
+    the same character: with 自訂 +5 and 自定 at any score X-ASR kept writing 自定, as with no biasing (TTS,
+    2026-10-21, the user's report; 自訂 alone or beside 自動 -3, and 程式 beside 城市 -3, were fine)."""
     keys = [w.casefold() for w, _ in words]
+    raised = {(w[0], _sound(w)) for w, s in words if s > 0 and _CJK_CHAR.match(w)}
     words = [(w, s) for (w, s), k in zip(words, keys)
-             if s >= 0 or not any(o != k and (o.startswith(k) or k.startswith(o)) for o in keys)]
+             if s >= 0 or not (any(o != k and (o.startswith(k) or k.startswith(o)) for o in keys)
+                               or _CJK_CHAR.match(w) and (w[0], _sound(w)) in raised)]
     seen = {w.casefold() for w, _ in words}
     out, kept = [], set()
     for w, score in words:

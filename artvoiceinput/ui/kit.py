@@ -228,11 +228,12 @@ class Switch(QAbstractButton):
         self._pos = 1.0 if checked else 0.0
         # not "pos": that is QWidget's own position, and animating it moved the switch to its parent's top left
         self._anim = QPropertyAnimation(self, b"knob", self, duration=150, easingCurve=QEasingCurve.OutCubic)
+        self.slides = False   # slides even when calm (節流模式's own: calm still held when it was turned off)
         self.toggled.connect(self._slide)
 
     def _slide(self, on: bool):
         self._anim.stop()
-        if calm():
+        if calm() and not self.slides:
             self._set(1.0 if on else 0.0)
             return
         self._anim.setEndValue(1.0 if on else 0.0)
