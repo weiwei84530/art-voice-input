@@ -134,6 +134,7 @@ class SysPage(QWidget):
 
         self.modes = Choice([(k, n, None) for k, n in theme.MODES], kind="seg", big=True)
         self.modes.picked.connect(self._mode)
+        self.modes.settled.connect(self._apply_mode)
         self.mode_row = row("外觀模式", "-", vbox(self.modes, None))
         self.auto = Switch(name="開機時自動啟動")
         self.auto.toggled.connect(self._auto)
@@ -208,11 +209,16 @@ class SysPage(QWidget):
 
     # --- 外觀模式 ---
     def _mode(self, mode: str):
+        """Saved at once; the colors change when the card has slid there (_apply_mode)."""
         self.cfg.theme = mode
         self.win.save()
-        _crossfade(self.window())   # before the new colors: the old look fades away over them
-        self.win.theme.set_mode(mode)
         self._mode_note()
+
+    def _apply_mode(self):
+        if self.win.theme.mode == self.cfg.theme:
+            return
+        _crossfade(self.window())   # the old look, the card already moved, fades away over the new colors
+        self.win.theme.set_mode(self.cfg.theme)
 
     def _mode_note(self):
         if self.cfg.theme == "system":

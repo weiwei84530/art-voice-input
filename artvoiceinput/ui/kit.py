@@ -490,6 +490,7 @@ def with_info(widget: QWidget, tip: str) -> QWidget:
 class Choice(QWidget):
     """One of several buttons checked: chips (rounded, orange when picked) or a segmented control."""
     picked = Signal(object)
+    settled = Signal()   # a segmented control's card got to the picked segment (at once without a slide)
 
     def __init__(self, items, value=None, kind: str = "chip", big: bool = False, wrap_cols: int = 0,
                  small: bool = False):
@@ -507,9 +508,12 @@ class Choice(QWidget):
             outer.addWidget(box)
             outer.addStretch(1)
             lay = inner
-            # the picked segment's card, under the buttons (a slide was tried 2026-10-21 and dropped: the 外觀模式
-            # cross-fade covered it)
+            # the picked segment's card, under the buttons: it slides to the one picked (2026-10-21; 外觀模式 waits
+            # for it before its cross-fade, which covered it)
             self._pill = _SegPill(box)
+            self._pill_anim = QPropertyAnimation(self._pill, b"geometry", self, duration=200,
+                                                 easingCurve=QEasingCurve.OutCubic)
+            self._pill_anim.finished.connect(self.settled.emit)
             box.installEventFilter(self)
         else:
             lay = FlowLayout(self, spacing=4 if small else 6)
@@ -530,7 +534,7 @@ class Choice(QWidget):
             self.setText(key, text)
             b.clicked.connect(lambda _=False, k=key: self.picked.emit(k))
             if kind == "seg":
-                b.toggled.connect(lambda on: on and self._place_pill())
+                b.toggled.connect(lambda on: on and self._place_pill(True))
         self.set(value)
 
     def setText(self, key, text: str):
@@ -550,21 +554,30 @@ class Choice(QWidget):
     def value(self):
         return next((k for k, b in self.buttons.items() if b.isChecked()), None)
 
-    def _place_pill(self):
+    def _place_pill(self, slide: bool = False):
         pill = getattr(self, "_pill", None)
         b = next((b for b in self.buttons.values() if b.isChecked()), None) if pill is not None else None
         if b is None:
             if pill is not None:
                 pill.hide()
             return
+        self._pill_anim.stop()
         pill.show()
         pill.lower()
+        if slide and not calm() and pill.isVisible() and b.width() > 0 and pill.geometry() != b.geometry():
+            self._pill_anim.setStartValue(pill.geometry())
+            self._pill_anim.setEndValue(b.geometry())
+            self._pill_anim.start()
+            return
         pill.setGeometry(b.geometry())
+        if slide:
+            self.settled.emit()
 
     def eventFilter(self, obj, e):
         # the segments laid out (shown, resized, a text changed): the card goes under the picked one at once
         if e.type() in (QEvent.Resize, QEvent.Show, QEvent.LayoutRequest):
-            QTimer.singleShot(0, self._place_pill)
+            QTimer.singleShot(0, lambda: self._pill_anim.state() != QPropertyAnimation.Running
+                              and self._place_pill())
         return False
 
 
