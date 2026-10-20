@@ -506,7 +506,7 @@ class Choice(QWidget):
             outer.addStretch(1)
             lay = inner
         else:
-            lay = FlowLayout(self, spacing=6)
+            lay = FlowLayout(self, spacing=4 if small else 6)
         for key, text, *rest in items:
             b = _Segment(text) if kind == "seg" else QPushButton(text)
             b.setCheckable(True)

@@ -8,12 +8,14 @@ from PySide6.QtWidgets import (QAbstractButton, QCheckBox, QComboBox, QFrame, QG
 from .. import audio
 from ..keys import hotkey_label
 from . import theme
+from .illus import Illustration
 from .kit import (Choice, Info, Pill, Switch, T, button, card, dim, hbox, label, prop, sep, titled, vbox)
 
 NEARS = [("", "不使用", "點進輸入框時什麼都不做"),
          ("bubble", "語音氣泡", "點擊處旁出現小按鈕，點一下開麥克風"),
          ("listen", "自動開麥克風", "點進輸入框時直接開麥克風")]
-OFFS = [(0, "不自動關閉")] + [(m, f"{m} 分鐘") for m in (1, 3, 5, 10, 30)]
+# small chips on one line (2026-10-21: the room went to the cards' illustrations)
+OFFS = [(0, "不關閉")] + [(m, f"{m} 分") for m in (1, 3, 5, 10, 30)]
 CUSTOM_MINUTES = (1, 240, 15)   # the 自訂 chip: lowest, highest, first offered
 TEST_IDLE = "按「測試麥克風」後說幾句話，看看音量有沒有跟著動"
 TEST_LISTENING = "正在聽，說幾句話試試看"
@@ -82,24 +84,25 @@ class MinutesChip(QFrame):
     def __init__(self):
         super().__init__(objectName="minchip")
         self.setAttribute(Qt.WA_StyledBackground)
-        self.setFixedHeight(30)   # as high as the other chips (28 cut the 自訂 chip's bottom edge)
+        self.setFixedHeight(26)   # as high as the small chips beside it (24) and their border
         h = QHBoxLayout(self)
         h.setContentsMargins(0, 0, 0, 0)
         h.setSpacing(4)
         self.chip = button("自訂", self._open, chip=True)
+        self.chip.setProperty("small", True)
         self.box = QLineEdit(str(CUSTOM_MINUTES[2]), objectName="minutes")
         self.box.setValidator(QIntValidator(*CUSTOM_MINUTES[:2], self.box))
         self.box.setAlignment(Qt.AlignCenter)
-        self.box.setFixedSize(42, 22)
-        self.box.setFont(theme.font(13, 700, num=True))
+        self.box.setFixedSize(34, 18)
+        self.box.setFont(theme.font(12.5, 700, num=True))
         self.box.setAccessibleName("自訂分鐘數")
         self.box.editingFinished.connect(self._typed)
-        self.unit = QLabel("分鐘")
-        self.unit.setFont(theme.font(13, 500))
+        self.unit = QLabel("分")
+        self.unit.setFont(theme.font(12.5, 500))
         h.addWidget(self.chip)
         h.addWidget(self.box)
         h.addWidget(self.unit)
-        self.setStyleSheet("QFrame#minchip[on=\"true\"] { background: %s; border-radius: 15px; }"
+        self.setStyleSheet("QFrame#minchip[on=\"true\"] { background: %s; border-radius: 13px; }"
                            " QLineEdit#minutes { background: rgba(255,255,255,56); color: #FFFFFF; border: none;"
                            " border-radius: 4px; padding: 0; min-height: 0; selection-background-color: #FFFFFF;"
                            " selection-color: %s; } QLabel { color: #FFFFFF; background: transparent; }"
@@ -112,7 +115,7 @@ class MinutesChip(QFrame):
         if on:
             self.box.setText(str(minutes))
         prop(self, on=on)   # before hiding the field: losing the focus it sends editingFinished
-        self.layout().setContentsMargins(*((7, 0, 11, 0) if on else (0, 0, 0, 0)))
+        self.layout().setContentsMargins(*((6, 0, 10, 0) if on else (0, 0, 0, 0)))
         self.chip.setVisible(not on)
         self.box.setVisible(on)
         self.unit.setVisible(on)
@@ -254,7 +257,7 @@ class MicPage(QWidget):
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(8)
         self.no_way = label("目前沒有任何方式能開麥克風，請至少開啟一種", warn=True)
-        v.addLayout(hbox(label("開麥克風的方式", sh=True), self.no_way, None, spacing=10))
+        v.addWidget(self.no_way)
         grid = QGridLayout()
         grid.setSpacing(12)
         for i in range(3):
@@ -262,6 +265,7 @@ class MicPage(QWidget):
 
         # 快捷鍵
         self.hk_card, c = card()
+        self._illustrate(self.hk_card, c, "keys")
         self.hk_pill = Pill()
         c.addLayout(hbox(label("快捷鍵", h3=True), Info(
             "按「設定按鍵」，再按下想用的鍵盤按鍵（可以加 Ctrl、Shift、Alt、Win）或滑鼠按鍵（左鍵以外）；按 Esc 或點滑鼠左鍵"
@@ -277,6 +281,7 @@ class MicPage(QWidget):
 
         # 點進輸入框時
         self.near_card, c = card()
+        self._illustrate(self.near_card, c, "box")
         self.near_pill = Pill()
         c.addLayout(hbox(label("點進輸入框時", h3=True), Info(
             "用滑鼠左鍵點進可以打字的地方時：\n・語音氣泡：點擊處旁出現小按鈕，點一下開麥克風；打字、捲動滾輪或點到不能打字的"
@@ -291,16 +296,12 @@ class MicPage(QWidget):
             box.addWidget(o)
         c.addLayout(box)
         c.addStretch(1)
-        self.auto_off = QCheckBox("自動關閉麥克風")
-        self.auto_off.setCursor(Qt.PointingHandCursor)
-        self.auto_off.toggled.connect(self._auto_off)
-        c.addLayout(hbox(self.auto_off, Info("當偵測到無法輸入時自動關閉麥克風：游標從輸入框移到不能打字的地方（網頁空白處、"
-                                             "按鈕、桌面）就關掉，不管麥克風是怎麼打開的"), None, spacing=6))
         grid.addWidget(self.near_card, 0, 1)
 
         # 浮動按鈕
         # design M2 (2026-10-20, the user's pick): a 顯示浮動按鈕 row with its switch, the two options hanging under it
         self.float_card, c = card()
+        self._illustrate(self.float_card, c, "float")
         self.float_pill = Pill()
         c.addLayout(hbox(label("浮動按鈕", h3=True), Info("停在螢幕上的按鈕，點一下開麥克風，拖到哪就留在哪；樣子和大小在"
                                                        "「外觀與聲音」設定"), None, self.float_pill, spacing=6))
@@ -324,8 +325,7 @@ class MicPage(QWidget):
         grid.addWidget(self.float_card, 0, 2)
         v.addLayout(grid)
 
-        v.addSpacing(8)
-        v.addWidget(label("關閉與裝置", sh=True))
+        v.addSpacing(4)
         grid2 = QGridLayout()
         grid2.setSpacing(12)
         grid2.setColumnStretch(0, 1)
@@ -333,7 +333,7 @@ class MicPage(QWidget):
         off_card, c = card()
         c.addLayout(hbox(label("沒講話多久自動關閉", h3=True), Info("麥克風開著卻一直沒聽到人聲時自動關掉，避免忘了關；"
                                                               "關掉時播結束音"), None, spacing=6))
-        self.offs = Choice(OFFS)
+        self.offs = Choice(OFFS, small=True)
         self.offs.picked.connect(self._off)
         self.custom_off = MinutesChip()
         self.custom_off.picked.connect(self._off)
@@ -343,6 +343,12 @@ class MicPage(QWidget):
         self.enter_switch = Switch(name="送出訊息後關閉")
         self.enter_switch.toggled.connect(self._enter)
         c.addLayout(_row(titled("送出訊息後關閉", "按 Enter 或說「送出」後；Shift+Enter 換行不算"), self.enter_switch))
+        c.addWidget(sep())
+        # 自動關閉麥克風 (auto_off), here since 2026-10-21 with the other ways it goes off
+        self.auto_off = Switch(name="離開輸入框後關閉")
+        self.auto_off.toggled.connect(self._auto_off)
+        c.addLayout(_row(titled("離開輸入框後關閉", "游標移到網頁空白處、按鈕等不能打字的地方時"),
+                         self.auto_off))
         c.addStretch(1)
         grid2.addWidget(off_card, 0, 0)
         dev_card, c = card()
@@ -374,6 +380,12 @@ class MicPage(QWidget):
         v.addLayout(grid2)
         v.addStretch(1)
 
+    @staticmethod
+    def _illustrate(frame, lay, kind: str):
+        ill = Illustration(kind)
+        ill.watch(frame)
+        lay.addWidget(ill)
+
     # --- values ---
     def load(self):
         cfg = self.cfg
@@ -384,9 +396,7 @@ class MicPage(QWidget):
         self.float_hide.setChecked(not cfg.float_keep)
         self._show_float()
         self._show_off()
-        self.auto_off.blockSignals(True)
-        self.auto_off.setChecked(cfg.auto_off)
-        self.auto_off.blockSignals(False)
+        self.auto_off.set_quiet(cfg.auto_off)
         self.enter_switch.set_quiet(cfg.stop_on_enter)
         self.mute_switch.set_quiet(cfg.mute_while_recording)
         self.mic.blockSignals(True)

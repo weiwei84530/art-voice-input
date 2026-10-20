@@ -111,7 +111,7 @@ QPushButton[link="true"] {{ background: transparent; border: none; color: {t['ac
               text-decoration: underline; }}
 QPushButton[chip="true"] {{ min-height: 28px; max-height: 28px; border-radius: 14px; padding: 0 12px; }}
 QPushButton[chip="true"]:checked {{ background: {t['acc']}; color: #FFFFFF; border: 1px solid {t['acc']}; }}
-QPushButton[chip="true"][small="true"] {{ min-height: 24px; max-height: 24px; border-radius: 12px; padding: 0 10px;
+QPushButton[chip="true"][small="true"] {{ min-height: 24px; max-height: 24px; border-radius: 12px; padding: 0 8px;
               font-size: 12.5px; }}
 QPushButton[seg="true"] {{ background: transparent; border: none; border-radius: 5px; color: {t['muted']};
               min-height: 30px; padding: 0 12px; }}

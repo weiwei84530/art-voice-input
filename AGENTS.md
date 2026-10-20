@@ -93,8 +93,8 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
   (`auto_off`, below). Red warning on 麥克風 when nothing can turn it on.
 - **Focus** (`App._watch_focus`, every 0.3s, `selection.focus_info`: editable?, identity, rect; a terminal always
   counts as editable). With auto_listen a left click that put the focus in a text box turns listening on, at the
-  moments the bubble would show (`App._clicked`; keyboard focus does nothing; 2026-10-20). 自動關閉麥克風
-  (`auto_off`, off by default, a checkbox in the 點進輸入框時 card, for any way listening was turned on): the focus
+  moments the bubble would show (`App._clicked`; keyboard focus does nothing; 2026-10-20). 離開輸入框後關閉
+  (`auto_off`, off by default, a switch in the auto-off card since 2026-10-21, for any way listening was turned on): the focus
   leaving a text box for a non-editable place turns it off. The settings window in front counts as non-editable
   (2026-10-20, the user's request: the user knows where they clicked, a microphone left on there misleads); the
   floating button, bubble and 選字 menu (never in front) and unknown controls change nothing.
@@ -262,9 +262,11 @@ names carry the logo's solid shadow, from design H5; the version, the status lin
 six tiles, each icon
 bled large into the tile's bottom right (tilted 5°; hover lifts it up-right, turning clockwise). A tile opens its page
 (transition Fly): the block shrinks to a 56px strip that goes home, the icon flies to the page title. Pages: 麥克風
-(design M2: hotkey card, 點進輸入框時 radio, floating button card with a 顯示浮動按鈕 row and its two options under
-it; no orange outline on cards (outlines answer the pointer only); each card's state pill (`kit.Pill`) is solid
-orange and breathes while on, all pills in step with the clock; auto-off chips, stop_on_enter, device with 測試麥克風
+(design M2: no section labels since 2026-10-21; each of the three cards opens with its illustration (`ui/illus.py`,
+round 13's L1-L3 drawn in Qt, played while the pointer is on the card, a still frame at rest, never with 節流模式;
+clicks are cartoon bursts); hotkey card, 點進輸入框時 radio, floating button card with a 顯示浮動按鈕 row and its two
+options under it; no orange outline on cards (outlines answer the pointer only); each card's state pill (`kit.Pill`) is solid
+orange and breathes while on, all pills in step with the clock; auto-off small chips on one line with 送出訊息後關閉 and 離開輸入框後關閉 under them, device with 測試麥克風
 (`audio.LevelProbe`, its own stream; meter design I1: 24 segments, the last six warmer, a falling peak tick; stops
 when the page hides), mute), 外觀與聲音 (on one screen, no scrolling: preview beside the mark colors (design A3,
 named), button looks beside the glow, whose 自訂顏色、速度與邊緣 slides its editor in its place in the same card
@@ -277,8 +279,7 @@ included, is marked; 說標點的名字 and 說「詞的字」 cards below), 詞
 order), 辨識紀錄 (design 1: timeline, filters 全部 / 文字 / 指令 / 選字與復原, 清除紀錄 → `App._clear_log`), 系統
 (design 3: 外觀模式 亮色 / 暗色 / 跟隨系統 with sun / moon / computer icons, autostart, 節流模式, settings file
 drop zone, about). 節流模式 (`orb_lite`) also calms this window (`kit.calm`): pages switch at once, no hover,
-switch or slide animations, the ready dot and state pills hold still, the preview's glow stands still. Small icon
-animations for the three 麥克風 cards are still being designed (round 13 on the canvas). `config.theme` drives the settings window and the 選字 menu;
+switch or slide animations, the ready dot and state pills hold still, the preview's glow stands still. `config.theme` drives the settings window and the 選字 menu;
 the floating button, bubble and glow are colored and not themed. `dev/settings_preview.py [page] [--dark]
 [shot.png]` shows the window on a temp copy of the user's data.
 - One typeface, Noto Sans TC (Bahnschrift for numbers): the window sets the application's font, since a style
