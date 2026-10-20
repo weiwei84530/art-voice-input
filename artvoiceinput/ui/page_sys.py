@@ -149,6 +149,10 @@ class SysPage(QWidget):
                 val = label(val)
             val.setFont(theme.font(15, 600, num=True))
             val.setFixedHeight(24)
+            if k == "辨識引擎":
+                # 本機 falls back to Noto Sans TC, whose taller line, centered, put the baseline 2px lower than the
+                # others' (2026-10-21); from the top it lands on theirs
+                val.setAlignment(Qt.AlignLeft | Qt.AlignTop)
             about.addWidget(dim(k), 0, col, Qt.AlignLeft | Qt.AlignBottom)
             about.addWidget(val, 1, col, Qt.AlignLeft | Qt.AlignVCenter)
         about.setColumnStretch(3, 1)
