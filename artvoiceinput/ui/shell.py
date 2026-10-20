@@ -3,9 +3,10 @@ block on the left (logo, 阿特語音輸入法, version) and six tiles, each wit
 opens its page: the block shrinks to a 56px strip that leads back home, the tile's icon flies to the page title
 (transition 1, Fly), the page fades in."""
 import ctypes
+import time
 
-from PySide6.QtCore import QEasingCurve, QPointF, QRectF, Qt, QTimer, QVariantAnimation, Signal
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QTransform
+from PySide6.QtCore import QEasingCurve, QPointF, QRect, QRectF, Qt, QTimer, QVariantAnimation, Signal
+from PySide6.QtGui import QColor, QFontMetricsF, QPainter, QPainterPath, QPainterPathStroker, QPen, QTransform
 from PySide6.QtWidgets import (QAbstractButton, QGraphicsDropShadowEffect, QGraphicsOpacityEffect, QLabel,
                                QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
@@ -55,13 +56,62 @@ def lerp(a, b, k):
 
 class Brand(QWidget):
     """The orange block: a large faint logo bleeding off the bottom right, the status, the logo, the name and the
-    version. `fade` 0..1 hides the text and logo (sliding left) as the block shrinks."""
+    version. `fade` 0..1 hides the text and logo (sliding left) as the block shrinks. The logo, name, version and
+    small lines carry the same solid shadow (three dark red silhouettes, a little larger each, shifted down: design
+    H5, the user's pick 2026-10-20); the status line has none, its dot pulses (a ring of light spreading out) while
+    ready."""
+    PULSE_S = 1.8                  # one ring
+    SHADOW = QColor("#780A00")
 
     def __init__(self, parent):
         super().__init__(parent)
         self.fade = 0.0
         self.status = "就緒"
         self._logo = logo_renderer()
+        self._logo_shadow = logo_renderer("#780A00")
+        self._shadows = {}         # (text, font, rect, shift, grow) -> the three silhouettes, made once
+        self._pulse = QTimer(self, interval=33)
+        self._pulse.timeout.connect(self._tick)
+        self._t0 = time.monotonic()
+
+    def showEvent(self, e):
+        self._pulse.start()
+
+    def hideEvent(self, e):
+        self._pulse.stop()
+
+    def _tick(self):
+        if self.fade < 1 and self.status == "就緒" and self.window().isVisible():
+            self.update(QRect(34 + 3 - 14, 28 - 14, 28, 28))   # only the dot
+
+    def _text(self, p, rect: QRectF, align, text: str, shift: float = 0, grow: float = 0):
+        """Text, over its solid shadow when shift is given."""
+        if shift:
+            f = p.font()
+            key = (text, f.key(), rect.getRect(), int(align), shift, grow)
+            layers = self._shadows.get(key)
+            if layers is None:
+                fm = QFontMetricsF(f)
+                if align & Qt.AlignBottom:
+                    base = rect.bottom() - fm.descent()
+                else:
+                    base = rect.center().y() + (fm.ascent() - fm.descent()) / 2
+                path = QPainterPath()
+                path.addText(QPointF(rect.x(), base), f, text)
+                layers = []
+                for d in (14, 12, 10):
+                    st = QPainterPathStroker()
+                    st.setWidth(2 * grow * d / 14)
+                    st.setJoinStyle(Qt.RoundJoin)
+                    layers.append(st.createStroke(path).united(path).translated(0, shift))
+                self._shadows[key] = layers
+            p.save()
+            a = p.opacity()
+            p.setOpacity(a * 0.06)
+            for layer in layers:
+                p.fillPath(layer, self.SHADOW)
+            p.restore()
+        p.drawText(rect, align, text)
 
     def paintEvent(self, _):
         p = QPainter(self)
@@ -77,11 +127,18 @@ class Brand(QWidget):
         p.translate(-40 * SWIFT(self.fade), 0)
         x = 34
         white = QColor("#FFFFFF")
+        dot = QPointF(x + 3.5, 28)
         p.setPen(Qt.NoPen)
-        p.setBrush(QColor(255, 255, 255, 77))
-        p.drawEllipse(QPointF(x + 3.5, 28), 6.5, 6.5)
+        if self.status == "就緒":
+            k = ((time.monotonic() - self._t0) / self.PULSE_S) % 1.0
+            p.setBrush(QColor(255, 255, 255, round(110 * (1 - k) ** 1.6)))
+            r = 3.5 + 7.5 * SOFT(k)
+            p.drawEllipse(dot, r, r)
+        else:
+            p.setBrush(QColor(255, 255, 255, 77))
+            p.drawEllipse(dot, 6.5, 6.5)
         p.setBrush(white)
-        p.drawEllipse(QPointF(x + 3.5, 28), 3.5, 3.5)
+        p.drawEllipse(dot, 3.5, 3.5)
         p.setPen(white)
         p.setFont(theme.font(12.5, 500))
         text = "就緒，隨時可以開始說話" if self.status == "就緒" else self.status
@@ -89,28 +146,26 @@ class Brand(QWidget):
         # bottom-up: footnote, version, English name, name, logo
         p.setFont(theme.font(13))
         p.setOpacity(a * 0.92)
-        p.drawText(QRectF(x, 572, 330, 20), Qt.AlignLeft | Qt.AlignVCenter, "語音在這台電腦上辨識，不會上傳")
+        self._text(p, QRectF(x, 572, 330, 20), Qt.AlignLeft | Qt.AlignVCenter, "語音在這台電腦上辨識，不會上傳", 2, 1)
         p.setOpacity(a)
         p.setFont(theme.font(56, 700, num=True))
         vw = p.fontMetrics().horizontalAdvance(__version__)
-        p.drawText(QRectF(x, 496, 300, 64), Qt.AlignLeft | Qt.AlignBottom, __version__)
+        self._text(p, QRectF(x, 496, 300, 64), Qt.AlignLeft | Qt.AlignBottom, __version__, 5, 2)
         p.setFont(theme.font(13))
         p.setOpacity(a * 0.9)
-        p.drawText(QRectF(x + vw + 10, 496, 100, 58), Qt.AlignLeft | Qt.AlignBottom, "版本")
+        self._text(p, QRectF(x + vw + 10, 496, 100, 58), Qt.AlignLeft | Qt.AlignBottom, "版本", 2, 1)
         p.setOpacity(a)
         p.setFont(theme.font(22, 600, num=True))
-        p.drawText(QRectF(x, 438, 330, 30), Qt.AlignLeft | Qt.AlignVCenter, "Art VoiceInput")
+        self._text(p, QRectF(x, 438, 330, 30), Qt.AlignLeft | Qt.AlignVCenter, "Art VoiceInput", 3, 1.5)
         p.setFont(theme.font(34, 700))
         f = p.font()
         f.setLetterSpacing(f.SpacingType.PercentageSpacing, 104)
         p.setFont(f)
-        p.drawText(QRectF(x, 394, 340, 44), Qt.AlignLeft | Qt.AlignVCenter, "阿特語音輸入法")
-        # the logo with its soft shadow
-        p.setOpacity(a * 0.35)
-        shadow = logo_renderer("#780A00")
+        self._text(p, QRectF(x, 394, 340, 44), Qt.AlignLeft | Qt.AlignVCenter, "阿特語音輸入法", 4, 2)
+        # the logo with its solid shadow
         for d in (14, 12, 10):
             p.setOpacity(a * 0.06)
-            shadow.render(p, QRectF(x - 14 - d / 4, 254 + 10 - d / 4, 132 + d / 2, 132 + d / 2))
+            self._logo_shadow.render(p, QRectF(x - 14 - d / 4, 254 + 10 - d / 4, 132 + d / 2, 132 + d / 2))
         p.setOpacity(a)
         self._logo.render(p, QRectF(x - 14, 254, 132, 132))
 

@@ -87,12 +87,15 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
   press is always a tap, fully suppressed; a modifier alone fires on release with nothing else pressed and is not
   suppressed, with Alt/Win an unassigned 0xE8 is sent so no menu opens), the floating button, the bubble,
   點進輸入框時 = 自動開麥克風 (`auto_listen`), spoken 結束,
-  送出訊息後自動關閉麥克風 (`stop_on_enter`: Enter / Ctrl+Enter or an operation's Enter step), 自動關閉麥克風 (no
-  speech for `auto_off_minutes`, default 5; tray notice). Red warning on 一般 when nothing can turn it on.
+  送出訊息後自動關閉麥克風 (`stop_on_enter`: Enter / Ctrl+Enter or an operation's Enter step), 沒講話多久自動關閉
+  (no speech for `auto_off_minutes`, default 5, chips or a 自訂 chip taking 1-240 minutes; tray notice), 自動關閉麥克風
+  (`auto_off`, below). Red warning on 麥克風 when nothing can turn it on.
 - **Focus** (`App._watch_focus`, every 0.3s, `selection.focus_info`: editable?, identity, rect; a terminal always
-  counts as editable). With auto_listen a text box turns listening on, leaving for a non-editable place turns it off;
-  turned off by hand it stays off in that box (`_box_quiet`) until the focus leaves or a left click into the box
-  (`App._clicked`). Art VoiceInput's own windows and unknown controls change nothing.
+  counts as editable). With auto_listen a left click that put the focus in a text box turns listening on, at the
+  moments the bubble would show (`App._clicked`; keyboard focus does nothing; 2026-10-20). 自動關閉麥克風
+  (`auto_off`, off by default, a checkbox in the 點進輸入框時 card, for any way listening was turned on): the focus
+  leaving a text box for a non-editable place turns it off. Art VoiceInput's own windows and unknown controls change
+  nothing.
 - **Bubble** (`show_bubble`, default): fades in just right of a left click (not a drag) that put the focus in a text
   box (focus read 120ms after the click); goes on typing / wheel (at once) or focus leaving (fade). Keyboard focus
   shows nothing. Placed at the click because UIA caret positions are wrong in Notion, LINE, web pages.
@@ -241,7 +244,8 @@ on.
 
 Settings window (`ui/`, the 2026-10 redesign; mockups on the claude.ai Design canvas
 https://claude.ai/artifact/8UWdBateenAsqfZKeHPeiG, style C): frameless 960x640, Windows 11 rounded corners. Home:
-the orange brand block (status, logo, 阿特語音輸入法, version from `artvoiceinput.__version__`) and six tiles, each icon
+the orange brand block (status with a pulsing dot while ready, logo, 阿特語音輸入法, version from
+`artvoiceinput.__version__`; all but the status line carry the logo's solid shadow, design H5) and six tiles, each icon
 bled large into the tile's bottom right (tilted 5°; hover lifts it up-right, turning clockwise). A tile opens its page
 (transition Fly): the block shrinks to a 56px strip that goes home, the icon flies to the page title. Pages: 麥克風
 (hotkey card, 點進輸入框時 radio, floating button + its two options; auto-off chips, stop_on_enter, device, mute), 外觀與聲音
@@ -312,7 +316,5 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
 
 ## Open questions
 
-- With auto_listen, listening turned off by 送出 / the idle timeout stays off in that box until the focus leaves or
-  a click into it (asked, not decided).
 - Not yet tried in a real terminal: the spoken edit commands. Not tried with the draft mark: Notepad, LINE,
   Electron apps, scrolling while drafting.

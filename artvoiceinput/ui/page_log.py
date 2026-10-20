@@ -126,6 +126,8 @@ class Entry(QWidget):
         if r["copy"]:
             b = button("", lambda: self.copy.emit(r["copy"]), ib=True)
             b.setIcon(icon("copy", T("muted"), 15, 1.9))
+            # as high as the time and tag (22): at 28 it made its row taller, the row's text sat high in it
+            b.setStyleSheet("min-height: 22px; max-height: 22px; min-width: 22px; max-width: 22px;")
             b.setToolTip("複製這句")
             b.setProperty("quick_tip", True)
             h.addWidget(b, 0, Qt.AlignTop)

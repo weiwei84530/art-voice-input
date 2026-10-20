@@ -1,5 +1,5 @@
 """Art VoiceInput: single-process tray app. Listening is turned on and off from the interface (the floating button, the
-bubble by a click in a text box: show_float / show_bubble; the focus coming into a text box: auto_listen), or by pressing the one hotkey (any key or
+bubble by a click in a text box: show_float / show_bubble; a click into a text box: auto_listen), or by pressing the one hotkey (any key or
 mouse button but the left one, modifiers allowed, the 一般 tab; 2026-10-16/17, the user's design: nothing else is bound
 to keys any more, and a press of it is always a tap: no hold or double tap given back to the key).
 
@@ -225,7 +225,6 @@ class App(QObject):
         self._box = None                         # the text box the focus is in, its identity
         self._click = None                       # (point, time) of a click the bubble may show by
         self._bubble_back = False                # the bubble showed when listening started: it comes back after
-        self._box_quiet = False                  # listening was turned off by hand in it: not on again by itself
         self._box_auto = False                   # listening was turned on by the focus
         self._focus_busy = False
         self._focus_pool = ThreadPoolExecutor(max_workers=1)   # its UI Automation reads (one COM object per thread)
@@ -610,10 +609,10 @@ class App(QObject):
         self.marks.hide()
 
     def _watch_focus(self):
-        """Main thread, every 0.3s with a button by text boxes or auto_listen: where the focus is, read on a thread
-        (UI Automation)."""
-        if not (self.cfg.show_bubble or self.cfg.show_float or self.cfg.auto_listen) or self._focus_busy \
-                or self._quitting:
+        """Main thread, every 0.3s with a button by text boxes, auto_listen or auto_off: where the focus is, read on a
+        thread (UI Automation)."""
+        if not (self.cfg.show_bubble or self.cfg.show_float or self.cfg.auto_listen or self.cfg.auto_off) \
+                or self._focus_busy or self._quitting:
             return
         self._focus_busy = True
 
@@ -626,36 +625,34 @@ class App(QObject):
     def _clicked(self, pt):
         """Main thread: a left click (not a drag) outside our windows. With the bubble or auto_listen, the focus is
         read soon after (where the click put it): in a text box the bubble shows by the click (2026-10-16, the user's
-        design), or listening comes on again in a box it was turned off in (2026-10-17, the user's request)."""
+        design), or listening comes on (2026-10-20, the user's design)."""
         if not (self.cfg.show_bubble or self.cfg.auto_listen) or self._listening:
             return
         self._click = (pt, time.monotonic())
         QTimer.singleShot(120, self._watch_focus)
 
     def _focus_seen(self, editable, key, started: float = 0.0):
-        """Main thread (the user's requests, 2026-10-16). The focus is in a text box: the bubble shows by a click that
-        has just been made (in it); a new one (another control or window) with auto_listen turns listening on, unless
-        it was turned off by hand in this box (a click in it turns it on again); the floating button shows. The focus went where nothing can be typed (a web page's blank part, a button, the
-        desktop): the bubble goes, and listening is turned off (when it was in a text box before: listening may be
-        turned on by hand anywhere). Unknown places and Art VoiceInput's own windows change nothing."""
+        """Main thread (the user's requests, 2026-10-16 and 20). The focus is in a text box: a click that has just put it
+        there shows the bubble by the click, or with auto_listen turns listening on (keyboard focus does neither);
+        the floating button shows. The focus went where nothing can be typed (a web page's blank part, a button, the
+        desktop): the bubble goes, and with auto_off listening is turned off (when it was in a text box before:
+        listening may be turned on by hand anywhere). Unknown places and Art VoiceInput's own windows change
+        nothing."""
         self._focus_busy = False
         bubble, floating, auto = self.cfg.show_bubble, self.cfg.show_float, self.cfg.auto_listen
-        if not (bubble or floating or auto) or editable is None:
+        if not (bubble or floating or auto or self.cfg.auto_off) or editable is None:
             return
         click = None
         if self._click is not None and self._click[1] <= started:   # a read begun before it says nothing of it
             click, self._click = self._click, None
         if editable:
-            new = key != self._box
-            if new:
-                self._box, self._box_quiet = key, False
-            if click and time.monotonic() - click[1] < 1.5:
-                self._box_quiet = False   # clicked in again: on again (2026-10-17, the user's request)
-            if auto and not self._listening and not self._box_quiet:
-                log.info("listen: on, the focus is in a text box")
+            self._box = key
+            clicked = click is not None and time.monotonic() - click[1] < 1.5
+            if auto and not self._listening and clicked:
+                log.info("listen: on, clicked into a text box")
                 if self._listen_now("focus", quiet=True):
                     self._box_auto = True
-            if bubble and not self._listening and click and time.monotonic() - click[1] < 1.5:
+            if bubble and not self._listening and clicked:
                 self.bubble.show_at(click[0])
             if floating:
                 self._update_float()
@@ -663,8 +660,8 @@ class App(QObject):
         was, self._box = self._box, None
         self.bubble.fade_out()   # the user's request, 2026-10-16
         self._update_float()
-        if auto and was is not None and self._listening:
-            log.info("listen: off, the focus left the text box")
+        if self.cfg.auto_off and was is not None and self._listening:
+            log.info("listen: off, the focus left the text box (自動關閉麥克風)")
             self._stop_listen(by_focus=True)
 
     def _preview_glow(self, style_id: str):
@@ -678,10 +675,7 @@ class App(QObject):
             self._preview_end.start(3000)
 
     def _stop_listen(self, by_focus: bool = False):
-        """Listening off. by_focus: the focus left the text box (auto_listen); any other way of turning it off keeps
-        the focus from turning it on again in the same box."""
-        if not by_focus and self._box is not None:
-            self._box_quiet = True
+        """Listening off. by_focus: the focus left the text box (auto_off)."""
         self._box_auto = False
         self._listen_owner, self._listen_shown = None, False
         self.listener.stop()   # speech still going on is handed over as a last piece

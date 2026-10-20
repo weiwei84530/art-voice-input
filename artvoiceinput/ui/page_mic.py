@@ -1,8 +1,9 @@
 """麥克風: the ways to turn listening on (hotkey, clicking into a text box, the floating button), when it turns off,
 and the device."""
-from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QConicalGradient, QPainter, QPen, QRadialGradient
-from PySide6.QtWidgets import QAbstractButton, QCheckBox, QComboBox, QGridLayout, QVBoxLayout, QWidget
+from PySide6.QtCore import QRectF, Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QConicalGradient, QIntValidator, QPainter, QPen, QRadialGradient
+from PySide6.QtWidgets import (QAbstractButton, QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
+                               QLineEdit, QVBoxLayout, QWidget)
 
 from .. import audio
 from ..keys import hotkey_label
@@ -11,8 +12,76 @@ from .kit import (Choice, Info, Pill, Switch, T, button, card, dim, hbox, label,
 
 NEARS = [("", "不使用", "點進輸入框時什麼都不做"),
          ("bubble", "語音氣泡", "點擊處旁出現小按鈕，點一下開麥克風"),
-         ("listen", "自動開麥克風", "直接開麥克風，離開輸入框時關閉")]
+         ("listen", "自動開麥克風", "點進輸入框時直接開麥克風")]
 OFFS = [(0, "不自動關閉")] + [(m, f"{m} 分鐘") for m in (1, 3, 5, 10, 30)]
+CUSTOM_MINUTES = (1, 240, 15)   # the 自訂 chip: lowest, highest, first offered
+
+
+class MinutesChip(QFrame):
+    """自訂 at the end of the auto-off chips (2026-10-20, the user's design): a chip; picked, an orange chip holding
+    a minutes field that can be typed in."""
+    picked = Signal(int)
+
+    def __init__(self):
+        super().__init__(objectName="minchip")
+        self.setAttribute(Qt.WA_StyledBackground)
+        self.setFixedHeight(28)
+        h = QHBoxLayout(self)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(4)
+        self.chip = button("自訂", self._open, chip=True)
+        self.box = QLineEdit(str(CUSTOM_MINUTES[2]), objectName="minutes")
+        self.box.setValidator(QIntValidator(*CUSTOM_MINUTES[:2], self.box))
+        self.box.setAlignment(Qt.AlignCenter)
+        self.box.setFixedSize(42, 22)
+        self.box.setFont(theme.font(13, 700, num=True))
+        self.box.setAccessibleName("自訂分鐘數")
+        self.box.editingFinished.connect(self._typed)
+        self.unit = QLabel("分鐘")
+        self.unit.setFont(theme.font(13, 500))
+        h.addWidget(self.chip)
+        h.addWidget(self.box)
+        h.addWidget(self.unit)
+        self.setStyleSheet("QFrame#minchip[on=\"true\"] { background: %s; border-radius: 14px; }"
+                           " QLineEdit#minutes { background: rgba(255,255,255,56); color: #FFFFFF; border: none;"
+                           " border-radius: 4px; padding: 0; min-height: 0; selection-background-color: #FFFFFF;"
+                           " selection-color: %s; } QLabel { color: #FFFFFF; background: transparent; }"
+                           % (theme.ACCENT, theme.ACCENT))
+        self.set(None)
+
+    def set(self, minutes):
+        """None: the plain 自訂 chip; a number: picked, showing it."""
+        on = minutes is not None
+        if on:
+            self.box.setText(str(minutes))
+        prop(self, on=on)   # before hiding the field: losing the focus it sends editingFinished
+        self.layout().setContentsMargins(*((7, 0, 11, 0) if on else (0, 0, 0, 0)))
+        self.chip.setVisible(not on)
+        self.box.setVisible(on)
+        self.unit.setVisible(on)
+        self.updateGeometry()
+        if self.parentWidget() is not None and self.parentWidget().layout() is not None:
+            self.parentWidget().layout().invalidate()
+
+    def _typed(self):
+        # also sent when the field loses the focus because another chip was picked: then it is no longer picked
+        if self.property("on"):
+            self.picked.emit(self.value())
+
+    def value(self) -> int:
+        try:
+            return min(max(int(self.box.text()), CUSTOM_MINUTES[0]), CUSTOM_MINUTES[1])
+        except ValueError:
+            return CUSTOM_MINUTES[2]
+
+    def _open(self):
+        self.set(self.value())
+        self.picked.emit(self.value())
+        self.box.setFocus()
+        self.box.selectAll()
+
+    def sizeHint(self):
+        return self.layout().sizeHint()
 
 
 class KeyCap(QWidget):
@@ -142,6 +211,13 @@ class FloatSample(QWidget):
         p.drawEllipse(orb)
 
 
+def _row(text: QWidget, switch: QWidget) -> QHBoxLayout:
+    """A setting's name and line, then its switch: the text takes the room (its line stays on one line)."""
+    h = hbox(text, switch)
+    h.setStretch(0, 1)
+    return h
+
+
 class MicPage(QWidget):
     title = "麥克風"
 
@@ -179,8 +255,8 @@ class MicPage(QWidget):
         self.near_pill = Pill()
         c.addLayout(hbox(label("點進輸入框時", h3=True), Info(
             "用滑鼠左鍵點進可以打字的地方時：\n・語音氣泡：點擊處旁出現小按鈕，點一下開麥克風；打字、捲動滾輪或點到不能打字的"
-            "地方就收起來\n・自動開麥克風：直接開麥克風，點到不能打字的地方就關掉；用其他方式關掉後，再點一次輸入框就會重新"
-            "打開"), None, self.near_pill, spacing=6))
+            "地方就收起來\n・自動開麥克風：在語音氣泡會出現的時候直接開麥克風（用鍵盤移進輸入框不算）"), None,
+            self.near_pill, spacing=6))
         self.nears = {}
         box = vbox(spacing=2)
         for key, name, desc in NEARS:
@@ -190,6 +266,11 @@ class MicPage(QWidget):
             box.addWidget(o)
         c.addLayout(box)
         c.addStretch(1)
+        self.auto_off = QCheckBox("自動關閉麥克風")
+        self.auto_off.setCursor(Qt.PointingHandCursor)
+        self.auto_off.toggled.connect(self._auto_off)
+        c.addLayout(hbox(self.auto_off, Info("當偵測到無法輸入時自動關閉麥克風：游標從輸入框移到不能打字的地方（網頁空白處、"
+                                             "按鈕、桌面）就關掉，不管麥克風是怎麼打開的"), None, spacing=6))
         grid.addWidget(self.near_card, 0, 1)
 
         # 浮動按鈕
@@ -224,12 +305,14 @@ class MicPage(QWidget):
                                                               "關掉時播結束音"), None, spacing=6))
         self.offs = Choice(OFFS)
         self.offs.picked.connect(self._off)
+        self.custom_off = MinutesChip()
+        self.custom_off.picked.connect(self._off)
+        self.offs.layout().addWidget(self.custom_off)
         c.addWidget(self.offs)
         c.addWidget(sep())
         self.enter_switch = Switch(name="送出訊息後關閉")
         self.enter_switch.toggled.connect(self._enter)
-        c.addLayout(hbox(titled("送出訊息後關閉", "按 Enter 或說「送出」之後；Shift+Enter 換行不算"), None,
-                         self.enter_switch))
+        c.addLayout(_row(titled("送出訊息後關閉", "按 Enter 或說「送出」後；Shift+Enter 換行不算"), self.enter_switch))
         c.addStretch(1)
         grid2.addWidget(off_card, 0, 0)
         dev_card, c = card()
@@ -244,7 +327,7 @@ class MicPage(QWidget):
         c.addWidget(sep())
         self.mute_switch = Switch(name="錄音時靜音電腦音效")
         self.mute_switch.toggled.connect(self._mute)
-        c.addLayout(hbox(titled("錄音時靜音電腦音效", "關掉麥克風後恢復；原本就靜音的話不會動"), None, self.mute_switch))
+        c.addLayout(_row(titled("錄音時靜音電腦音效", "關掉麥克風後恢復；原本就靜音的話不會動"), self.mute_switch))
         c.addStretch(1)
         grid2.addWidget(dev_card, 0, 1)
         v.addLayout(grid2)
@@ -259,7 +342,10 @@ class MicPage(QWidget):
         self.float_text_only.setChecked(cfg.float_text_only)
         self.float_hide.setChecked(not cfg.float_keep)
         self._show_float()
-        self.offs.set(cfg.auto_off_minutes)
+        self._show_off()
+        self.auto_off.blockSignals(True)
+        self.auto_off.setChecked(cfg.auto_off)
+        self.auto_off.blockSignals(False)
         self.enter_switch.set_quiet(cfg.stop_on_enter)
         self.mute_switch.set_quiet(cfg.mute_while_recording)
         self.mic.blockSignals(True)
@@ -364,6 +450,17 @@ class MicPage(QWidget):
 
     def _off(self, minutes):
         self.cfg.auto_off_minutes = minutes
+        self.win.save()
+        self._show_off()
+
+    def _show_off(self):
+        m = self.cfg.auto_off_minutes
+        preset = m in dict(OFFS)
+        self.offs.set(m if preset else None)
+        self.custom_off.set(None if preset else m)
+
+    def _auto_off(self, on: bool):
+        self.cfg.auto_off = on
         self.win.save()
 
     def _enter(self, on: bool):

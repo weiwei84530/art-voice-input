@@ -58,10 +58,13 @@ class Config:
     # (kept on screen with float_keep, a fixed place to turn listening off); either may go with auto_listen
     show_bubble: bool = True
     show_float: bool = True
-    # 點進輸入框時 自動開麥克風 (the 一般 tab): a text box the focus comes into turns listening on, leaving it for a
-    # place where nothing can be typed turns it off. One choice with show_bubble since 2026-10-17 (the 一般 tab's
-    # 點進輸入框時: 不使用 / bubble / this; the user's design), so at most one of them is on
+    # 點進輸入框時 自動開麥克風 (the 麥克風 page): a left click that puts the focus in a text box turns listening on,
+    # at the moments the bubble would show (2026-10-20, the user's design; keyboard focus does nothing). One choice
+    # with show_bubble (點進輸入框時: 不使用 / bubble / this), so at most one of them is on
     auto_listen: bool = False
+    # 自動關閉麥克風 (that card's checkbox, 2026-10-20, the user's design; off by default): the focus leaving a text box
+    # for a place where nothing can be typed turns listening off, however it was turned on
+    auto_off: bool = False
     # the color the draft is marked with (highlight.py), #AARRGGBB; highlighter yellow by default, unlike a
     # selection's blue (2026-10-16, the user's choice: a selection-blue draft passed for a selection)
     highlight_color: str = "#78FFE45C"
