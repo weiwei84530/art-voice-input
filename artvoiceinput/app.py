@@ -38,7 +38,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 
 import numpy as np
-from PySide6.QtCore import QLockFile, QObject, QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QLockFile, QObject, QPointF, QProcess, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QCursor, QGuiApplication, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
@@ -246,6 +246,7 @@ class App(QObject):
         self.settings.clear_log.connect(self._clear_log)
         self.settings.glow_preview.connect(self._preview_glow)
         self.settings.wizard_heard.connect(self._wizard_heard)
+        self.settings.restart.connect(self.restart)
         self._heard_at = 0.0                     # when speech last began while listening (auto_off_minutes)
         self._idle_timer = QTimer(self, interval=5000, timeout=self._check_idle)
         self._idle_timer.start()
@@ -1940,6 +1941,15 @@ class App(QObject):
             log.exception("autostart failed")
             self.settings.set_status(f"開機啟動設定失敗：{e}")
 
+    def restart(self):
+        """清空並重新設定: a new Art VoiceInput is started the way this one was, and this one quits; the new one waits
+        for the lock (RESTARTED)."""
+        log.info("restart")
+        self.settings.hide()
+        args = [a for a in sys.argv[1:] if a != RESTARTED] + [RESTARTED]
+        QProcess.startDetached(sys.executable, [os.path.abspath(sys.argv[0])] + args, os.getcwd())
+        self.quit()
+
     def quit(self):
         self._quitting = True
         if self._listening:
@@ -2156,6 +2166,9 @@ def _paste_over(sel, text: str) -> bool:
     return True
 
 
+RESTARTED = "--restarted"   # started by App.restart
+
+
 def main():
     paths.migrate_legacy()
     logging.basicConfig(
@@ -2173,7 +2186,7 @@ def main():
     qapp.setQuitOnLastWindowClosed(False)
 
     lock = QLockFile(str(paths.LOCK_PATH))
-    if not lock.tryLock(100):
+    if not lock.tryLock(10000 if RESTARTED in sys.argv else 100):   # restarted: the old one is still closing
         log.info("already running")
         return 0
 

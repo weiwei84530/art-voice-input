@@ -294,7 +294,8 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   replaces settings except `userdata.LOCAL` (mic, autostart, float place, setup_done) and merges the 詞庫 (file
   wins). 清空並重新設定 (a button, like a phone's factory reset, 2026-10-21) asks in a `ui/sheet.py` card (window
   dimmed; 先匯出設定檔… link), then resets everything including the 詞庫 and 辨識紀錄 (models, cache and dev
-  recordings stay) and opens the setup wizard.
+  recordings stay), then the app closes and starts again (`App.restart`, `--restarted` waits for the lock), new,
+  on the setup wizard.
 - **Setup wizard** (`ui/wizard.py`, 2026-10-21, design C of https://claude.ai/artifact/LFjmoPLHVf1bz7irmzKy6i): over
   the whole window, one card on the wall, light or dark with the window. Shown when the settings window opens while
   `setup_done` is false (a new install, after 清空並重新設定; `app.main` opens it at launch; a config.json from

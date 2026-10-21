@@ -12,6 +12,7 @@ class SettingsWindow(Shell):
     glow_preview = Signal(str)      # a glow style picked or changed: shown for a moment
     capture_hotkey = Signal(bool)   # 快捷鍵: take the next press (True), or stop waiting for it
     clear_log = Signal()            # 清除紀錄 on the 辨識紀錄 page
+    restart = Signal()              # 清空並重新設定 done: App closes and starts a new one
     wizard_heard = Signal(object)   # the setup wizard heard speech (16 kHz audio): App decodes it (wizard_said)
 
     def __init__(self, cfg, hotwords, memory):

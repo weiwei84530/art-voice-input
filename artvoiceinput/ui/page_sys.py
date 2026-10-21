@@ -282,7 +282,8 @@ class SysPage(QWidget):
         self.win.start_wizard()
 
     def _reset_now(self):
+        """Cleared and saved, then the app closes and starts again as new (the user's request, 2026-10-21: nothing
+        carried over); setup_done is false, so the new one opens on the setup wizard."""
         userdata.reset(self.cfg, self.win.hotwords, self.win.memory)
-        self.win.clear_log.emit()
         self.win.data_changed()
-        self.win.start_wizard()
+        self.win.restart.emit()
