@@ -75,12 +75,12 @@ class Node(QWidget):
         p.setBrush(T("bg"))
         p.drawEllipse(c, 3, 3)
         p.setPen(T("ink"))
-        p.setFont(theme.font(14, 700))
+        p.setFont(theme.font(14, 700, num=True))   # numbers in the window's number face (2026-10-22)
         fm = p.fontMetrics()
         p.drawText(QPointF(LINE_X + 16, 26 + fm.ascent() / 2 - 2), self.title)
         x = LINE_X + 16 + fm.horizontalAdvance(self.title) + 10
         p.setPen(T("muted"))
-        p.setFont(theme.font(12.5))
+        p.setFont(theme.font(12.5, num=True))
         p.drawText(QPointF(x, 26 + p.fontMetrics().ascent() / 2 - 2), self.meta)
 
 

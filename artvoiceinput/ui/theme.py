@@ -9,6 +9,8 @@ ACCENT = "#FF453A"
 FONT = "Noto Sans TC"            # Windows 11's optional font; Microsoft JhengHei UI stands in
 FONT_FALLBACK = "Microsoft JhengHei UI"
 NUM_FONT = "Bahnschrift SemiCondensed"   # version number, counts, keys (Barlow Semi Condensed in the mockups)
+# for a style-sheet-sized widget (its font-size resets the family): numbers in NUM_FONT, the rest falls to FONT
+NUM_FAMILY = f"font-family: '{NUM_FONT}', '{FONT}', '{FONT_FALLBACK}';"
 
 LIGHT = {"bg": "#F1F2F4", "tile": "#FFFFFF", "tile2": "#F6F7F8", "ink": "#15171A", "muted": "#5E646C",
          "line": "#E0E2E6", "acc": ACCENT, "acct": "#C5261C", "accbg": "rgba(255,69,58,23)",

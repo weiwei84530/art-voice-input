@@ -301,7 +301,8 @@ a mode picked cross-fades the window from a snapshot in 220ms, not with 節流�
 switch or slide animations, the ready dot and state pills hold still, the preview's glow stands still. `config.theme` drives the settings window and the 選字 menu;
 the floating button, bubble and glow are colored and not themed. `dev/settings_preview.py [page] [--dark]
 [shot.png]` shows the window on a temp copy of the user's data.
-- One typeface, Noto Sans TC (Bahnschrift for numbers): the window sets the application's font, since a style
+- One typeface, Noto Sans TC (Bahnschrift for numbers, wherever digits show: chips, counts, dates, times; a
+  style-sheet-sized widget takes `theme.NUM_FAMILY`): the window sets the application's font, since a style
   sheet font-size gave a widget Segoe UI / 正黑體 (grainy, the user's report 2026-10-20). Gray lines 12px, checkboxes
   14px medium like the radio rows' names.
 - Each setting's help is an ⓘ after its name (`ui.kit.Info`), not tooltips. Where an ⓘ doesn't fit (icon buttons,
@@ -320,7 +321,7 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   (`App._paused`: no hotkey, floating button, bubble or listening). 1 microphone: name, device, meter; status 試著說…
   → 正在聽… (speech coming in, decoding) → green dot + 聽到了 when 你剛剛說 shows (decoded on the worker; trial, the
   user decides whether it stays); the icon over 阿特語音輸入法 at 26px (34 stood apart from it), no 已經裝好了; 略過 (plain) becomes 下一步 then. 2 packs, 3 columns, two lines of whole sample
-  terms, no counts; 跳過 / 下一步. 3 便利 / 容易 / 自動 / 工具 (`wizard.PRESETS`, 2026-10-22, rows 80px; 工具: nothing on screen,
+  terms, no counts; 跳過 / 下一步. 3 標準 / 容易 / 自動 / 工具 (`wizard.PRESETS`, 2026-10-22, rows 80px; 工具: nothing on screen,
   右 Alt `vk:a5`, the tray icon on the taskbar turning the microphone on/off, 5 minutes' auto-off only), fixed height,
   each one short line, no list of what it sets; 開始教學 does nothing yet (the tutorial comes later), 跳過教學，直接開始使用 finishes.
   Focus rings only after Tab. With --debug, 系統 has 進入設定精靈 (dark, nothing cleared, applies like the real one).

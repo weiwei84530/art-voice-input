@@ -96,7 +96,7 @@ class MinutesChip(QFrame):
         self.box.setValidator(QIntValidator(*CUSTOM_MINUTES[:2], self.box))
         self.box.setAlignment(Qt.AlignCenter)
         self.box.setFixedSize(34, 18)
-        self.box.setFont(theme.font(12.5, 700))   # the chips' font, not Bahnschrift (2026-10-22, the user's request)
+        self.box.setFont(theme.font(12.5, 700, num=True))
         self.box.setAccessibleName("自訂分鐘數")
         self.box.editingFinished.connect(self._typed)
         self.unit = QLabel("分")
@@ -337,6 +337,8 @@ class MicPage(QWidget):
         c.addLayout(hbox(label("沒講話多久自動關閉", h3=True), Info("麥克風開著卻一直沒聽到人聲時自動關掉，避免忘了關；"
                                                               "關掉時播結束音"), None, spacing=6))
         self.offs = Choice(OFFS, small=True)
+        for b in self.offs.buttons.values():   # the minutes in the window's number face, as 自訂's (2026-10-22)
+            b.setStyleSheet(theme.NUM_FAMILY)
         self.offs.picked.connect(self._off)
         self.custom_off = MinutesChip()
         self.custom_off.picked.connect(self._off)

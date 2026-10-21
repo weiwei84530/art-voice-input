@@ -1,7 +1,7 @@
 """The setup wizard (2026-10-21, the user's design C: one card on the wall, its content changing): shown over the
 settings window at the first launch and after 清空並重新設定, before the home page. Three steps: the microphone heard
 (the level meter; 略過 turns into 下一步 once what was said is decoded and shown as 你剛剛說), term
-packs ticked (跳過 / 下一步), and a starting setup picked (便利 / 容易 / 自動 / 工具, `PRESETS`). Light or dark with the
+packs ticked (跳過 / 下一步), and a starting setup picked (標準 / 容易 / 自動 / 工具, `PRESETS`). Light or dark with the
 window. Closed before the end, it comes back at the next launch (`Config.setup_done`)."""
 import time
 
@@ -34,7 +34,7 @@ PRESETS = {
                     auto_off=False, hotkey="vk:a5", tray_pinned=True, tray_click="mic"),
 }
 OPTIONS = [
-    ("std", "便利", "點進輸入框，點一下小氣泡就講", "想方便，又想保留一點掌控"),
+    ("std", "標準", "點進輸入框，點一下小氣泡就講", "想方便，又想保留一點掌控"),
     ("simple", "容易", "麥克風由你親手開關", "剛開始用語音輸入，或想每一步都自己決定"),
     ("auto", "自動", "點進輸入框就開始聽", "打字量大，想把雙手完全空出來"),
     ("minimal", "工具", "按右 Alt 或點工作列圖示開關", "畫面上不想多出任何按鈕"),
