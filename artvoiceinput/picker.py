@@ -11,7 +11,7 @@ sees what is chosen (a click on it keeps it); tab counts leave it out. Light or 
 somewhere else.
 
 The same menu is the symbol keyboard (2026-10-22, design A of https://claude.ai/artifact/FSX49ZChyWMdwvv5i8kPcG, the
-user's pick): said 符號 or 鍵盤, it opens under the caret with SYMBOLS' tabs, no word leading the first; a click types
+user's pick): said 符號 or 鍵盤, it opens under the caret with SYMBOLS' tabs (全形, 半形, 小寫, 大寫), no word leading the first; a click types
 the symbol, a pair (PAIRS) with the caret put back between, and closes it.
 """
 import ctypes
@@ -35,11 +35,14 @@ _RAIL_PAD = 5     # inside the rail of tabs
 _TAB_H = 38       # a tab: its name over its count
 _TAB_GAP = 4
 _RAIL_MIN = 62
-SYMBOL_GRID = (6, 5)   # columns, rows of the symbol keyboard, in the single characters' cells
-SYMBOLS = [("標點", ["，", "。", "、", "；", "：", "？", "！", "……", "——", "～", "·", "※"]),
-           ("括號引號", ["「」", "『』", "（）", "【】", "《》", "〈〉", "〔〕", "“”", "‘’", "［］"]),
+SYMBOL_GRID = (5, 6)   # columns, rows of the symbol keyboard, in the single characters' cells, filled top to bottom
+# 全形: two columns of marks, then two of pairs; letters a-z for what speech spells badly (2026-10-22)
+SYMBOLS = [("全形", ["，", "。", "、", "；", "：", "？", "！", "……", "——", "～", "·", "※",
+                     "「」", "『』", "（）", "【】", "《》", "〈〉", "〔〕", "“”", "‘’", "［］"]),
            ("半形", ["@", "#", "$", "%", "&", "*", "_", "-", "+", "=", "/", "\\", "|", "<", ">", "~", "^", "`", "'",
-                     '"', ":", ";", "!", "?", "()", "[]", "{}"])]
+                     '"', ":", ";", "!", "?", "()", "[]", "{}"]),
+           ("小寫", [chr(c) for c in range(ord("a"), ord("z") + 1)]),
+           ("大寫", [chr(c) for c in range(ord("A"), ord("Z") + 1)])]
 PAIRS = {w for _, ws in SYMBOLS for w in ws if len(w) == 2 and w not in ("……", "——")}
 
 

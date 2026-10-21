@@ -226,7 +226,7 @@ sentence end → 嗎 questions → trailing punctuation.
 - **Symbol keyboard** (2026-10-22, the user's request; design A of
   https://claude.ai/artifact/FSX49ZChyWMdwvv5i8kPcG): said 符號 or 鍵盤 (`rules.KEYBOARD`, rules_version 15), the
   選字 menu opens under the caret (`selection.caret_rect`, else the selection, else the mouse) with `picker.SYMBOLS`:
-  標點, 括號引號, 半形 (6x5 cells); a click types the symbol (over a selection), a pair (`picker.PAIRS`, also the
+  全形 (marks, then pairs), 半形, 小寫, 大寫 a-z (5x6 cells; 2026-10-22); a click types the symbol (over a selection), a pair (`picker.PAIRS`, also the
   half-width () [] {}) around the caret or selection like 括號, and closes it; no 。 is added before it. Speech typed
   while it is open closes it. Only full- and half-width symbols (no emoji: Win+. has them; no letters or 注音).
 - **詞庫 list** (`hotwords.py`, `hotword-list.json`; code says hotwords, UI says 詞庫 / 優先度): 優先度 shown as
