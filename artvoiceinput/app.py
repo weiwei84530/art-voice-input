@@ -44,8 +44,8 @@ from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtGui import QAction, QCursor, QGuiApplication
 from PySide6.QtWidgets import QApplication, QMenu
 
-from . import (autostart, candidates, config, cues, edit, models, packs, paths, recordings, rules, sounds, spelling,
-               syllables)
+from . import (appicon, autostart, candidates, config, cues, edit, models, packs, paths, recordings, rules, sounds,
+               spelling, syllables)
 from .asr import SAMPLE_RATE, Recognizer
 from .config import Config
 from .floatbtn import Bubble, FloatButton
@@ -2233,6 +2233,7 @@ def main():
     log.info("launched%s", " in debug mode" if config.DEBUG else "")
     qapp = QApplication(sys.argv)
     qapp.setQuitOnLastWindowClosed(False)
+    qapp.setWindowIcon(appicon.icon())   # the settings window on the taskbar and in Alt+Tab
 
     lock = QLockFile(str(paths.LOCK_PATH))
     if not lock.tryLock(10000 if RESTARTED in sys.argv else 100):   # restarted: the old one is still closing

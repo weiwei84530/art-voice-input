@@ -7,9 +7,9 @@ import time
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QAbstractButton, QComboBox, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QAbstractButton, QComboBox, QGraphicsDropShadowEffect, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from .. import audio, packs
+from .. import appicon, audio, packs
 from . import theme
 from .kit import Slides, T, button, crossfade, draw_icon, logo_renderer, prop
 from .page_mic import TEST_HEARD, LevelMeter
@@ -73,23 +73,21 @@ class KeyFocus:
 
 
 class Badge(QWidget):
-    """The logo on an orange tile over its solid dark red shadow (the brand block's, from design H5)."""
+    """The app icon (`appicon`) over a soft dark red shadow."""
     S = 84
 
     def __init__(self):
         super().__init__()
-        self.setFixedSize(self.S, self.S + 6)
-        self._logo = logo_renderer()
+        self.setFixedSize(self.S + 24, self.S + 24)
+        shadow = QGraphicsDropShadowEffect(self, blurRadius=22, offset=QPointF(0, 6))
+        shadow.setColor(QColor(120, 10, 0, 70))
+        self.setGraphicsEffect(shadow)
 
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        p.setPen(Qt.NoPen)
-        p.setBrush(QColor("#780A00"))
-        p.drawRoundedRect(QRectF(0, 6, self.S, self.S), 22, 22)
-        p.setBrush(QColor(theme.ACCENT))
-        p.drawRoundedRect(QRectF(0, 0, self.S, self.S), 22, 22)
-        self._logo.render(p, QRectF(15, 15, self.S - 30, self.S - 30))
+        p.translate(12, 8)
+        appicon.paint(p, self.S)
 
 
 class OkDot(QWidget):
@@ -398,12 +396,18 @@ class MicStep(QWidget):
         v = QVBoxLayout(self)
         v.setContentsMargins(60, 52, 60, 30)
         v.setSpacing(0)
-        v.addWidget(Badge(), 0, Qt.AlignHCenter)
-        v.addSpacing(20)
-        v.addWidget(_label("阿特語音輸入法", 34, 700, center=True))
-        v.addSpacing(4)
-        v.addWidget(_label("已經裝好了。先說句話，確認麥克風聽得到你。", 14, muted=True, center=True))
-        v.addSpacing(28)
+        v.addWidget(Badge(), 0, Qt.AlignHCenter)   # 8px of its shadow's room under the icon
+        v.addSpacing(6)
+        # smaller and closer to the icon than at first, spaced like the brand block's name (2026-10-21, the user's
+        # request: 34px stood apart from the icon)
+        name = _label("阿特語音輸入法", 26, 700, center=True)
+        f = name.font()
+        f.setLetterSpacing(f.SpacingType.PercentageSpacing, 104)
+        name.setFont(f)
+        v.addWidget(name)
+        v.addSpacing(6)
+        v.addWidget(_label("先說句話，確認麥克風聽得到你。", 14, muted=True, center=True))
+        v.addSpacing(30)
         self.mic = QComboBox()
         self.mic.setCursor(Qt.PointingHandCursor)
         self.mic.setAccessibleName("使用的麥克風")

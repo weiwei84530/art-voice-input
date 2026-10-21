@@ -1,6 +1,5 @@
-"""The tray icon (2026-10-21, the user's design): the brand block's orange rounded square with the white microphone;
-while listening the microphone becomes a white ring turning. A left click turns listening on or off, the right
-button opens the menu.
+"""The tray icon (2026-10-21, the user's design): the app icon (`appicon`); while listening the microphone becomes a
+white ring turning on the icon's square. A left click turns listening on or off, the right button opens the menu.
 
 `promote` puts the icon on the taskbar itself instead of the ^ overflow (系統's 在工作列顯示圖示): Windows 11 keeps
 one key per icon under HKCU\\Control Panel\\NotifyIconSettings, named by Explorer once the icon has been shown, and
@@ -9,11 +8,11 @@ import ctypes
 import logging
 import winreg
 
-from PySide6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QSystemTrayIcon
 
-from .ui.theme import ACCENT
+from . import appicon
 
 log = logging.getLogger(__name__)
 
@@ -23,45 +22,13 @@ TURN_MS = 1200                         # one turn
 _KEY = r"Control Panel\NotifyIconSettings"
 
 
-def _square(p: QPainter, s: int):
-    p.setPen(Qt.NoPen)
-    p.setBrush(QColor(ACCENT))
-    # the whole canvas, as other apps' icons fill theirs (a margin made it look smaller, 2026-10-21)
-    p.drawRoundedRect(QRectF(0, 0, s, s), s * 0.22, s * 0.22)
-
-
-def _mic(s: int) -> QPixmap:
-    """The logo's microphone (ui.kit.LOGO, a 64 grid) inside the square with a little padding: capsule 20x34, the holder an arc 36 wide
-    and the stem in 5-unit strokes (2026-10-21, the user's request: thicker strokes looked wrong)."""
-    pm = QPixmap(s, s)
-    pm.fill(Qt.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.Antialiasing)
-    _square(p, s)
-    pad = s * 0.1   # room round the microphone (2026-10-21, the user's request)
-    p.translate(pad, pad)
-    k = (s - 2 * pad) / 64
-    white = QColor(255, 255, 255)
-    p.setPen(Qt.NoPen)
-    p.setBrush(white)
-    p.drawRoundedRect(QRectF(22 * k, 6 * k, 20 * k, 34 * k), 10 * k, 10 * k)
-    pen = QPen(white, max(1.25, 5 * k))
-    pen.setCapStyle(Qt.RoundCap)
-    p.setPen(pen)
-    p.setBrush(Qt.NoBrush)
-    p.drawArc(QRectF(14 * k, 16 * k, 36 * k, 34 * k), 200 * 16, 140 * 16)   # the logo's A18 17 arc
-    p.drawLine(QPointF(32 * k, 50 * k), QPointF(32 * k, 58 * k))
-    p.end()
-    return pm
-
-
 def _ring(s: int, turn: float) -> QPixmap:
     """A faint whole ring and a bright arc on it, `turn` 0..1 of the way round (clockwise)."""
     pm = QPixmap(s, s)
     pm.fill(Qt.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.Antialiasing)
-    _square(p, s)
+    appicon.tile(p, s)
     w = max(2, round(s / 8))                  # whole pixels, centred on the grid: sharp at 16px
     rad = round(s * 0.28)
     r = QRectF(s / 2 - rad, s / 2 - rad, 2 * rad, 2 * rad)
@@ -90,7 +57,7 @@ class Tray(QObject):
 
     def __init__(self, menu, parent=None):
         super().__init__(parent)
-        self.idle = _icon(_mic)
+        self.idle = _icon(appicon.pixmap)
         self._frames = [_icon(lambda s, i=i: _ring(s, i / FRAMES)) for i in range(FRAMES)]
         self._frame = 0
         self._step = 1
