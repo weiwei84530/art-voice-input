@@ -75,7 +75,8 @@ automatically; read it before reviving or redesigning something). Module docstri
 | `picker.py` | the 選字 menu |
 | `floatbtn.py` / `orbs.py` | floating button and bubble (`OrbButton`), the ten 按鈕樣式 looks |
 | `glow.py` | screen-edge glow while listening |
-| `tray.py` | tray icon (orange square + white mic, a turning ring while listening), `promote` (taskbar, not ^) |
+| `appicon.py` | the app icon (design J 光澤: warm diagonal gradient, sheen, white mic): tray, wizard badge, window icon; `dev/build_icon.py` writes `appicon.ico` for the exe |
+| `tray.py` | tray icon (the app icon, a turning ring on its square while listening), `promote` (taskbar, not ^) |
 | `ui/` | settings window (2026-10 redesign): `theme.py` tokens + QSS, `kit.py` widgets, `shell.py` home and transition, `window.py` app interface, `page_*.py` the six pages, `wizard.py` setup wizard, `sheet.py` in-window question |
 | `logbook.py` | 辨識紀錄 rows |
 | `config.py` / `userdata.py` | `Config` (load migrates old keys) / settings file export, import, reset |
@@ -260,8 +261,9 @@ on.
 
 Launch (2026-10-21): started by the user the settings window opens on its home; at login (`autostart.FLAG`
 `--autostart` in the Run entry) only the tray icon, unless the setup wizard is unfinished. A second launch asks the
-running one (`app.PIPE`, QLocalServer) to show its home. Tray icon (`tray.py`, the user's design): the brand
-block's orange rounded square with the white logo, while listening a white ring turning (1.2s a turn, half the
+running one (`app.PIPE`, QLocalServer) to show its home. Tray icon (`tray.py`, the user's design): the app
+icon (`appicon.py`, design J of https://claude.ai/artifact/JU4N5jkE3UiiURvWfUhUNK, 2026-10-21; also every window's
+icon and the wizard's badge), while listening a white ring turning on its square (1.2s a turn, half the
 frames with 節流模式). 系統's 圖示固定在工作列 (`tray_pinned`, off by default) sets IsPromoted in
 `HKCU\Control Panel\NotifyIconSettings` for this executable's entry (applies live; off at launch writes nothing).
 
@@ -312,7 +314,7 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   before the wizard counts as done); closed before the end it comes back. Until it is finished the app rests
   (`App._paused`: no hotkey, floating button, bubble or listening). 1 microphone: name, device, meter; status 試著說…
   → 正在聽… (speech coming in, decoding) → green dot + 聽到了 when 你剛剛說 shows (decoded on the worker; trial, the
-  user decides whether it stays); 略過 (plain) becomes 下一步 then. 2 packs, 3 columns, two lines of whole sample
+  user decides whether it stays); the icon over 阿特語音輸入法 at 26px (34 stood apart from it), no 已經裝好了; 略過 (plain) becomes 下一步 then. 2 packs, 3 columns, two lines of whole sample
   terms, no counts; 跳過 / 下一步. 3 簡單 / 標準 / 全自動 (`wizard.PRESETS`), fixed height; the picked one's settings
   as chips in a box under them; 開始教學 does nothing yet (the tutorial comes later), 跳過教學，直接開始使用 finishes.
   Focus rings only after Tab. With --debug, 系統 has 進入設定精靈 (dark, nothing cleared, applies like the real one).
