@@ -110,7 +110,7 @@ QPushButton:hover {{ border-color: {t['acc']}; }}
 QPushButton:disabled {{ color: {t['muted']}; border-color: {t['line']}; }}
 QPushButton[pri="true"] {{ background: {t['acc']}; color: #FFFFFF; border: none; }}
 QPushButton[pri="true"]:hover {{ background: #F0392E; }}
-QPushButton[wiz="true"] {{ font-size: 15px; font-weight: 500; border-radius: 7px; }}
+QPushButton[wiz="true"] {{ font-size: 15px; font-weight: 500; border-radius: 7px; min-height: 46px; max-height: 46px; }}
 QPushButton[danger="true"] {{ color: {t['acct']}; }}
 QPushButton[testing="true"] {{ background: {t['accbg']}; color: {t['acct']}; border: 1px solid {t['acc']}; }}
 QPushButton[link="true"] {{ background: transparent; border: none; color: {t['acct']}; padding: 0;

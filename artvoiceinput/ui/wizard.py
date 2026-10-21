@@ -1,7 +1,7 @@
 """The setup wizard (2026-10-21, the user's design C: one card on the wall, its content changing): shown over the
 settings window at the first launch and after 清空並重新設定, before the home page. Three steps: the microphone heard
 (the level meter; 略過 turns into 下一步 once what was said is decoded and shown as 你剛剛說), term
-packs ticked (跳過 / 下一步), and a starting setup picked (標準 / 容易 / 自動 / 工具, `PRESETS`). Light or dark with the
+packs ticked (跳過 / 下一步), and a starting setup picked (標準 / 簡單 / 自動 / 簡約, `PRESETS`). Light or dark with the
 window. Closed before the end, it comes back at the next launch (`Config.setup_done`)."""
 import time
 
@@ -29,15 +29,16 @@ PRESETS = {
                    auto_off_minutes=1, stop_on_enter=False, auto_off=False),
     "auto": dict(auto_listen=True, show_bubble=False, show_float=False, auto_off_minutes=0, stop_on_enter=False,
                  auto_off=True),
-    # nothing on screen: 右 Alt or the tray icon, shown on the taskbar, turns the microphone on and off
+    # nothing on screen, no glow: 右 Alt or the tray icon, shown on the taskbar, turns the microphone on and off;
+    # 送出 doesn't turn it off (stop_on_enter)
     "minimal": dict(auto_listen=False, show_bubble=False, show_float=False, auto_off_minutes=5, stop_on_enter=False,
-                    auto_off=False, hotkey="vk:a5", tray_pinned=True, tray_click="mic"),
+                    auto_off=False, hotkey="vk:a5", tray_pinned=True, tray_click="mic", glow=""),
 }
 OPTIONS = [
     ("std", "標準", "點進輸入框，點一下小氣泡就講", "想方便，又想保留一點掌控"),
-    ("simple", "容易", "麥克風由你親手開關", "剛開始用語音輸入，或想每一步都自己決定"),
+    ("simple", "簡單", "麥克風由你親手開關", "剛開始用語音輸入，或想每一步都自己決定"),
     ("auto", "自動", "點進輸入框就開始聽", "打字量大，想把雙手完全空出來"),
-    ("minimal", "工具", "按右 Alt 或點工作列圖示開關", "畫面上不想多出任何按鈕"),
+    ("minimal", "簡約", "按右 Alt 或點工作列圖示開關", "畫面上不想多出任何按鈕"),
 ]
 
 
@@ -396,8 +397,8 @@ class MicStep(QWidget):
         self.said.setWordWrap(True)
         v.addWidget(self.said)
         v.addStretch(1)
-        self.next = button("略過", self.done.emit, wiz=True)
-        self.next.setFixedSize(200, 46)
+        self.next = button("略過", self.done.emit, wiz=True)   # 46 high by the style sheet (setFixedHeight lost to it)
+        self.next.setFixedWidth(200)
         v.addWidget(self.next, 0, Qt.AlignHCenter)
 
         self.probe = audio.LevelProbe(keep=KEEP)
@@ -531,7 +532,7 @@ class PackStep(QWidget):
         v.addWidget(_label("之後在「詞庫」可以隨時加減，也能自己加詞。", 12.5, muted=True))
         v.addStretch(1)
         self.next = button("跳過", self.done.emit, wiz=True)
-        self.next.setFixedSize(200, 46)
+        self.next.setFixedWidth(200)
         v.addWidget(self.next, 0, Qt.AlignHCenter)
         BackButton(self).move(16, 18)
 
@@ -557,12 +558,12 @@ class StyleStep(QWidget):
         super().__init__()
         self.win = win
         v = QVBoxLayout(self)
-        v.setContentsMargins(40, 40, 40, 16)
+        v.setContentsMargins(40, 30, 40, 16)   # 30: room for the four rows and the 46px button
         v.setSpacing(0)
         v.addWidget(_label("你想怎麼開關麥克風？", 24, 700))
         v.addSpacing(6)
         v.addWidget(_label("選一個起點，之後都能在「麥克風」頁改。", 13.5, muted=True))
-        v.addSpacing(14)
+        v.addSpacing(12)
         self.options = {}
         for key, *rest in OPTIONS:
             o = Option(key, *rest)
@@ -572,7 +573,6 @@ class StyleStep(QWidget):
             self.options[key] = o
         v.addStretch(1)
         tutorial = button("開始教學", None, pri=True, wiz=True)   # the tutorial comes later (the user's decision)
-        tutorial.setFixedHeight(46)
         v.addWidget(tutorial)
         v.addSpacing(6)
         skip = TextLink("跳過教學，直接開始使用")
