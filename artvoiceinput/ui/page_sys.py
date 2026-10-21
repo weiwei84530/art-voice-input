@@ -7,7 +7,7 @@ from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QPainter, QPen
 from PySide6.QtWidgets import QComboBox, QFileDialog, QGridLayout, QHBoxLayout, QMessageBox, QVBoxLayout, QWidget
 
-from .. import __version__, config, paths, userdata
+from .. import __version__, appicon, config, paths, userdata
 from . import theme
 from .kit import (Choice, Info, Switch, T, button, card, crossfade, dim, draw_icon, hbox, icon, label, sep,
                   set_calm, titled, vbox)
@@ -20,6 +20,20 @@ CLICKS = (("settings", "打開設定視窗"), ("mic", "開關麥克風"))   # Co
 def _state(on: bool, text: str) -> str:
     """A switch's note, led by the state it describes (開： / 關：, 2026-10-21, the user's request)."""
     return f"<b>{'開' if on else '關'}：</b>{text}"
+
+
+class TrayMark(QWidget):
+    """The tray icon itself in 點一下 [icon] [dropdown], where the words said 圖示 (2026-10-21, the user's request)."""
+    S = 20
+
+    def __init__(self):
+        super().__init__()
+        self.setFixedSize(self.S, self.S)
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        appicon.paint(p, self.S)
 
 
 class Drop(QWidget):
@@ -136,7 +150,7 @@ class SysPage(QWidget):
             self.click.addItem(name, key)
         self.click.currentIndexChanged.connect(self._click)
         row("圖示固定在工作列", "右下角直接看得到，不收進 ^ 箭頭裡",
-            hbox(self.pin, self.pin_note, None, label("點一下圖示："), self.click, spacing=10),
+            hbox(self.pin, self.pin_note, None, hbox(label("點一下"), TrayMark(), self.click, spacing=6), spacing=10),
             info="左鍵點圖示做的事在右邊選，右鍵打開選單。關閉時圖示回到 ^ 箭頭裡")
         # 節流模式 (moved here from 外觀與聲音, 2026-10-20, the user's request): the orbs and the glow draw less, and
         # this window skips its animations (kit.calm)

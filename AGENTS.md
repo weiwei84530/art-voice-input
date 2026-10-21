@@ -267,7 +267,7 @@ icon (`appicon.py`, design J of https://claude.ai/artifact/JU4N5jkE3UiiURvWfUhUN
 icon and the wizard's badge), while listening a white ring turning on its square (1.2s a turn, half the
 frames with 節流模式). 系統's 圖示固定在工作列 (`tray_pinned`, off by default) sets IsPromoted in
 `HKCU\Control Panel\NotifyIconSettings` for this executable's entry (applies live; off at launch writes nothing);
-a 點一下圖示 dropdown after its switch picks 打開設定視窗 / 開關麥克風 (`tray_click`, 2026-10-21). 系統's names
+"點一下 [the tray icon drawn] [dropdown]" after its switch picks 打開設定視窗 / 開關麥克風 (`tray_click`, 2026-10-21). 系統's names
 column is 300px so each gray line fits one line and the page needs no scrolling.
 
 Settings window (`ui/`, the 2026-10 redesign; mockups on the claude.ai Design canvas
