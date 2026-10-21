@@ -7,6 +7,7 @@ from .paths import APP_DIR
 
 APP_ID = "ArtVoiceInput"
 LAUNCHER = APP_DIR / "run.pyw"
+FLAG = "--autostart"   # launched at login: no settings window (app.main)
 
 
 def _python() -> str:
@@ -20,7 +21,7 @@ def set_enabled(enabled: bool, debug: bool = False) -> None:
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run",
                         0, winreg.KEY_SET_VALUE) as k:
         if enabled:
-            winreg.SetValueEx(k, APP_ID, 0, winreg.REG_SZ, f'"{_python()}" "{LAUNCHER}"' + (" --debug" if debug else ""))
+            winreg.SetValueEx(k, APP_ID, 0, winreg.REG_SZ, f'"{_python()}" "{LAUNCHER}" {FLAG}' + (" --debug" if debug else ""))
         else:
             try:
                 winreg.DeleteValue(k, APP_ID)

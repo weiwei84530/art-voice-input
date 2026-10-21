@@ -21,6 +21,8 @@ class Config:
     # app mode)
     theme: str = "system"
     autostart: bool = True
+    # the tray icon on the taskbar itself, not in the ^ overflow (2026-10-21, the user's request; off by default)
+    tray_pinned: bool = False
     mute_while_recording: bool = True   # mute the speakers while listening
     period_to_comma: bool = True   # speaking on a selected 。 turns it into ， + the utterance + 。
     punctuation_names: bool = True  # an utterance of just a punctuation name (逗號, 句號 …) types the mark

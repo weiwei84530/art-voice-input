@@ -1,4 +1,4 @@
-"""系統: 外觀模式 (light, dark, Windows'), autostart, the settings file, about."""
+"""系統: 外觀模式 (light, dark, Windows'), autostart, the tray icon on the taskbar, the settings file, about."""
 import os
 import time
 from pathlib import Path
@@ -120,6 +120,12 @@ class SysPage(QWidget):
         self.auto.toggled.connect(self._auto)
         self.auto_note = label("")
         row("開機時自動啟動", "登入 Windows 後在背景啟動，常駐在右下角", hbox(self.auto, self.auto_note, None, spacing=10))
+        # the tray icon on the taskbar itself (2026-10-21, the user's request; tray.promote)
+        self.pin = Switch(name="圖示固定在工作列")
+        self.pin.toggled.connect(self._pin)
+        self.pin_note = label("")
+        row("圖示固定在工作列", "右下角直接看得到，不收進 ^ 箭頭裡", hbox(self.pin, self.pin_note, None, spacing=10),
+            info="左鍵點圖示開始或結束錄音，右鍵打開選單。關閉時圖示回到 ^ 箭頭裡")
         # 節流模式 (moved here from 外觀與聲音, 2026-10-20, the user's request): the orbs and the glow draw less, and
         # this window skips its animations (kit.calm)
         self.lite = Switch(name="節流模式")
@@ -181,6 +187,8 @@ class SysPage(QWidget):
         self._mode_note()
         self.auto.set_quiet(self.cfg.autostart)
         self._auto_note()
+        self.pin.set_quiet(self.cfg.tray_pinned)
+        self._pin_note()
         self.lite.set_quiet(self.cfg.orb_lite)
         self._lite_note()
         set_calm(self.cfg.orb_lite)
@@ -232,6 +240,16 @@ class SysPage(QWidget):
 
     def _auto_note(self):
         self.auto_note.setText(_state(self.cfg.autostart, "下次開機會自動啟動" if self.cfg.autostart else "要自己打開"))
+
+    # --- the tray icon ---
+    def _pin(self, on: bool):
+        self.cfg.tray_pinned = on
+        self.win.save()
+        self._pin_note()
+
+    def _pin_note(self):
+        self.pin_note.setText(_state(self.cfg.tray_pinned, "點一下就能開關麥克風" if self.cfg.tray_pinned
+                                     else "收在 ^ 箭頭裡"))
 
     # --- 設定檔 ---
     def _export(self):

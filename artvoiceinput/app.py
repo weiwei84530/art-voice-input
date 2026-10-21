@@ -28,6 +28,7 @@ The one popup (picker.py) is the 選字 candidate menu; it came back 2026-10-11 
 popup and was redesigned 2026-10-16 (tabs by how close the candidates sound, no input box). The second opinion
 (SenseVoice + suspects.py) is commented out below.
 """
+import ctypes
 import logging
 import os
 import re
@@ -38,9 +39,10 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 
 import numpy as np
-from PySide6.QtCore import QLockFile, QObject, QPointF, QProcess, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QColor, QCursor, QGuiApplication, QIcon, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
+from PySide6.QtCore import QLockFile, QObject, QProcess, QTimer, Signal
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
+from PySide6.QtGui import QAction, QCursor, QGuiApplication
+from PySide6.QtWidgets import QApplication, QMenu
 
 from . import (autostart, candidates, config, cues, edit, models, packs, paths, recordings, rules, sounds, spelling,
                syllables)
@@ -65,6 +67,7 @@ from .reading import reading_key
 from .selection import (Context, ContextProbe, focus_info, move_cursor_after, term_watcher,
                         terminal_in_front)
 from .session import Session, foreground
+from .tray import Tray, promote as tray_promote
 from .ui.window import SettingsWindow
 from .textfmt import format_text, to_traditional
 
@@ -121,10 +124,13 @@ def _double_click_time() -> float:
 
 
 def foreground_pid() -> int:
-    import ctypes
+    return window_pid(ctypes.windll.user32.GetForegroundWindow())
+
+
+def window_pid(hwnd) -> int:
     import ctypes.wintypes
     pid = ctypes.wintypes.DWORD()
-    ctypes.windll.user32.GetWindowThreadProcessId(ctypes.windll.user32.GetForegroundWindow(), ctypes.byref(pid))
+    ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     return pid.value
 
 
@@ -137,24 +143,6 @@ class _Press:
     down_at: float
     dictated: bool                    # the last dictation could still be deleted then
     deleted: object = None            # Selection a 刪除 step removed (the dictation goes there)
-
-
-def make_icon(color: QColor) -> QIcon:
-    pm = QPixmap(64, 64)
-    pm.fill(Qt.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.Antialiasing)
-    p.setPen(Qt.NoPen)
-    p.setBrush(color)
-    p.drawRoundedRect(QRectF(22, 6, 20, 34), 10, 10)          # mic capsule
-    pen = QPen(color, 5)
-    pen.setCapStyle(Qt.RoundCap)
-    p.setPen(pen)
-    p.setBrush(Qt.NoBrush)
-    p.drawArc(QRectF(14, 16, 36, 34), 200 * 16, 140 * 16)     # holder
-    p.drawLine(QPointF(32, 50), QPointF(32, 58))
-    p.end()
-    return QIcon(pm)
 
 
 class App(QObject):
@@ -205,9 +193,6 @@ class App(QObject):
         self._menu = None                        # ("pick", Selection) while the 選字 menu is up
         self._pick_gen = 0                       # mouse presses so far: a selection read late is dropped
 
-        self.icon_idle = make_icon(QColor(235, 235, 235) if self._dark_taskbar() else QColor(40, 40, 40))
-        self.icon_rec = make_icon(QColor(255, 69, 58))
-
         self._busy, self._busy_lock = 0, threading.Lock()   # decoding jobs queued or running
         self.glow = EdgeGlow(lambda: self.listener.level if self._listening else 0.0)
         self.glow.set_style(style_for(self.cfg.glow, self.cfg.glow_edits))
@@ -251,17 +236,23 @@ class App(QObject):
         self._idle_timer = QTimer(self, interval=5000, timeout=self._check_idle)
         self._idle_timer.start()
 
-        self.tray = QSystemTrayIcon(self.icon_idle)
         menu = QMenu()
         menu.addAction(QAction("設定…", menu, triggered=self.open_settings))
         menu.addSeparator()
         menu.addAction(QAction("結束", menu, triggered=self.quit))
-        self.tray.setContextMenu(menu)
+        self._tray = Tray(menu, self)   # left click: listening on / off; the menu on the right button
+        self._tray.set_lite(self.cfg.orb_lite)
+        self._tray.clicked.connect(self._tray_clicked)
+        self.tray = self._tray.icon
         self._toast = ""   # what the last tray notice leads to when clicked ("packs")
         self.tray.messageClicked.connect(self._toast_clicked)
-        self.tray.activated.connect(
-            lambda reason: self.open_settings() if reason == QSystemTrayIcon.Trigger else None)
-        self.tray.show()
+        self._tray.show()
+        self._typing_hwnd = 0   # the last foreground window outside the taskbar (_tray_clicked gives it back)
+        self._fg_hook = self._watch_foreground()
+        self._pin_tries = 0
+        self._pinned = None     # what the tray icon was last set to (None: left to Windows)
+        if self.cfg.tray_pinned:
+            self._pin_tray()
 
         self.hotkey_tap.connect(self._on_hotkey)
         self.main.connect(lambda fn: fn())
@@ -283,16 +274,6 @@ class App(QObject):
         if self.cfg.autostart:
             self._set_autostart()   # re-register so the entry follows the app if its folder was moved
         self._update_float()
-
-    @staticmethod
-    def _dark_taskbar() -> bool:
-        try:
-            import winreg
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as k:
-                return winreg.QueryValueEx(k, "SystemUsesLightTheme")[0] == 0
-        except OSError:
-            return True
 
     def _on_other_key(self, vk: int):
         """Keyboard hook thread: a key the user pressed (injected keys never get here); it closes the 選字 menu.
@@ -496,7 +477,7 @@ class App(QObject):
         log.info("listen: on (%s)", press.key)
         self._listen_shown = True
         self.book.new_session()
-        self.tray.setIcon(self.icon_rec)
+        self._tray.set_listening(True)
         self.settings.set_listening(True)
         self.glow.show(self._pointer_screen())
         cues.play(self.cfg.start_sound, "start", self.cfg.cue_volume)
@@ -548,6 +529,43 @@ class App(QObject):
             b.burst()
         else:
             b.vanish()
+
+    def _tray_clicked(self):
+        """Main thread: a left click on the tray icon turns listening on or off (2026-10-21, the user's design; the menu
+        is on the right button). Clicking the taskbar made it the foreground window: the one typed into before gets
+        the focus back, so the text goes there. While the setup wizard is not finished it opens the wizard."""
+        self._close_menu()
+        if self._paused:
+            self.open_settings()
+            return
+        if self._listening:
+            self._stop_listen()
+            return
+        if self._typing_hwnd and _taskbar(foreground()):
+            ctypes.windll.user32.SetForegroundWindow(self._typing_hwnd)
+        self._listen_now("tray")
+
+    def _watch_foreground(self):
+        """The last foreground window that is not the taskbar or ours (a WinEvent hook, called on this thread)."""
+        proto = ctypes.WINFUNCTYPE(None, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_long,
+                                   ctypes.c_long, ctypes.c_uint32, ctypes.c_uint32)
+
+        def changed(_hook, _event, hwnd, *_):
+            if hwnd and not _taskbar(hwnd) and window_pid(hwnd) != os.getpid():
+                self._typing_hwnd = hwnd
+        callback = proto(changed)
+        hook = ctypes.windll.user32.SetWinEventHook(0x0003, 0x0003, None, callback, 0, 0, 0)   # EVENT_SYSTEM_FOREGROUND
+        return hook, callback   # the callback must outlive the hook
+
+    def _pin_tray(self):
+        """系統's 在工作列顯示圖示: Explorer lists a new icon a moment after it first shows, so tried again a few
+        times. Off at launch writes nothing (a choice made in Windows' own settings stays)."""
+        if tray_promote(self.cfg.tray_pinned):
+            self._pinned = self.cfg.tray_pinned
+            log.info("tray icon %s", "on the taskbar" if self.cfg.tray_pinned else "in the overflow")
+        elif self._pin_tries < 5:
+            self._pin_tries += 1
+            QTimer.singleShot(2000 * self._pin_tries, self._pin_tray)
 
     def _float_clicked(self):
         """Main thread: the floating button turns listening on, as a tap of the key would (the text goes to the
@@ -701,7 +719,7 @@ class App(QObject):
         self.listener.stop()   # speech still going on is handed over as a last piece
         self.book.end_session()
         log.info("listen: off")
-        self.tray.setIcon(self.icon_idle)
+        self._tray.set_listening(False)
         self.settings.set_listening(False)
         self.glow.hide()
         self._marks_timer.stop()
@@ -1664,7 +1682,7 @@ class App(QObject):
                 self.main.emit(lambda: self.book.hint(text, "packs"))
                 self._toast = "packs"
                 self.tray.showMessage("Art VoiceInput", f"「{word}」收錄在詞包「{pack.name}」。到設定的詞庫頁勾選它，"
-                                      "同類的詞會更容易辨識。", self.icon_idle, 8000)
+                                      "同類的詞會更容易辨識。", self._tray.idle, 8000)
                 return
 
     def _keep(self, audio, **info):
@@ -1704,7 +1722,7 @@ class App(QObject):
 
     def _notify(self, text: str):
         self._toast = ""
-        self.tray.showMessage("Art VoiceInput", text, self.icon_idle, 4000)
+        self.tray.showMessage("Art VoiceInput", text, self._tray.idle, 4000)
 
     # --- popups: 選字 and the hotword notice ---
     def _close_menu(self):
@@ -1905,7 +1923,12 @@ class App(QObject):
             self.open_settings()
             self.settings.show_packs()
 
-    def open_settings(self):
+    def open_settings(self, home: bool = False):
+        """home: shown on its home also when it is already open on a page (launched again)."""
+        if home and self.settings.isVisible():
+            self.settings.show_home_now()
+            if self.settings.isMinimized():
+                self.settings.showNormal()
         self.settings.load_values()
         self.settings.set_log(self.book.sessions)
         self.settings.set_status(self._status_text)
@@ -1930,6 +1953,10 @@ class App(QObject):
         if self._paused and self._listening:   # the setup wizard opened (清空並重新設定)
             self._stop_listen()
         self._update_float()
+        self._tray.set_lite(self.cfg.orb_lite)
+        if self.cfg.tray_pinned != self._pinned:
+            self._pin_tries = 0
+            self._pin_tray()
         if not self.cfg.show_bubble or self._paused:
             self.bubble.hide()
         self._set_autostart()
@@ -1960,7 +1987,7 @@ class App(QObject):
         self.hotkeys.stop()
         if self._mouse:
             self._mouse.stop()
-        self.tray.hide()
+        self._tray.hide()
         self.float_btn.vanish()
         self.qapp.quit()
 
@@ -2158,6 +2185,14 @@ def _is_cjk(text: str) -> bool:
     return bool(text) and bool(re.match(r"[㐀-䶿一-鿿]", text))
 
 
+def _taskbar(hwnd: int) -> bool:
+    """The taskbar, its tray overflow or the Start menu (where a click on the tray icon puts the foreground)."""
+    cls = ctypes.create_unicode_buffer(64)
+    ctypes.windll.user32.GetClassNameW(hwnd, cls, 64)
+    return cls.value in ("Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow",
+                         "TopLevelWindowForOverflowXamlIsland", "Windows.UI.Core.CoreWindow")
+
+
 def _paste_over(sel, text: str) -> bool:
     """Replace the selected text: a paste replaces a selection, except in a terminal."""
     if sel.term is not None and not _delete_selection(sel):
@@ -2167,6 +2202,20 @@ def _paste_over(sel, text: str) -> bool:
 
 
 RESTARTED = "--restarted"   # started by App.restart
+# where a second launch asks the running Art VoiceInput to show its settings (a named pipe, one per user)
+PIPE = f"ArtVoiceInput-{os.environ.get('USERNAME', '')}"
+
+
+def _show_running():
+    """Launched again by the user while running: the running one shows its settings window's home. It may take the
+    foreground: this process has it now."""
+    ctypes.windll.user32.AllowSetForegroundWindow(-1)   # ASFW_ANY
+    sock = QLocalSocket()
+    sock.connectToServer(PIPE)
+    if sock.waitForConnected(1000):
+        sock.write(b"show")
+        sock.waitForBytesWritten(1000)
+        sock.disconnectFromServer()
 
 
 def main():
@@ -2188,10 +2237,23 @@ def main():
     lock = QLockFile(str(paths.LOCK_PATH))
     if not lock.tryLock(10000 if RESTARTED in sys.argv else 100):   # restarted: the old one is still closing
         log.info("already running")
+        if autostart.FLAG not in sys.argv:
+            _show_running()
         return 0
 
     recover_mute()   # killed while listening last time: the speakers come back (not in App: tests build one)
     app = App(qapp)  # noqa: F841 (keep reference alive)
-    if not app.cfg.setup_done:   # first launch, or 清空並重新設定 last time: the setup wizard
+    server = QLocalServer()
+    QLocalServer.removeServer(PIPE)
+
+    def launched_again():
+        server.nextPendingConnection().deleteLater()
+        log.info("launched again: settings shown")
+        app.open_settings(home=True)
+    server.newConnection.connect(launched_again)
+    server.listen(PIPE)
+    # started by the user: the settings window's home (2026-10-21, the user's request); at login (autostart.FLAG)
+    # only the tray icon, unless the setup wizard is not finished (first launch, 清空並重新設定 last time)
+    if not app.cfg.setup_done or autostart.FLAG not in sys.argv:
         app.open_settings()
     return qapp.exec()
