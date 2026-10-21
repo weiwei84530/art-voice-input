@@ -75,6 +75,7 @@ automatically; read it before reviving or redesigning something). Module docstri
 | `picker.py` | the 選字 menu |
 | `floatbtn.py` / `orbs.py` | floating button and bubble (`OrbButton`), the ten 按鈕樣式 looks |
 | `glow.py` | screen-edge glow while listening |
+| `tray.py` | tray icon (orange square + white mic, a turning ring while listening), `promote` (taskbar, not ^) |
 | `ui/` | settings window (2026-10 redesign): `theme.py` tokens + QSS, `kit.py` widgets, `shell.py` home and transition, `window.py` app interface, `page_*.py` the six pages, `wizard.py` setup wizard, `sheet.py` in-window question |
 | `logbook.py` | 辨識紀錄 rows |
 | `config.py` / `userdata.py` | `Config` (load migrates old keys) / settings file export, import, reset |
@@ -86,7 +87,9 @@ automatically; read it before reviving or redesigning something). Module docstri
 Listening is a switch: on, it takes text, spoken commands and mouse edits until turned off.
 - **On / off**: 麥克風快捷鍵 (`config.hotkey`, captured from any key, combination or mouse button but the left; a
   press is always a tap, fully suppressed; a modifier alone fires on release with nothing else pressed and is not
-  suppressed, with Alt/Win an unassigned 0xE8 is sent so no menu opens), the floating button, the bubble,
+  suppressed, with Alt/Win an unassigned 0xE8 is sent so no menu opens), the floating button, the bubble, a left
+  click on the tray icon (`App._tray_clicked`: the window typed into before gets the foreground back from the taskbar;
+  setup wizard unfinished → opens it; the menu is on the right button),
   點進輸入框時 = 自動開麥克風 (`auto_listen`), spoken 結束,
   送出訊息後自動關閉麥克風 (`stop_on_enter`: Enter / Ctrl+Enter or an operation's Enter step), 沒講話多久自動關閉
   (no speech for `auto_off_minutes`, default 5, chips or a 自訂 chip taking 1-240 minutes; tray notice), 自動關閉麥克風
@@ -254,6 +257,13 @@ sentence end → 嗎 questions → trailing punctuation.
 
 Defaults (`Config`) are the user's own setup: no hotkey, bubble, floating button (流光 look), 彩虹 glow, autostart
 on.
+
+Launch (2026-10-21): started by the user the settings window opens on its home; at login (`autostart.FLAG`
+`--autostart` in the Run entry) only the tray icon, unless the setup wizard is unfinished. A second launch asks the
+running one (`app.PIPE`, QLocalServer) to show its home. Tray icon (`tray.py`, the user's design): the brand
+block's orange rounded square with the white logo, while listening a white ring turning (1.2s a turn, half the
+frames with 節流模式). 系統's 圖示固定在工作列 (`tray_pinned`, off by default) sets IsPromoted in
+`HKCU\Control Panel\NotifyIconSettings` for this executable's entry (applies live; off at launch writes nothing).
 
 Settings window (`ui/`, the 2026-10 redesign; mockups on the claude.ai Design canvas
 https://claude.ai/artifact/8UWdBateenAsqfZKeHPeiG, style C): frameless 960x640, Windows 11 rounded corners. Home:
