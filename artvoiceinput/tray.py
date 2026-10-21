@@ -31,30 +31,24 @@ def _square(p: QPainter, s: int):
 
 
 def _mic(s: int) -> QPixmap:
-    """The logo's microphone drawn on whole pixels: the logo scaled to 16px fell between them and blurred
-    (2026-10-21, the user's report)."""
+    """The logo's microphone (ui.kit.LOGO, a 64 grid) on the whole square: capsule 20x34, the holder an arc 36 wide
+    and the stem in 5-unit strokes (2026-10-21, the user's request: thicker strokes looked wrong)."""
     pm = QPixmap(s, s)
     pm.fill(Qt.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.Antialiasing)
     _square(p, s)
+    k = s / 64
     white = QColor(255, 255, 255)
-    # at 16px: a 4px capsule, 2px strokes 1px from it (the crispest of four tried); other sizes in proportion
-    cw = 2 * round(s * 0.13)
-    w = max(2, round(s / 10))
-    gap = max(1, round(s / 16))
-    top, ch = round(s / 8), round(s / 2)
     p.setPen(Qt.NoPen)
     p.setBrush(white)
-    p.drawRoundedRect(QRectF((s - cw) / 2, top, cw, ch), cw / 2, cw / 2)
-    pen = QPen(white, w)
+    p.drawRoundedRect(QRectF(22 * k, 6 * k, 20 * k, 34 * k), 10 * k, 10 * k)
+    pen = QPen(white, max(1.25, 5 * k))
     pen.setCapStyle(Qt.RoundCap)
     p.setPen(pen)
     p.setBrush(Qt.NoBrush)
-    r = (cw + 2 * gap + w) / 2
-    cy = top + ch - cw / 2                    # the holder is round about the capsule's bottom
-    p.drawArc(QRectF(s / 2 - r, cy - r, 2 * r, 2 * r), 180 * 16, 180 * 16)
-    p.drawLine(QPointF(s / 2, cy + r), QPointF(s / 2, s - round(s / 8)))
+    p.drawArc(QRectF(14 * k, 16 * k, 36 * k, 34 * k), 200 * 16, 140 * 16)   # the logo's A18 17 arc
+    p.drawLine(QPointF(32 * k, 50 * k), QPointF(32 * k, 58 * k))
     p.end()
     return pm
 
