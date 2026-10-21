@@ -1,4 +1,5 @@
 """Building blocks of the redesigned settings window: icons, the switch, cards, chips, segmented buttons, ⓘ."""
+import ctypes
 import math
 import time
 
@@ -7,7 +8,7 @@ from PySide6.QtCore import (Property, QByteArray, QEasingCurve, QEvent, QObject,
 from PySide6.QtGui import QColor, QCursor, QFont, QFontMetrics, QGuiApplication, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (QAbstractButton, QApplication, QButtonGroup, QFrame, QGraphicsOpacityEffect, QHBoxLayout,
-                               QLabel, QLayout, QPushButton, QSizePolicy, QVBoxLayout, QWidget)
+                               QColorDialog, QDialog, QLabel, QLayout, QPushButton, QSizePolicy, QVBoxLayout, QWidget)
 
 from . import theme
 
@@ -232,6 +233,40 @@ def T(key: str, alpha: float | None = None) -> QColor:
             c.setAlphaF(alpha)
         return c
     return Hub.current.color(key, alpha)
+
+
+def dark_frame(w, dark: bool):
+    """A window's title bar dark or light (DWMWA_USE_IMMERSIVE_DARK_MODE)."""
+    try:
+        hwnd = int(w.winId())
+        v = ctypes.c_int(1 if dark else 0)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(v), ctypes.sizeof(v))
+    except (AttributeError, OSError):
+        pass
+
+
+def pick_color(parent, color: QColor, title: str, alpha: bool = False) -> QColor:
+    """Qt's color dialog in the window's theme (2026-10-22, the user's report): the window's style sheet reached it,
+    its text light on the dialog's own light background in dark mode and the line edits' padding cutting the spin
+    boxes' three digits. An invalid color when cancelled."""
+    dialog = QColorDialog(color, parent)
+    dialog.setWindowTitle(title)
+    if alpha:
+        dialog.setOption(QColorDialog.ShowAlphaChannel)
+    dialog.setStyleSheet(
+        f"QColorDialog {{ background: {T('tile').name()}; }}"
+        f" QColorDialog QLabel {{ color: {T('ink').name()}; }}"
+        f" QColorDialog QSpinBox {{ min-width: 64px; min-height: 26px; padding: 0 2px 0 6px; color: {T('ink').name()};"
+        f" background: {T('tile2').name()}; border: 1px solid {T('line').name()}; border-radius: 5px; }}"
+        " QColorDialog QSpinBox QLineEdit { padding: 0; border: none; background: transparent; min-height: 0; }"
+        " QColorDialog QSpinBox::up-button, QColorDialog QSpinBox::down-button { subcontrol-origin: border;"
+        " width: 18px; border: none; background: transparent; }"
+        " QColorDialog QSpinBox::up-button { subcontrol-position: top right; }"
+        " QColorDialog QSpinBox::down-button { subcontrol-position: bottom right; }"
+        f" QColorDialog QSpinBox::up-arrow {{ image: url({theme.UP}); width: 10px; height: 10px; }}"
+        f" QColorDialog QSpinBox::down-arrow {{ image: url({theme._DOWN}); width: 10px; height: 10px; }}")
+    dark_frame(dialog, T("tile").lightness() < 128)
+    return dialog.currentColor() if dialog.exec() == QDialog.Accepted else QColor()
 
 
 class Switch(QAbstractButton):

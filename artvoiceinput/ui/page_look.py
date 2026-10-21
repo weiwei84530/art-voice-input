@@ -5,7 +5,7 @@ import time
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen
-from PySide6.QtWidgets import (QAbstractButton, QColorDialog, QComboBox, QGridLayout, QSlider, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QAbstractButton, QComboBox, QGridLayout, QSlider, QVBoxLayout, QWidget)
 
 from .. import cues
 from .. import glow as glowmod
@@ -14,7 +14,7 @@ from ..floatbtn import _SIZE as _MIC_SIZE, OrbButton, _hover_curve, _paint_mic
 from ..highlight import COLORS as MARK_COLORS
 from ..orbs import LOOKS, draw as draw_orb, palette
 from . import theme
-from .kit import Choice, Info, Slides, T, button, calm, card, dim, hbox, icon, label, sep
+from .kit import Choice, Info, Slides, T, button, calm, card, dim, hbox, icon, label, pick_color, sep
 
 PREVIEW_H = 132     # the preview, as tall as the mark card beside it
 _NAME_W = 60        # the glow editor's names column
@@ -764,7 +764,7 @@ class LookPage(QWidget):
 
     def _glow_color(self, i: int):
         colors = list(self._params()["colors"])
-        c = QColorDialog.getColor(QColor(colors[i] if i >= 0 else colors[-1]), self, "光暈顏色")
+        c = pick_color(self, QColor(colors[i] if i >= 0 else colors[-1]), "光暈顏色")
         if not c.isValid():
             return
         if i >= 0:
@@ -810,7 +810,7 @@ class LookPage(QWidget):
         self._show_mark()
 
     def _pick_mark(self):
-        c = QColorDialog.getColor(QColor(self.cfg.highlight_color), self, "草稿反白顏色", QColorDialog.ShowAlphaChannel)
+        c = pick_color(self, QColor(self.cfg.highlight_color), "草稿反白顏色", alpha=True)
         if c.isValid():
             self.cfg.highlight_color = c.name(QColor.HexArgb).upper()
             self.win.save()

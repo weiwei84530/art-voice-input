@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (QAbstractButton, QApplication, QGraphicsDropShado
 
 from .. import __version__
 from . import theme
-from .kit import T, Hub, Tip, TipRouter, calm, draw_icon, logo_renderer
+from .kit import T, Hub, Tip, TipRouter, calm, dark_frame, draw_icon, logo_renderer
 
 W, H = 960, 640
 ORG_HOME, ORG_PAGE = 380, 56
@@ -471,7 +471,7 @@ class Shell(QWidget):
 
     def _restyle(self):
         self.setStyleSheet(theme.qss(self.theme.t) + f"Shell {{ background: {self.theme['bg']}; }}")
-        _dark_frame(self, self.theme["dark"])
+        dark_frame(self, self.theme["dark"])
         for w in self.findChildren(QWidget):
             w.update()
 
@@ -631,13 +631,3 @@ def _round_corners(w):
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(pref), ctypes.sizeof(pref))
     except (AttributeError, OSError):
         pass
-
-
-def _dark_frame(w, dark: bool):
-    try:
-        hwnd = int(w.winId())
-        v = ctypes.c_int(1 if dark else 0)
-        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(v), ctypes.sizeof(v))
-    except (AttributeError, OSError):
-        pass
-
