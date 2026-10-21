@@ -31,14 +31,16 @@ def _square(p: QPainter, s: int):
 
 
 def _mic(s: int) -> QPixmap:
-    """The logo's microphone (ui.kit.LOGO, a 64 grid) on the whole square: capsule 20x34, the holder an arc 36 wide
+    """The logo's microphone (ui.kit.LOGO, a 64 grid) inside the square with a little padding: capsule 20x34, the holder an arc 36 wide
     and the stem in 5-unit strokes (2026-10-21, the user's request: thicker strokes looked wrong)."""
     pm = QPixmap(s, s)
     pm.fill(Qt.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.Antialiasing)
     _square(p, s)
-    k = s / 64
+    pad = s * 0.1   # room round the microphone (2026-10-21, the user's request)
+    p.translate(pad, pad)
+    k = (s - 2 * pad) / 64
     white = QColor(255, 255, 255)
     p.setPen(Qt.NoPen)
     p.setBrush(white)
