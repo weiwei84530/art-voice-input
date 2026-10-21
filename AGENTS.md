@@ -224,7 +224,7 @@ sentence end → 嗎 questions → trailing punctuation.
   the next dictation; an update appends new shipped terms under a dated comment, `packs/shipped` keeps the last
   shipped copy). Seven packs (`packs.ORDER`), none ticked by default; ticked words bias at 150% unlisted. No version
   numbers, no common words as products, nothing the hotword encoding can't hold (UI/UX, 4K). A pick or typed word an
-  unticked pack lists brings a tray hint (`_suggest_pack`) every time.
+  unticked pack lists brings a tray hint (`_suggest_pack`) every time, also a 詞包建議 row in 辨識紀錄; clicking either opens 詞庫's 詞包.
 - **English spelling** (`spelling.py`): a run of English words whose letters equal a known term's (詞庫, packs,
   on-screen terms) is written as the term (case only when it adds inner capitals). Aliases (Dipsick → DeepSeek, from
   picks or spelling) are always rewritten; 英文強制替換 lists them.
@@ -298,11 +298,13 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
 - **Setup wizard** (`ui/wizard.py`, 2026-10-21, design C of https://claude.ai/artifact/LFjmoPLHVf1bz7irmzKy6i): over
   the whole window, one card on the wall, light or dark with the window. Shown when the settings window opens while
   `setup_done` is false (a new install, after 清空並重新設定; `app.main` opens it at launch; a config.json from
-  before the wizard counts as done); closed before the end it comes back. 1 microphone: name, device, meter; 略過
-  (plain) becomes 下一步 (orange) once speech is over `TEST_HEARD` for 150ms, with a green dot + 聽到了; what was said
-  is decoded on the worker and shown as 你剛剛說 (trial, the user decides whether it stays). 2 packs, 3 columns,
-  whole sample terms only; 跳過 / 下一步. 3 簡單 / 標準 / 全自動 (`wizard.PRESETS`), picked one shows its settings as
-  chips; 開始教學 does nothing yet (the tutorial comes later), 跳過教學，直接開始使用 finishes.
+  before the wizard counts as done); closed before the end it comes back. Until it is finished the app rests
+  (`App._paused`: no hotkey, floating button, bubble or listening). 1 microphone: name, device, meter; status 試著說…
+  → 正在聽… (speech coming in, decoding) → green dot + 聽到了 when 你剛剛說 shows (decoded on the worker; trial, the
+  user decides whether it stays); 略過 (plain) becomes 下一步 then. 2 packs, 3 columns, two lines of whole sample
+  terms, no counts; 跳過 / 下一步. 3 簡單 / 標準 / 全自動 (`wizard.PRESETS`), fixed height; the picked one's settings
+  as chips in a box under them; 開始教學 does nothing yet (the tutorial comes later), 跳過教學，直接開始使用 finishes.
+  Focus rings only after Tab. With --debug, 系統 has 進入設定精靈 (dark, nothing cleared, applies like the real one).
 - 辨識紀錄 (`logbook.py`, `set_log`): one row per event, grouped per listening session, newest first, heard vs the
   screen's change as a diff, details in the tooltip; copy icon on rows that settled text; an orange book (the 詞庫 tile's) when the 詞庫
   may have shaped the text (`logbook.bank_of`; good news, not a warning). Text fixed as typed is 定稿 (its tag and dot the text red a

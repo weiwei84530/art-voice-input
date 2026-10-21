@@ -11,7 +11,7 @@ from . import theme
 from .kit import Choice, T, Tip, button, dim, icon, label
 
 FILTERS = [("all", "全部"), ("text", "文字"), ("cmd", "指令"), ("fix", "選字與復原")]
-KIND_COLORS = {"text": "#FF453A", "cmd": "#3D7BFF", "pick": "#A259FF", "undo": "#8A9099"}
+KIND_COLORS = {"text": "#FF453A", "cmd": "#3D7BFF", "pick": "#A259FF", "undo": "#8A9099", "hint": "#D9822B"}
 SETTLED = ("#C8323E", "#E8525C")   # 定稿, light and dark: the text red a little deeper (2026-10-21, the user's pick)
 MAX_ROWS = 300   # rows drawn, newest first
 LINE_X = 77      # the timeline's x
@@ -19,8 +19,8 @@ LINE_X = 77      # the timeline's x
 
 def kind_of(r: dict) -> str:
     """text, cmd, pick or undo (the filters and colors)."""
-    if r["kind"] == "undo":
-        return "undo"
+    if r["kind"] in ("undo", "hint"):
+        return r["kind"]
     if r["kind"] == "op":
         return "pick" if r["tag"] in ("選字", "刪除") or r["heard"] in ("（選字）", "（刪除）") else "cmd"
     return "text"
@@ -34,6 +34,8 @@ def tag_of(r: dict) -> str:
         return r["tag"] or "選字"
     if k == "undo":
         return "復原"
+    if k == "hint":
+        return r["tag"]
     return "文字" if r["kind"] in ("", "lock") else (r["tag"].split("；")[0] if r["tag"] else "文字")
 
 
@@ -82,6 +84,7 @@ class Node(QWidget):
 class Entry(QWidget):
     """An event: time, a dot on the line, its tag, the change, ! and copy."""
     copy = Signal(str)
+    link = Signal(str)   # a hint row clicked: where it leads ("packs")
 
     def __init__(self, r: dict, dark: bool):
         super().__init__()
@@ -135,6 +138,13 @@ class Entry(QWidget):
         tip = [x for x in (f"聽到：{r['heard']}" if r["heard"] else "", r["tag"], r["tip"]) if x]
         self.setToolTip("\n".join(tip))
         self.setProperty("quick_tip", True)   # shown as soon as the pointer comes, not after kit.TipRouter's second
+        if r.get("link"):
+            self.setCursor(Qt.PointingHandCursor)
+
+    def mouseReleaseEvent(self, e):
+        if self.r.get("link") and e.button() == Qt.LeftButton and self.rect().contains(e.position().toPoint()):
+            self.link.emit(self.r["link"])
+        super().mouseReleaseEvent(e)
 
     def enterEvent(self, e):
         self.update()
@@ -240,6 +250,7 @@ class LogPage(QWidget):
             self.body.addWidget(Node(f"{g['start'][:5]}　{head}", meta))
             for r in rows[:left]:
                 e = Entry(r, dark)
+                e.link.connect(lambda key: key == "packs" and self.win.show_packs())
                 e.copy.connect(self._copy)
                 self.body.addWidget(e)
             left -= len(rows)

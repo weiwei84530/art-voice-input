@@ -271,6 +271,12 @@ class LogBook:
                       draft=self._listening)
         g["counts"]["undo"] += 1
 
+    def hint(self, text: str, link: str):
+        """A suggestion (an unticked pack lists a word): a row that opens `link` when clicked ("packs")."""
+        g = self._row("（提示）", esc(text), "詞包建議", "hint", "點一下打開詞包", draft=False)
+        g["rows"][-1]["link"] = link
+        self._on_change()
+
     def single(self, kind: str, title: str, body: str, why: str = "", entry: dict | None = None):
         """Something done on its own: a 選字 pick, a selection deleted … (no copy icon: only settled text has one)"""
         if kind == "選字" and " → " in title:

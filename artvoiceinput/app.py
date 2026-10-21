@@ -256,6 +256,8 @@ class App(QObject):
         menu.addSeparator()
         menu.addAction(QAction("結束", menu, triggered=self.quit))
         self.tray.setContextMenu(menu)
+        self._toast = ""   # what the last tray notice leads to when clicked ("packs")
+        self.tray.messageClicked.connect(self._toast_clicked)
         self.tray.activated.connect(
             lambda reason: self.open_settings() if reason == QSystemTrayIcon.Trigger else None)
         self.tray.show()
@@ -407,6 +409,8 @@ class App(QObject):
         """Main thread: the hotkey turns listening on or off."""
         self._close_menu()
         log.info("hotkey")
+        if self._paused:
+            return
         if self._listening:
             self._stop_listen()
         else:
@@ -443,6 +447,12 @@ class App(QObject):
         return QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
 
     # --- listening (the one way to record since 2026-10-14, continuous-mic branch) ---
+    @property
+    def _paused(self) -> bool:
+        """Until the setup wizard is finished nothing listens or shows (the user's request, 2026-10-21): no hotkey,
+        floating button, bubble or listening on a click, also with the wizard closed half way."""
+        return not self.cfg.setup_done
+
     @property
     def _listening(self) -> bool:
         return self.listener is not None and self.listener.active
@@ -521,7 +531,7 @@ class App(QObject):
         listening starts ("start") it grows and fades out with the glow, and comes back as the glow goes ("stop"),
         unless float_keep keeps it on screen."""
         b = self.float_btn
-        if not self.cfg.show_float or self._quitting:
+        if not self.cfg.show_float or self._quitting or self._paused:
             show = False
         else:
             show = (self._box is not None or not self.cfg.float_text_only) \
@@ -550,7 +560,7 @@ class App(QObject):
     def _listen_now(self, name: str, quiet: bool = False) -> bool:
         """Main thread: listening on without a key (the floating button, the bubble, the focus). quiet: no notice
         when the model is not ready."""
-        if self._listening:
+        if self._listening or self._paused:
             return False
         if self.recognizer is None:
             if not quiet:
@@ -633,7 +643,7 @@ class App(QObject):
         """Main thread: a left click (not a drag) outside our windows. With the bubble or auto_listen, the focus is
         read soon after (where the click put it): in a text box the bubble shows by the click (2026-10-16, the user's
         design), or listening comes on (2026-10-20, the user's design)."""
-        if not (self.cfg.show_bubble or self.cfg.auto_listen) or self._listening:
+        if not (self.cfg.show_bubble or self.cfg.auto_listen) or self._listening or self._paused:
             return
         self._click = (pt, time.monotonic())
         QTimer.singleShot(120, self._watch_focus)
@@ -646,6 +656,8 @@ class App(QObject):
         listening may be turned on by hand anywhere); the settings window in front counts as such a place. Unknown
         places and Art VoiceInput's other windows change nothing."""
         self._focus_busy = False
+        if self._paused:
+            return
         bubble, floating, auto = self.cfg.show_bubble, self.cfg.show_float, self.cfg.auto_listen
         if not (bubble or floating or auto or self.cfg.auto_off) or editable is None:
             return
@@ -1645,6 +1657,11 @@ class App(QObject):
                 continue
             if any(w == word or (is_latin(word) and w.casefold() == word.casefold()) for w in pack.words):
                 log.info("pack hint: %s in %s", word, pack.id)
+                text = f"「{word}」收錄在詞包「{pack.name}」，勾選它，同類的詞會更容易辨識。"
+                # also a row in 辨識紀錄, and both open the 詞包 section when clicked (the user's request,
+                # 2026-10-21: the notice went away before it could be acted on)
+                self.main.emit(lambda: self.book.hint(text, "packs"))
+                self._toast = "packs"
                 self.tray.showMessage("Art VoiceInput", f"「{word}」收錄在詞包「{pack.name}」。到設定的詞庫頁勾選它，"
                                       "同類的詞會更容易辨識。", self.icon_idle, 8000)
                 return
@@ -1685,6 +1702,7 @@ class App(QObject):
     #         log.exception("suspect check failed")
 
     def _notify(self, text: str):
+        self._toast = ""
         self.tray.showMessage("Art VoiceInput", text, self.icon_idle, 4000)
 
     # --- popups: 選字 and the hotword notice ---
@@ -1881,6 +1899,11 @@ class App(QObject):
             self.main.emit(lambda: self.settings.wizard_said(text))
         self.worker.submit(run)
 
+    def _toast_clicked(self):
+        if self._toast == "packs":
+            self.open_settings()
+            self.settings.show_packs()
+
     def open_settings(self):
         self.settings.load_values()
         self.settings.set_log(self.book.sessions)
@@ -1903,8 +1926,10 @@ class App(QObject):
         self.glow.set_lite(self.cfg.orb_lite)
         self.marks.set_color(self.cfg.highlight_color)
         self._apply_look()
+        if self._paused and self._listening:   # the setup wizard opened (清空並重新設定)
+            self._stop_listen()
         self._update_float()
-        if not self.cfg.show_bubble:
+        if not self.cfg.show_bubble or self._paused:
             self.bubble.hide()
         self._set_autostart()
 

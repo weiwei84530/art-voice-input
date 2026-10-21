@@ -1,6 +1,6 @@
 """The setup wizard (2026-10-21, the user's design C: one card on the wall, its content changing): shown over the
 settings window at the first launch and after 清空並重新設定, before the home page. Three steps: the microphone heard
-(the level meter; 略過 turns into 下一步 once speech is loud enough, and what was said is decoded and shown), term
+(the level meter; 略過 turns into 下一步 once what was said is decoded and shown as 你剛剛說), term
 packs ticked (跳過 / 下一步), and a starting setup picked (簡單 / 標準 / 全自動, `PRESETS`). Light or dark with the
 window. Closed before the end, it comes back at the next launch (`Config.setup_done`)."""
 import time
@@ -15,9 +15,9 @@ from .kit import Slides, T, button, crossfade, draw_icon, logo_renderer, prop
 from .page_mic import TEST_HEARD, LevelMeter
 
 CARD_W, CARD_H = 600, 560
-HEARD_TICKS = 3        # reads in a row over TEST_HEARD (50ms apart) that count as speech heard
 SPEECH = 0.3           # a level this high is speech for 你剛剛說's cut
 QUIET_AFTER = 0.7      # seconds under SPEECH that end what was said
+MAX_SAY = 8.0          # speech longer than this is decoded anyway
 KEEP = 12.0            # seconds of audio the probe keeps
 
 # what each starting setup sets (the user's design, 2026-10-21); the 麥克風 page shows the same settings
@@ -58,6 +58,20 @@ def _tick(p: QPainter, r: QRectF, color: QColor, width: float):
     p.drawPath(path)
 
 
+class KeyFocus:
+    """A focus ring only when the focus came by the keyboard: a step's button hidden handed the focus on as if Tab
+    was pressed, and the next step's first tile showed its ring (the user's report, 2026-10-21)."""
+    ring = False
+
+    def focusInEvent(self, e):
+        self.ring = e.reason() in (Qt.TabFocusReason, Qt.BacktabFocusReason)
+        super().focusInEvent(e)
+
+    def focusOutEvent(self, e):
+        self.ring = False
+        super().focusOutEvent(e)
+
+
 class Badge(QWidget):
     """The logo on an orange tile over its solid dark red shadow (the brand block's, from design H5)."""
     S = 84
@@ -94,7 +108,7 @@ class OkDot(QWidget):
         _tick(p, QRectF(0, 0, 16, 16), QColor("#FFFFFF"), 1.8)
 
 
-class TextLink(QAbstractButton):
+class TextLink(KeyFocus, QAbstractButton):
     """Gray text, underlined under the pointer: 跳過教學."""
 
     def __init__(self, text: str):
@@ -115,13 +129,13 @@ class TextLink(QAbstractButton):
     def paintEvent(self, _):
         p = QPainter(self)
         f = self.font()
-        f.setUnderline(self.underMouse() or self.hasFocus())
+        f.setUnderline(self.underMouse() or self.ring)
         p.setFont(f)
         p.setPen(T("ink") if self.underMouse() else T("muted"))
         p.drawText(self.rect(), Qt.AlignCenter, self.text())
 
 
-class BackButton(QAbstractButton):
+class BackButton(KeyFocus, QAbstractButton):
     """‹ at the card's top left: the step before."""
 
     def __init__(self, parent):
@@ -140,15 +154,16 @@ class BackButton(QAbstractButton):
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        if self.underMouse() or self.hasFocus():
+        if self.underMouse() or self.ring:
             p.setPen(Qt.NoPen)
             p.setBrush(T("tile2"))
             p.drawEllipse(QRectF(self.rect()))
         draw_icon(p, "back", QRectF(8, 8, 16, 16), T("ink") if self.underMouse() else T("muted"), 2.2)
 
 
-class PackTile(QAbstractButton):
-    """A term pack to tick: its name, the first terms that fit, how many terms."""
+class PackTile(KeyFocus, QAbstractButton):
+    """A term pack to tick: its name and as many of its first terms as two lines hold (no count: the user's
+    request, 2026-10-21)."""
     W, H = 168, 78
 
     def __init__(self, pack):
@@ -160,12 +175,12 @@ class PackTile(QAbstractButton):
         self.setFocusPolicy(Qt.TabFocus)
         self.setAccessibleName(pack.name)
         fm = QFontMetrics(theme.font(12))
-        shown = []
-        for w in pack.words:   # whole terms only: none cut off (the mockup's were)
-            if fm.horizontalAdvance("、".join(shown + [w])) > self.W - 26:
-                break
-            shown.append(w)
-        self.sample = "、".join(shown)
+        lines = [[], []]
+        words = list(pack.words)
+        for line in lines:   # whole terms only: none cut off (the mockup's were)
+            while words and (not line or fm.horizontalAdvance("、".join(line + [words[0]]) + "、") <= self.W - 24):
+                line.append(words.pop(0))
+        self.sample = ["、".join(lines[0]) + ("、" if lines[1] else ""), "、".join(lines[1])]
 
     def enterEvent(self, e):
         self.update()
@@ -181,7 +196,7 @@ class PackTile(QAbstractButton):
         p.setPen(QPen(T("acc") if on else T("acc", 0.5) if self.underMouse() else T("line"), 1.5))
         p.setBrush(T("acc", 0.07) if on else T("tile2"))
         p.drawRoundedRect(r, 8, 8)
-        if self.hasFocus():
+        if self.ring:
             p.setPen(QPen(T("ink"), 2))
             p.setBrush(Qt.NoBrush)
             p.drawRoundedRect(r.adjusted(-0.5, -0.5, 0.5, 0.5), 8, 8)
@@ -201,9 +216,8 @@ class PackTile(QAbstractButton):
         p.drawText(QRectF(12, 9, self.W - 44, 22), Qt.AlignLeft | Qt.AlignVCenter, self.pack.name)
         p.setPen(T("muted"))
         p.setFont(theme.font(12))
-        p.drawText(QRectF(12, 32, self.W - 20, 18), Qt.AlignLeft | Qt.AlignVCenter, self.sample)
-        p.setFont(theme.font(13, 600, num=True))
-        p.drawText(QRectF(12, 51, self.W - 20, 18), Qt.AlignLeft | Qt.AlignVCenter, f"{len(self.pack.words)} 個詞")
+        for i, line in enumerate(self.sample):
+            p.drawText(QRectF(12, 32 + i * 18, self.W - 20, 18), Qt.AlignLeft | Qt.AlignVCenter, line)
 
 
 class Illus:
@@ -271,9 +285,9 @@ class Illus:
         p.restore()
 
 
-class Option(QAbstractButton):
-    """A starting setup: picture, name and what it is for; picked, what it sets as chips under them."""
-    PIC = QRectF(9, 9, 84, 56)
+class Option(KeyFocus, QAbstractButton):
+    """A starting setup: picture, name and what it is for (what it sets is in the Summary under the three)."""
+    PIC = QRectF(8, 7, 84, 56)
     TEXT_X = 107
 
     def __init__(self, key, name, lead, who, sets):
@@ -283,29 +297,10 @@ class Option(QAbstractButton):
         self.setCursor(Qt.PointingHandCursor)
         self.setFocusPolicy(Qt.TabFocus)
         self.setAccessibleName(f"{name}：{lead}")
-        self.toggled.connect(lambda _: self.updateGeometry())
-
-    def _chips(self, width: float) -> list[QRectF]:
-        """Where each chip goes, wrapped within the text column."""
-        fm = QFontMetrics(theme.font(11.5))
-        x, y, out = 0.0, 0.0, []
-        for s in self.sets:
-            w = fm.horizontalAdvance(s) + 16
-            if x and x + w > width:
-                x, y = 0.0, y + 24
-            out.append(QRectF(x, y, w, 20))
-            x += w + 5
-        return out
+        self.setFixedHeight(70)
 
     def sizeHint(self):
-        h = 74
-        if self.isChecked():
-            chips = self._chips(max(self.width(), 520) - self.TEXT_X - 14)
-            h = 70 + int(chips[-1].bottom()) + 12
-        return QSize(520, h)
-
-    def resizeEvent(self, e):
-        self.updateGeometry()
+        return QSize(520, 70)
 
     def enterEvent(self, e):
         self.update()
@@ -321,7 +316,7 @@ class Option(QAbstractButton):
         p.setPen(QPen(T("acc") if on else T("acc", 0.5) if self.underMouse() else T("line"), 1.5))
         p.setBrush(T("acc", 0.05) if on else T("tile"))
         p.drawRoundedRect(r, 8, 8)
-        if self.hasFocus():
+        if self.ring:
             p.setPen(QPen(T("ink"), 2))
             p.setBrush(Qt.NoBrush)
             p.drawRoundedRect(r.adjusted(-0.5, -0.5, 0.5, 0.5), 8, 8)
@@ -333,26 +328,67 @@ class Option(QAbstractButton):
         p.setPen(T("ink"))
         f = theme.font(16, 700)
         p.setFont(f)
-        p.drawText(QRectF(x, 12, 200, 24), Qt.AlignLeft | Qt.AlignVCenter, self.name)
+        p.drawText(QRectF(x, 10, 200, 24), Qt.AlignLeft | Qt.AlignVCenter, self.name)
         nx = x + QFontMetrics(f).horizontalAdvance(self.name) + 10
         p.setFont(theme.font(13, 500))
-        p.drawText(QRectF(nx, 13, self.width() - nx - 12, 24), Qt.AlignLeft | Qt.AlignVCenter, self.lead)
+        p.drawText(QRectF(nx, 11, self.width() - nx - 12, 24), Qt.AlignLeft | Qt.AlignVCenter, self.lead)
         p.setPen(T("muted"))
         p.setFont(theme.font(12))
-        p.drawText(QRectF(x, 38, self.width() - x - 12, 20), Qt.AlignLeft | Qt.AlignVCenter, self.who)
-        if on:
-            p.setFont(theme.font(11.5))
-            for s, c in zip(self.sets, self._chips(self.width() - x - 14)):
-                c.translate(x, 66)
-                p.setPen(Qt.NoPen)
-                p.setBrush(T("accbg"))
-                p.drawRoundedRect(c, 10, 10)
-                p.setPen(T("acct"))
-                p.drawText(c, Qt.AlignCenter, s)
+        p.drawText(QRectF(x, 36, self.width() - x - 12, 20), Qt.AlignLeft | Qt.AlignVCenter, self.who)
+
+
+def _chips(sets, width: float) -> list[QRectF]:
+    """Where each chip goes, wrapped within width."""
+    fm = QFontMetrics(theme.font(12))
+    x, y, out = 0.0, 0.0, []
+    for text in sets:
+        w = fm.horizontalAdvance(text) + 18
+        if x and x + w > width:
+            x, y = 0.0, y + 26
+        out.append(QRectF(x, y, w, 22))
+        x += w + 6
+    return out
+
+
+class Summary(QWidget):
+    """The picked setup again under the three, with what it sets as chips (the user's request, 2026-10-21: the
+    options keep their height). As tall as the longest list needs, so nothing moves when another is picked."""
+    W = 520
+
+    def __init__(self):
+        super().__init__()
+        self.option = None
+        rows = max(_chips(o[4], self.W - 32)[-1].bottom() for o in OPTIONS)
+        self.setFixedSize(self.W, int(38 + rows + 12))
+
+    def show_option(self, option):
+        self.option = option
+        self.update()
+
+    def paintEvent(self, _):
+        if self.option is None:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(Qt.NoPen)
+        p.setBrush(T("bg"))
+        p.drawRoundedRect(QRectF(self.rect()), 8, 8)
+        p.setPen(T("ink"))
+        p.setFont(theme.font(14, 700))
+        p.drawText(QRectF(16, 9, self.W - 32, 22), Qt.AlignLeft | Qt.AlignVCenter,
+                   f"選了「{self.option.name}」，會這樣設定")
+        p.setFont(theme.font(12))
+        for text, c in zip(self.option.sets, _chips(self.option.sets, self.W - 32)):
+            c.translate(16, 38)
+            p.setPen(Qt.NoPen)
+            p.setBrush(T("accbg"))
+            p.drawRoundedRect(c, 11, 11)
+            p.setPen(T("acct"))
+            p.drawText(c, Qt.AlignCenter, text)
 
 
 class MicStep(QWidget):
-    """1: the name, the microphone, its meter; 略過 until speech is heard, then 下一步."""
+    """1: the name, the microphone, its meter; 略過 until what was said is decoded (你剛剛說), then 下一步."""
     heard_audio = Signal(object)   # what was said (16 kHz float32), to be decoded for 你剛剛說
     done = Signal()
 
@@ -391,8 +427,8 @@ class MicStep(QWidget):
         self.said.setWordWrap(True)
         v.addWidget(self.said)
         v.addStretch(1)
-        self.next = button("略過", self.done.emit)
-        self.next.setFixedSize(160, 40)
+        self.next = button("略過", self.done.emit, wiz=True)
+        self.next.setFixedSize(200, 46)
         v.addWidget(self.next, 0, Qt.AlignHCenter)
 
         self.probe = audio.LevelProbe(keep=KEEP)
@@ -400,10 +436,10 @@ class MicStep(QWidget):
         self.reset()
 
     def reset(self):
-        self._heard = False
-        self._run = 0
+        self._heard = False      # 你剛剛說 came back: 聽到了 and 下一步
         self._speech_at = None   # when the speech being said began (monotonic)
         self._loud_at = 0.0
+        self._loud = False       # this speech went over TEST_HEARD
         self._waiting = False    # what was said is being decoded
         self.mic.blockSignals(True)
         self.mic.clear()
@@ -418,6 +454,8 @@ class MicStep(QWidget):
         self._show()
 
     def _show(self, error: str = ""):
+        """The status line (the user's design, 2026-10-21): 試著說… → 正在聽… while speech comes in and is decoded →
+        聽到了 with the green dot once 你剛剛說 shows."""
         self.ok.setVisible(self._heard and not error)
         if error:
             self.status.setText(error)
@@ -425,6 +463,9 @@ class MicStep(QWidget):
         elif self._heard:
             self.status.setText("聽到了，音量足夠")
             prop(self.status, muted=False, ok=True, warn=False)
+        elif self._speech_at is not None or self._waiting:
+            self.status.setText("正在聽…")
+            prop(self.status, muted=True, ok=False, warn=False)
         else:
             self.status.setText("試著說「今天天氣很好」")
             prop(self.status, muted=True, ok=False, warn=False)
@@ -446,11 +487,12 @@ class MicStep(QWidget):
         self._timer.stop()
         self.probe.stop()
         self.meter.reset()
+        self._speech_at = None
 
     def _mic(self):
         self.win.cfg.mic = self.mic.currentData() or ""
         self.win.save()
-        self._heard, self._run, self._speech_at = False, 0, None
+        self._heard, self._speech_at, self._waiting = False, None, False
         self.said.hide()
         self.stop()
         self.start()
@@ -459,35 +501,38 @@ class MicStep(QWidget):
         level = self.probe.read()
         self.meter.set(level)
         now = time.monotonic()
-        if not self._heard:
-            self._run = self._run + 1 if level > TEST_HEARD else 0
-            if self._run >= HEARD_TICKS:
-                self._heard = True
-                self._show()
         if level > SPEECH:
             if self._speech_at is None:
                 self._speech_at = now
+                self._loud = False
+                self._show()
             self._loud_at = now
-        elif self._speech_at is not None and now - self._loud_at > QUIET_AFTER:
-            spoken = self._loud_at - self._speech_at
-            start = self._speech_at
-            self._speech_at = None
-            if spoken >= 0.3 and not self._waiting:
-                self._waiting = True
-                self.heard_audio.emit(self.probe.recent(min(now - start + 0.4, KEEP)))
+            self._loud = self._loud or level > TEST_HEARD
+            if now - self._speech_at < MAX_SAY:
+                return
+        elif self._speech_at is None or now - self._loud_at <= QUIET_AFTER:
+            return
+        # the speech ended (or went on past MAX_SAY: a noisy room never goes quiet)
+        start, self._speech_at = self._speech_at, None
+        if self._loud_at - start >= 0.3 and not self._waiting:
+            self._waiting = True
+            self.heard_audio.emit(self.probe.recent(min(now - start + 0.4, KEEP)))
+        self._show()
 
     def show_said(self, text):
-        """The decode of what was said: None while the model isn't ready yet."""
+        """The decode of what was said: None while the model isn't ready yet (then the level alone counts)."""
         self._waiting = False
         if text is None:
+            self._heard = self._heard or self._loud
             self.said.setText("辨識模型還在準備，好了之後這裡會顯示你說的話")
             prop(self.said, muted=True)
+            self.said.show()
         elif text:
+            self._heard = True
             self.said.setText(f"你剛剛說：「{text}」")
             prop(self.said, muted=False)
-        else:
-            return
-        self.said.show()
+            self.said.show()
+        self._show()
 
 
 class PackStep(QWidget):
@@ -516,8 +561,8 @@ class PackStep(QWidget):
         v.addSpacing(14)
         v.addWidget(_label("之後在「詞庫」可以隨時加減，也能自己加詞。", 12.5, muted=True))
         v.addStretch(1)
-        self.next = button("跳過", self.done.emit)
-        self.next.setFixedSize(160, 40)
+        self.next = button("跳過", self.done.emit, wiz=True)
+        self.next.setFixedSize(200, 46)
         v.addWidget(self.next, 0, Qt.AlignHCenter)
         BackButton(self).move(16, 18)
 
@@ -543,24 +588,27 @@ class StyleStep(QWidget):
         super().__init__()
         self.win = win
         v = QVBoxLayout(self)
-        v.setContentsMargins(40, 44, 40, 20)
+        v.setContentsMargins(40, 40, 40, 16)
         v.setSpacing(0)
         v.addWidget(_label("你想怎麼開關麥克風？", 24, 700))
         v.addSpacing(6)
         v.addWidget(_label("選一個起點，之後都能在「麥克風」頁改。", 13.5, muted=True))
-        v.addSpacing(16)
+        v.addSpacing(14)
         self.options = {}
         for key, *rest in OPTIONS:
             o = Option(key, *rest)
             o.clicked.connect(lambda _=False, k=key: self.pick(k))
             v.addWidget(o)
-            v.addSpacing(8)
+            v.addSpacing(6)
             self.options[key] = o
+        v.addSpacing(4)
+        self.summary = Summary()
+        v.addWidget(self.summary)
         v.addStretch(1)
-        tutorial = button("開始教學", None, pri=True)   # the tutorial comes later (the user's decision, 2026-10-21)
-        tutorial.setFixedHeight(44)
+        tutorial = button("開始教學", None, pri=True, wiz=True)   # the tutorial comes later (the user's decision)
+        tutorial.setFixedHeight(46)
         v.addWidget(tutorial)
-        v.addSpacing(8)
+        v.addSpacing(6)
         skip = TextLink("跳過教學，直接開始使用")
         skip.clicked.connect(self.done.emit)
         v.addWidget(skip, 0, Qt.AlignHCenter)
@@ -573,6 +621,7 @@ class StyleStep(QWidget):
         self.choice = key
         for k, o in self.options.items():
             o.setChecked(k == key)
+        self.summary.show_option(self.options[key])
 
 
 class Card(QWidget):
@@ -610,6 +659,7 @@ class Wizard(QWidget):
         super().__init__(win)
         self.win = win
         self.setGeometry(win.rect())
+        self.setFocusPolicy(Qt.ClickFocus)
         self._logos = {}           # color -> the faint logo on the wall
         self.card = Card(self)
         self.card.setGeometry((self.width() - CARD_W) // 2, (self.height() - CARD_H) // 2, CARD_W, CARD_H)
@@ -642,6 +692,7 @@ class Wizard(QWidget):
             self.mic_step.stop()
         self.card.step = index
         self.card.update()
+        self.setFocus(Qt.OtherFocusReason)   # not on the next step's first tile, as if Tab was pressed
         self.slides.go(index)
 
     def showEvent(self, e):

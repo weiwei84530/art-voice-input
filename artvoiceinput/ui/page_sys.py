@@ -7,7 +7,7 @@ from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QPainter, QPen
 from PySide6.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QMessageBox, QVBoxLayout, QWidget
 
-from .. import __version__, paths, userdata
+from .. import __version__, config, paths, userdata
 from . import theme
 from .kit import (Choice, Info, Switch, T, button, card, crossfade, dim, draw_icon, hbox, icon, label, sep,
                   set_calm, titled, vbox)
@@ -136,8 +136,12 @@ class SysPage(QWidget):
         # 清空並重新設定 (2026-10-21, the user's design: like a phone's factory reset): everything cleared, then the
         # setup wizard from its first step
         reset = button("清空並重新設定…", self._reset, danger=True)
+        # with --debug: the setup wizard at once, dark, nothing cleared (2026-10-21, the user's request; it applies what
+        # is picked like the real one)
+        wizard = button("進入設定精靈", self._wizard_dark)
+        wizard.setVisible(config.DEBUG)
         row("設定檔", "所有設定與詞庫存成一個檔案，換電腦時帶走",
-            vbox(drop, 10, hbox(export, None, reset, spacing=8), spacing=0))
+            vbox(drop, 10, hbox(export, None, wizard, reset, spacing=8), spacing=0))
         # names on one line, values on the next, all values alike (the folder link was a button: the buttons'
         # style-sheet size made it smaller, 2026-10-21)
         about = QGridLayout()
@@ -241,7 +245,6 @@ class SysPage(QWidget):
         except OSError as e:
             QMessageBox.warning(self, "匯出設定", f"無法寫入檔案：{e}")
             return
-        self.notice(f"已匯出到 {path}")
 
     def _import_pick(self):
         path, _ = QFileDialog.getOpenFileName(self, "匯入設定", str(Path.home() / "Documents"),
@@ -268,6 +271,15 @@ class SysPage(QWidget):
         sheet.linked.connect(self._export)
         sheet.accepted.connect(self._reset_now)
         sheet.open()
+
+    def _wizard_dark(self):
+        self.cfg.theme = "dark"
+        self.cfg.setup_done = False   # the app rests until it is finished, as after 清空並重新設定
+        self.modes.set("dark")
+        self._mode_note()
+        self.win.save()
+        self.win.theme.set_mode("dark")
+        self.win.start_wizard()
 
     def _reset_now(self):
         userdata.reset(self.cfg, self.win.hotwords, self.win.memory)

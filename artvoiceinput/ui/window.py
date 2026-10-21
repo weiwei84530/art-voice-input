@@ -135,6 +135,15 @@ class SettingsWindow(Shell):
         self.min_button.raise_()
         self.close_button.raise_()
 
+    def show_packs(self):
+        """詞庫's 詞包 section (a pack hint clicked: the tray notice or its 辨識紀錄 row)."""
+        if self.wizard is not None and self.wizard.isVisible():
+            return
+        self.show_home_now()
+        self.bank_page.tabs.set("packs")
+        self.bank_page._pick_tab("packs")
+        self.open_page("bank")
+
     def wizard_said(self, text):
         if self.wizard is not None:
             self.wizard.mic_step.show_said(text)

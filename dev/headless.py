@@ -211,7 +211,7 @@ class Muter:
 
 A.muter = Muter()
 A.cfg.save = lambda: None   # settings are never saved (the pack hint saves config.json)
-appmod.cues.play = lambda cue, kind: print(f"      [音效] {kind}: {cue or '（無）'}")   # printed, not played
+appmod.cues.play = lambda cue, kind, volume=100: print(f"      [音效] {kind}: {cue or '（無）'}")   # printed, not played
 
 
 def pump(sec):
