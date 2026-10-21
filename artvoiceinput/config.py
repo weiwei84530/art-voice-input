@@ -10,6 +10,9 @@ from .paths import CONFIG_PATH
 # launched with --debug (2026-10-17, the user's request): the 開發測試 settings are shown and work; a release is
 # launched without it, and they are off. Set by app.main before the config is loaded.
 DEBUG = False
+# a 自訂 draft mark color's opacity, fixed (2026-10-22, the user's request: an opaque one hid the draft); the preset
+# colors (highlight.COLORS) are 0x5A-0x78
+MARK_ALPHA = 0x6E
 BUTTON_SCALE_RANGE = (75, 125)
 
 
@@ -126,6 +129,9 @@ class Config:
         edges = data.get("glow_edges")   # one for every style until 2026-10-21: now the style's own
         if edges and edges != "all" and cfg.glow:
             cfg.glow_edits = {**cfg.glow_edits, cfg.glow: {**cfg.glow_edits.get(cfg.glow, {}), "edges": edges}}
+        mark = cfg.highlight_color
+        if len(mark) == 9 and mark.startswith("#") and int(mark[1:3], 16) > 0x78:   # a 自訂 picked with its own opacity
+            cfg.highlight_color = f"#{MARK_ALPHA:02X}{mark[3:].upper()}"
         cfg.button_scale = min(max(int(cfg.button_scale), BUTTON_SCALE_RANGE[0]), BUTTON_SCALE_RANGE[1])
         cfg.save_recordings = DEBUG   # no setting (2026-10-20): recordings are kept exactly in debug mode
         if "rules" in data:

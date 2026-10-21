@@ -128,7 +128,8 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
 - **Caret moved** (click, key, selection; `_caret_left` from the hooks): the draft stays as typed, the next speech
   starts a new one; a late update is redone at the new caret (`_redo_job`). A draft started over a selection
   replaces it.
-- **Draft mark** (`highlight.py`, color `highlight_color`, default yellow because blue read as a selection): only the
+- **Draft mark** (`highlight.py`, color `highlight_color`, default yellow because blue read as a selection; a 自訂
+  color's opacity fixed at `config.MARK_ALPHA`, its dialog the picker and numbers only, 2026-10-22): only the
   open sentence, read every 0.15s on a thread, hidden while the wheel turns, on caret moves or another window in
   front. Windows Terminal reports a wide character 3 cells wide (it takes 2).
 - **Pastes** (`output.paste_text`): Win32 clipboard owned by a hidden window (Qt's lazy clipboard let a following

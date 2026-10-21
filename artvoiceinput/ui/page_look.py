@@ -7,7 +7,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen
 from PySide6.QtWidgets import (QAbstractButton, QComboBox, QGridLayout, QSlider, QVBoxLayout, QWidget)
 
-from .. import cues
+from .. import config, cues
 from .. import glow as glowmod
 from ..config import BUTTON_SCALE_RANGE
 from ..floatbtn import _SIZE as _MIC_SIZE, OrbButton, _hover_curve, _paint_mic
@@ -810,8 +810,9 @@ class LookPage(QWidget):
         self._show_mark()
 
     def _pick_mark(self):
-        c = pick_color(self, QColor(self.cfg.highlight_color), "草稿反白顏色", alpha=True)
+        c = pick_color(self, QColor(self.cfg.highlight_color), "草稿反白顏色")
         if c.isValid():
+            c.setAlpha(config.MARK_ALPHA)   # the opacity is fixed: the text shows through
             self.cfg.highlight_color = c.name(QColor.HexArgb).upper()
             self.win.save()
         self._show_mark()
