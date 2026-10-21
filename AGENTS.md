@@ -129,7 +129,7 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
   starts a new one; a late update is redone at the new caret (`_redo_job`). A draft started over a selection
   replaces it.
 - **Draft mark** (`highlight.py`, color `highlight_color`, default yellow because blue read as a selection; a 自訂
-  color's opacity fixed at `config.MARK_ALPHA`, its dialog the picker and numbers only, 2026-10-22): only the
+  color's opacity fixed at `config.MARK_ALPHA`, 2026-10-22): only the
   open sentence, read every 0.15s on a thread, hidden while the wheel turns, on caret moves or another window in
   front. Windows Terminal reports a wide character 3 cells wide (it takes 2).
 - **Pastes** (`output.paste_text`): Win32 clipboard owned by a hidden window (Qt's lazy clipboard let a following
@@ -371,7 +371,9 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   (shared errors; Qwen 1.2GB); dictionary-only mishearing guesses (all wrong on 80 utterances); start-sound
   cut-out by cross-correlation (press-and-talk era).
 - **Popups**: the lean redesign removed every popup but the 選字 menu and tray error notices; new popups get
-  designed from scratch with the user.
+  designed from scratch with the user. Colors (草稿反白 自訂, the glow's) are picked in `ui/colorpop.py`, a small
+  card under the swatch: a hue ring round a square, no numbers, live; outside click keeps, Esc reverts (2026-10-22,
+  Qt's color dialog dropped).
 
 ## Testing
 

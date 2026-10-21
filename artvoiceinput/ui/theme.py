@@ -22,7 +22,6 @@ DARK = {"bg": "#1A1C1F", "tile": "#24272B", "tile2": "#2C2F34", "ink": "#EEF0F2"
         "ins": "#62D683", "dark": True}
 MODES = [("light", "亮色"), ("dark", "暗色"), ("system", "跟隨系統")]
 _DOWN = (Path(__file__).parent / "down.svg").as_posix()   # the drop-down's arrow
-UP = (Path(__file__).parent / "up.svg").as_posix()       # a spin box's up arrow (kit.pick_color)
 _CHECK = (Path(__file__).parent / "check.svg").as_posix()  # the check box's tick
 
 

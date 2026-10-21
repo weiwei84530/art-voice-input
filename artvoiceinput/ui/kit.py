@@ -8,7 +8,7 @@ from PySide6.QtCore import (Property, QByteArray, QEasingCurve, QEvent, QObject,
 from PySide6.QtGui import QColor, QCursor, QFont, QFontMetrics, QGuiApplication, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (QAbstractButton, QApplication, QButtonGroup, QFrame, QGraphicsOpacityEffect, QHBoxLayout,
-                               QColorDialog, QDialog, QLabel, QLayout, QPushButton, QSizePolicy, QVBoxLayout, QWidget)
+                               QLabel, QLayout, QPushButton, QSizePolicy, QVBoxLayout, QWidget)
 
 from . import theme
 
@@ -41,8 +41,6 @@ ICONS = {
     "plus": ("M12 5v14M5 12h14", ""),
     "minus": ("M5 12h14", ""),
     "copy": ("M9 9h10v11H9zM5 15V4h10", ""),
-    "pick": ("M2 22l1-1h3l9-9M3 21v-3l9-9M15 6l3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8"
-             "a2.1 2.1 0 1 1 3-3l.4.4z", ""),   # an eyedropper: 從螢幕取色
     "arrow": ("M5 12h14M13 6l6 6-6 6", ""),
     "chev": ("M9 6l6 6-6 6", ""),
     "down": ("M12 3v12M7 10l5 5 5-5M4 15v5h16v-5", ""),
@@ -245,66 +243,6 @@ def dark_frame(w, dark: bool):
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(v), ctypes.sizeof(v))
     except (AttributeError, OSError):
         pass
-
-
-_COLOR_WORDS = {"Basic colors": "基本顏色", "Pick Screen Color": "從螢幕取色", "Hue:": "色相", "Sat:": "飽和度",
-                "Val:": "亮度", "Red:": "紅", "Green:": "綠", "Blue:": "藍", "Alpha channel:": "透明度", "HTML:": "色碼",
-                "OK": "確定", "Cancel": "取消"}
-
-
-def _push_down(layout, widget) -> bool:
-    """A stretch put before widget in whichever layout under `layout` holds it."""
-    for i in range(layout.count()):
-        item = layout.itemAt(i)
-        if item.widget() is widget:
-            layout.insertStretch(i, 1)
-            return True
-        if item.layout() is not None and _push_down(item.layout(), widget):
-            return True
-    return False
-
-
-def pick_color(parent, color: QColor, title: str, alpha: bool = False) -> QColor:
-    """Qt's color dialog in the window's theme (2026-10-22, the user's report): the window's style sheet reached it,
-    its text light on the dialog's own light background in dark mode and the line edits' padding cutting the spin
-    boxes' three digits. An invalid color when cancelled."""
-    dialog = QColorDialog(color, parent)
-    dialog.setWindowTitle(title)
-    if alpha:
-        dialog.setOption(QColorDialog.ShowAlphaChannel)
-    dialog.setStyleSheet(
-        f"QColorDialog {{ background: {T('tile').name()}; }}"
-        f" QColorDialog QLabel {{ color: {T('ink').name()}; }}"
-        f" QColorDialog QSpinBox {{ min-width: 64px; min-height: 26px; padding: 0 2px 0 6px; color: {T('ink').name()};"
-        f" background: {T('tile2').name()}; border: 1px solid {T('line').name()}; border-radius: 5px; }}"
-        " QColorDialog QSpinBox QLineEdit { padding: 0; border: none; background: transparent; min-height: 0; }"
-        " QColorDialog QSpinBox::up-button, QColorDialog QSpinBox::down-button { subcontrol-origin: border;"
-        " width: 18px; border: none; background: transparent; }"
-        " QColorDialog QSpinBox::up-button { subcontrol-position: top right; }"
-        " QColorDialog QSpinBox::down-button { subcontrol-position: bottom right; }"
-        f" QColorDialog QSpinBox::up-arrow {{ image: url({theme.UP}); width: 10px; height: 10px; }}"
-        f" QColorDialog QSpinBox::down-arrow {{ image: url({theme._DOWN}); width: 10px; height: 10px; }}")
-    # its words in Chinese (the long "Alpha channel:" pushed its row out of line); no custom colors (a row of empty
-    # squares nothing here uses); the basic colors' column ends with 從螢幕取色, level with 確定 / 取消, so it reads
-    # as one side column, not an empty corner (2026-10-22, the user's requests)
-    for w in dialog.findChildren(QLabel) + dialog.findChildren(QPushButton):
-        name = w.text().replace("&", "")
-        if name in ("Custom colors", "Add to Custom Colors"):
-            w.hide()
-        elif name in _COLOR_WORDS:
-            w.setText(_COLOR_WORDS[name])
-            if name == "Pick Screen Color":
-                w.setIcon(icon("pick", T("muted"), 15, 1.8))
-                _push_down(dialog.layout(), w)
-    wells = [w for w in dialog.findChildren(QWidget) if w.metaObject().className() == "QColorWell"]
-    if len(wells) > 1:
-        wells[1].hide()   # the custom colors' wells (created after the basic ones)
-    # the title bar once the dialog is up: winId() before it showed made the settings window's widgets native, and
-    # its page transitions broke into pieces (2026-10-22, the user's report)
-    QTimer.singleShot(0, lambda: dark_frame(dialog, T("tile").lightness() < 128))
-    picked = dialog.currentColor() if dialog.exec() == QDialog.Accepted else QColor()
-    dialog.deleteLater()
-    return picked
 
 
 class Switch(QAbstractButton):

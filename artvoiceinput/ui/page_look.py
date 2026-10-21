@@ -14,7 +14,8 @@ from ..floatbtn import _SIZE as _MIC_SIZE, OrbButton, _hover_curve, _paint_mic
 from ..highlight import COLORS as MARK_COLORS
 from ..orbs import LOOKS, draw as draw_orb, palette
 from . import theme
-from .kit import Choice, Info, Slides, T, button, calm, card, dim, hbox, icon, label, pick_color, sep
+from .colorpop import pop_color
+from .kit import Choice, Info, Slides, T, button, calm, card, dim, hbox, icon, label, sep
 
 PREVIEW_H = 132     # the preview, as tall as the mark card beside it
 _NAME_W = 60        # the glow editor's names column
@@ -714,10 +715,12 @@ class LookPage(QWidget):
         for i, color in enumerate(c["colors"]):
             sw = Swatch(color, "", 26)
             sw.setToolTip("點一下換顏色")
-            sw.clicked.connect(lambda _=False, i=i: self._glow_color(i))
+            sw.clicked.connect(lambda _=False, i=i, sw=sw: self._glow_color(i, sw))
             self.color_row.addWidget(sw)
         if len(c["colors"]) < glowmod.MAX_COLORS:
-            self.color_row.addWidget(button("＋", lambda: self._glow_color(-1), ib=True))
+            more = button("＋", None, ib=True)
+            more.clicked.connect(lambda _=False, b=more: self._glow_color(-1, b))
+            self.color_row.addWidget(more)
         if len(c["colors"]) > 2:
             self.color_row.addWidget(button("－", self._glow_fewer, ib=True))
         self.color_row.addStretch(1)
@@ -762,16 +765,31 @@ class LookPage(QWidget):
         if not self._live.isActive():
             self._live.start()
 
-    def _glow_color(self, i: int):
+    def _glow_color(self, i: int, anchor):
+        """A color of the glow changed in the picker beside its swatch (＋: a new one, the last copied), the glow
+        following; saved when the picker closes. A new color never moved is not added."""
         colors = list(self._params()["colors"])
-        c = pick_color(self, QColor(colors[i] if i >= 0 else colors[-1]), "光暈顏色")
-        if not c.isValid():
-            return
-        if i >= 0:
+        new = i < 0
+        if new:
+            colors.append(colors[-1])
+            i = len(colors) - 1
+        moved = [False]
+
+        def changed(c: QColor):
+            moved[0] = True
             colors[i] = c.name()
-        else:
-            colors.append(c.name())
-        self._glow_edited("colors", colors)
+            self._glow_edited("colors", list(colors), save=False)
+            if isinstance(anchor, Swatch):
+                anchor.color = c.name()
+                anchor.update()
+            self.preview.colors = _colors_of(self.cfg.glow, self.cfg.glow_edits)
+            self.preview.update()
+
+        def closed():
+            if new and not moved[0]:
+                return
+            self._glow_edited(None, None)
+        pop_color(anchor, QColor(colors[i]), changed, closed)
 
     def _glow_fewer(self):
         self._glow_edited("colors", list(self._params()["colors"])[:-1])
@@ -810,12 +828,18 @@ class LookPage(QWidget):
         self._show_mark()
 
     def _pick_mark(self):
-        c = pick_color(self, QColor(self.cfg.highlight_color), "草稿反白顏色")
-        if c.isValid():
+        """自訂: the picker beside it, the preview following; saved when it closes."""
+        def changed(c: QColor):
+            c = QColor(c)
             c.setAlpha(config.MARK_ALPHA)   # the opacity is fixed: the text shows through
             self.cfg.highlight_color = c.name(QColor.HexArgb).upper()
+            self._show_mark()
+
+        def closed():
             self.win.save()
-        self._show_mark()
+            self._show_mark()
+        self._show_mark()   # the click toggled 自訂: it is checked only once a color of its own is picked
+        pop_color(self.mark_custom, QColor(self.cfg.highlight_color), changed, closed)
 
     # --- sounds ---
     def _sound_set(self, cid):
