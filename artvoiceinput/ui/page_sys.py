@@ -5,12 +5,16 @@ from pathlib import Path
 
 from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QPainter, QPen
-from PySide6.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QMessageBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QFileDialog, QGridLayout, QHBoxLayout, QMessageBox, QVBoxLayout, QWidget
 
 from .. import __version__, config, paths, userdata
 from . import theme
 from .kit import (Choice, Info, Switch, T, button, card, crossfade, dim, draw_icon, hbox, icon, label, sep,
                   set_calm, titled, vbox)
+
+
+LEFT = 300   # the names' column: each gray line on one line (210 wrapped them, 2026-10-21, the user's request)
+CLICKS = (("settings", "打開設定視窗"), ("mic", "開關麥克風"))   # Config.tray_click
 
 
 def _state(on: bool, text: str) -> str:
@@ -75,7 +79,7 @@ class Drop(QWidget):
         p.setFont(theme.font(12))
         p.setPen(T("muted"))
         p.drawText(QRectF(50, 32, r.width() - 60, 18), Qt.AlignLeft | Qt.AlignVCenter,
-                   "或點這裡選擇檔案。詞庫會合併；麥克風、開機啟動、浮動按鈕位置不會被覆蓋")
+                   "或點這裡選擇檔案。詞庫會合併，麥克風等這台電腦的設定不會被覆蓋")
 
 
 class SysPage(QWidget):
@@ -95,10 +99,10 @@ class SysPage(QWidget):
 
         def row(title, sub, body, last=False, info=None):
             r = QHBoxLayout()
-            r.setContentsMargins(0, 18, 0, 18)
+            r.setContentsMargins(0, 16, 0, 16)
             r.setSpacing(24)
             t = titled(title, sub, 14.5, 700)
-            t.setFixedWidth(210)
+            t.setFixedWidth(LEFT)
             if info is not None:   # the ⓘ after the name
                 t.layout().removeWidget(t.title)
                 t.layout().insertLayout(0, hbox(t.title, Info(info), None, spacing=6))
@@ -124,8 +128,16 @@ class SysPage(QWidget):
         self.pin = Switch(name="圖示固定在工作列")
         self.pin.toggled.connect(self._pin)
         self.pin_note = label("")
-        row("圖示固定在工作列", "右下角直接看得到，不收進 ^ 箭頭裡", hbox(self.pin, self.pin_note, None, spacing=10),
-            info="左鍵點圖示開始或結束錄音，右鍵打開選單。關閉時圖示回到 ^ 箭頭裡")
+        # what a left click on the icon does, after the switch (2026-10-21, the user's request)
+        self.click = QComboBox()
+        self.click.setAccessibleName("點一下圖示時")
+        self.click.setCursor(Qt.PointingHandCursor)
+        for key, name in CLICKS:
+            self.click.addItem(name, key)
+        self.click.currentIndexChanged.connect(self._click)
+        row("圖示固定在工作列", "右下角直接看得到，不收進 ^ 箭頭裡",
+            hbox(self.pin, self.pin_note, None, label("點一下圖示："), self.click, spacing=10),
+            info="左鍵點圖示做的事在右邊選，右鍵打開選單。關閉時圖示回到 ^ 箭頭裡")
         # 節流模式 (moved here from 外觀與聲音, 2026-10-20, the user's request): the orbs and the glow draw less, and
         # this window skips its animations (kit.calm)
         self.lite = Switch(name="節流模式")
@@ -189,6 +201,9 @@ class SysPage(QWidget):
         self._auto_note()
         self.pin.set_quiet(self.cfg.tray_pinned)
         self._pin_note()
+        self.click.blockSignals(True)
+        self.click.setCurrentIndex(max(0, self.click.findData(self.cfg.tray_click)))
+        self.click.blockSignals(False)
         self.lite.set_quiet(self.cfg.orb_lite)
         self._lite_note()
         set_calm(self.cfg.orb_lite)
@@ -248,8 +263,11 @@ class SysPage(QWidget):
         self._pin_note()
 
     def _pin_note(self):
-        self.pin_note.setText(_state(self.cfg.tray_pinned, "點一下就能開關麥克風" if self.cfg.tray_pinned
-                                     else "收在 ^ 箭頭裡"))
+        self.pin_note.setText(_state(self.cfg.tray_pinned, "顯示在工作列" if self.cfg.tray_pinned else "收在 ^ 箭頭裡"))
+
+    def _click(self):
+        self.cfg.tray_click = self.click.currentData()
+        self.win.save()
 
     # --- 設定檔 ---
     def _export(self):

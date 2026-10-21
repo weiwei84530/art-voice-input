@@ -89,7 +89,8 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
 - **On / off**: 麥克風快捷鍵 (`config.hotkey`, captured from any key, combination or mouse button but the left; a
   press is always a tap, fully suppressed; a modifier alone fires on release with nothing else pressed and is not
   suppressed, with Alt/Win an unassigned 0xE8 is sent so no menu opens), the floating button, the bubble, a left
-  click on the tray icon (`App._tray_clicked`: the window typed into before gets the foreground back from the taskbar;
+  click on the tray icon when 點一下圖示 is 開關麥克風 (`tray_click` "mic"; default "settings" opens the settings
+  window; `App._tray_clicked`: the window typed into before gets the foreground back from the taskbar;
   setup wizard unfinished → opens it; the menu is on the right button),
   點進輸入框時 = 自動開麥克風 (`auto_listen`), spoken 結束,
   送出訊息後自動關閉麥克風 (`stop_on_enter`: Enter / Ctrl+Enter or an operation's Enter step), 沒講話多久自動關閉
@@ -265,7 +266,9 @@ running one (`app.PIPE`, QLocalServer) to show its home. Tray icon (`tray.py`, t
 icon (`appicon.py`, design J of https://claude.ai/artifact/JU4N5jkE3UiiURvWfUhUNK, 2026-10-21; also every window's
 icon and the wizard's badge), while listening a white ring turning on its square (1.2s a turn, half the
 frames with 節流模式). 系統's 圖示固定在工作列 (`tray_pinned`, off by default) sets IsPromoted in
-`HKCU\Control Panel\NotifyIconSettings` for this executable's entry (applies live; off at launch writes nothing).
+`HKCU\Control Panel\NotifyIconSettings` for this executable's entry (applies live; off at launch writes nothing);
+a 點一下圖示 dropdown after its switch picks 打開設定視窗 / 開關麥克風 (`tray_click`, 2026-10-21). 系統's names
+column is 300px so each gray line fits one line and the page needs no scrolling.
 
 Settings window (`ui/`, the 2026-10 redesign; mockups on the claude.ai Design canvas
 https://claude.ai/artifact/8UWdBateenAsqfZKeHPeiG, style C): frameless 960x640, Windows 11 rounded corners. Home:

@@ -531,11 +531,12 @@ class App(QObject):
             b.vanish()
 
     def _tray_clicked(self):
-        """Main thread: a left click on the tray icon turns listening on or off (2026-10-21, the user's design; the menu
-        is on the right button). Clicking the taskbar made it the foreground window: the one typed into before gets
-        the focus back, so the text goes there. While the setup wizard is not finished it opens the wizard."""
+        """Main thread: a left click on the tray icon opens the settings window or, with `tray_click` "mic", turns
+        listening on or off (2026-10-21, the user's design; the menu is on the right button). Clicking the taskbar made
+        it the foreground window: the one typed into before gets the focus back, so the text goes there. While the
+        setup wizard is not finished it opens the wizard."""
         self._close_menu()
-        if self._paused:
+        if self._paused or self.cfg.tray_click != "mic":
             self.open_settings()
             return
         if self._listening:
