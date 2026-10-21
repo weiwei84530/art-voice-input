@@ -9,12 +9,10 @@ import ctypes
 import logging
 import winreg
 
-from PySide6.QtCore import QByteArray, QObject, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
-from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QSystemTrayIcon
 
-from .ui.kit import LOGO
 from .ui.theme import ACCENT
 
 log = logging.getLogger(__name__)
@@ -28,19 +26,35 @@ _KEY = r"Control Panel\NotifyIconSettings"
 def _square(p: QPainter, s: int):
     p.setPen(Qt.NoPen)
     p.setBrush(QColor(ACCENT))
-    m = s / 32   # half a pixel at 16px: the edge stays sharp
-    p.drawRoundedRect(QRectF(m, m, s - 2 * m, s - 2 * m), s * 0.24, s * 0.24)
+    # the whole canvas, as other apps' icons fill theirs (a margin made it look smaller, 2026-10-21)
+    p.drawRoundedRect(QRectF(0, 0, s, s), s * 0.22, s * 0.22)
 
 
 def _mic(s: int) -> QPixmap:
+    """The logo's microphone drawn on whole pixels: the logo scaled to 16px fell between them and blurred
+    (2026-10-21, the user's report)."""
     pm = QPixmap(s, s)
     pm.fill(Qt.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.Antialiasing)
     _square(p, s)
-    xml = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">{LOGO.format(c="#FFFFFF")}</svg>'
-    inset = s * 0.16
-    QSvgRenderer(QByteArray(xml.encode())).render(p, QRectF(inset, inset, s - 2 * inset, s - 2 * inset))
+    white = QColor(255, 255, 255)
+    # at 16px: a 4px capsule, 2px strokes 1px from it (the crispest of four tried); other sizes in proportion
+    cw = 2 * round(s * 0.13)
+    w = max(2, round(s / 10))
+    gap = max(1, round(s / 16))
+    top, ch = round(s / 8), round(s / 2)
+    p.setPen(Qt.NoPen)
+    p.setBrush(white)
+    p.drawRoundedRect(QRectF((s - cw) / 2, top, cw, ch), cw / 2, cw / 2)
+    pen = QPen(white, w)
+    pen.setCapStyle(Qt.RoundCap)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    r = (cw + 2 * gap + w) / 2
+    cy = top + ch - cw / 2                    # the holder is round about the capsule's bottom
+    p.drawArc(QRectF(s / 2 - r, cy - r, 2 * r, 2 * r), 180 * 16, 180 * 16)
+    p.drawLine(QPointF(s / 2, cy + r), QPointF(s / 2, s - round(s / 8)))
     p.end()
     return pm
 
@@ -52,8 +66,9 @@ def _ring(s: int, turn: float) -> QPixmap:
     p = QPainter(pm)
     p.setRenderHint(QPainter.Antialiasing)
     _square(p, s)
-    w = max(2.0, s * 0.11)
-    r = QRectF(s * 0.27, s * 0.27, s * 0.46, s * 0.46)
+    w = max(2, round(s / 8))                  # whole pixels, centred on the grid: sharp at 16px
+    rad = round(s * 0.28)
+    r = QRectF(s / 2 - rad, s / 2 - rad, 2 * rad, 2 * rad)
     pen = QPen(QColor(255, 255, 255, 90), w)
     p.setPen(pen)
     p.setBrush(Qt.NoBrush)
