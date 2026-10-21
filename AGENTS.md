@@ -156,7 +156,8 @@ and runs (nothing decoded when nothing was said since the last commit).
 - Spoken operations (`rules.py`, 自訂操作 tab): phrase(s) separated by 、 → one step: keys, text, 左右輸入文字
   (`WRAP`, caret put back between), or a command: 復原, 結束錄音, 全選 / 複製 / 剪下 / 貼上. Defaults
   (`rules.defaults`, rows fixed but the phrase; empty turns off): 換行、下一行 Shift+Enter, 空白, 括號 （）,
-  引號 「」, 刪除 Backspace, 復原 / 撤銷, clipboard four, 送出 Enter (listening goes on), 結束. With --debug the
+  引號 「」, 符號 / 鍵盤 (the symbol keyboard, below), 刪除 Backspace, 復原 / 撤銷, clipboard four, 送出 Enter
+  (listening goes on), 結束. With --debug the
   defaults (`rules.defaults(dev=True)`) also have the user's `rules.dev_rules` as 自訂 rows (標點 = "- ", 貼上圖片 = Alt+V);
   a --debug launch adds them when missing. 自訂 rows can't take
   a command a default row has. Problems shown in red when the tab comes into view. The engine still has situations,
@@ -222,6 +223,12 @@ sentence end → 嗎 questions → trailing punctuation.
   (`memory.variants`), 中文 (Chinese X-ASR wrote as English, `syllables.chinese_words`: one word as characters,
   2-3 words as a dictionary word, How the -> 好的; first next to Chinese; the spaces to Chinese go with the pick;
   nothing learned).
+- **Symbol keyboard** (2026-10-22, the user's request; design A of
+  https://claude.ai/artifact/FSX49ZChyWMdwvv5i8kPcG): said 符號 or 鍵盤 (`rules.KEYBOARD`, rules_version 15), the
+  選字 menu opens under the caret (`selection.caret_rect`, else the selection, else the mouse) with `picker.SYMBOLS`:
+  標點, 括號引號, 半形 (6x5 cells); a click types the symbol (over a selection), a pair (`picker.PAIRS`, also the
+  half-width () [] {}) around the caret or selection like 括號, and closes it; no 。 is added before it. Speech typed
+  while it is open closes it. Only full- and half-width symbols (no emoji: Win+. has them; no letters or 注音).
 - **詞庫 list** (`hotwords.py`, `hotword-list.json`; code says hotwords, UI says 詞庫 / 優先度): 優先度 shown as
   stored − 100 (0% nothing, +100% top, negative red). A pick of 2+ characters or English moves the picked word +25%
   and the replaced one −25%. Typed words are top. English replaced by English goes down too, to −50% at most (2026-10-21, TTS-measured: `hotwords` docstring); English for Chinese or back lowers no English; case forms are separate hotwords. Single characters never listed. ✕ puts a

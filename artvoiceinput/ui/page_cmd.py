@@ -21,6 +21,7 @@ BUILT = {
     (rules.KEYS, "Space"): (0, "按下", "Space", "key", "輸入一個空白"),
     (rules.WRAP, ("（", "）")): (0, "打出", "（ ｜ ）", "wrap", "游標停在中間；有選取時包住選取的字"),
     (rules.WRAP, ("「", "」")): (0, "打出", "「 ｜ 」", "wrap", "游標停在中間；有選取時包住選取的字"),
+    (rules.COMMAND, rules.KEYBOARD): (0, "", "打開符號鍵盤", "cmd", "在游標下方，點一個符號就打出來"),
     (rules.KEYS, "Backspace"): (1, "按下", "Backspace", "key", "有選取時刪掉選取的字"),
     (rules.COMMAND, rules.UNDO): (1, "", "復原上一步", "cmd", "收回剛才打的字或改動，一次一步"),
     (rules.COMMAND, rules.SELECT_ALL): (2, "", "全選", "cmd", "終端機裡無法全選"),

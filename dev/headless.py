@@ -187,6 +187,7 @@ appmod.FloatButton.set_active = lambda self, on: (
     print(f"      [浮動按鈕 {'縮小加速' if on else '恢復'}]") if on != self.active else None, _set_active(self, on))
 appmod.Bubble.burst = lambda self: (print("      [語音氣泡 放大淡出]"), self.hide())
 appmod.focus_info = lambda: (None, None)   # the real focus is the user's: focus: steps say what it is
+appmod.caret_rect = lambda: None           # nor its caret: the symbol keyboard opens by the mouse
 _show_at = appmod.Bubble.show_at
 appmod.Bubble.show_at = lambda self, pt: (print(f"      [語音氣泡 在 {pt}]"), _show_at(self, pt))
 A = appmod.App(qapp)

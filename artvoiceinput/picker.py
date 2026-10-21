@@ -9,6 +9,10 @@ sees what is chosen (a click on it keeps it); tab counts leave it out. Light or 
 (config.theme, ui/theme.py). Rows are answered with the mouse only (decided 2026-09-29: short spoken answers like
 對 / 第二個 were often misheard). There is no timeout: the app closes the menu when the user's next click or key is
 somewhere else.
+
+The same menu is the symbol keyboard (2026-10-22, design A of https://claude.ai/artifact/FSX49ZChyWMdwvv5i8kPcG, the
+user's pick): said 符號 or 鍵盤, it opens under the caret with SYMBOLS' tabs, no word leading the first; a click types
+the symbol, a pair (PAIRS) with the caret put back between, and closes it.
 """
 import ctypes
 
@@ -31,6 +35,12 @@ _RAIL_PAD = 5     # inside the rail of tabs
 _TAB_H = 38       # a tab: its name over its count
 _TAB_GAP = 4
 _RAIL_MIN = 62
+SYMBOL_GRID = (6, 5)   # columns, rows of the symbol keyboard, in the single characters' cells
+SYMBOLS = [("標點", ["，", "。", "、", "；", "：", "？", "！", "……", "——", "～", "·", "※"]),
+           ("括號引號", ["「」", "『』", "（）", "【】", "《》", "〈〉", "〔〕", "“”", "‘’", "［］"]),
+           ("半形", ["@", "#", "$", "%", "&", "*", "_", "-", "+", "=", "/", "\\", "|", "<", ">", "~", "^", "`", "'",
+                     '"', ":", ";", "!", "?", "()", "[]", "{}"])]
+PAIRS = {w for _, ws in SYMBOLS for w in ws if len(w) == 2 and w not in ("……", "——")}
 
 
 class Picker(QWidget):
@@ -46,6 +56,8 @@ class Picker(QWidget):
         self.tabs: list[tuple[str, list[str]]] = []
         self.current = 0
         self.single = False
+        self.grid = SINGLE
+        self.lead = True            # the first tab's first word is the one there now (選字; not the symbol keyboard)
         self.message = ""           # shown instead of candidates: … while loading, 沒有候選字
         self._anchor = None         # (top-left, bottom y) of the selection the menu belongs to, logical pixels
         self._answered = False
@@ -64,11 +76,19 @@ class Picker(QWidget):
     @property
     def candidates(self) -> list[str]:
         """Every candidate, tab after tab (not the word that is there now)."""
-        return [w for i, (_, words) in enumerate(self.tabs) for w in (words[1:] if i == 0 else words)]
+        return [w for i, (_, words) in enumerate(self.tabs) for w in (words[1:] if i == 0 and self.lead else words)]
 
     def show_loading(self, word: str, rect):
         self._answered = False
+        self.lead = True
         self._fill([], single=False, message="…")
+        self._place(rect)
+
+    def show_symbols(self, rect):
+        """The symbol keyboard under rect (the caret, physical pixels), or by the mouse."""
+        self._answered = False
+        self.lead = False
+        self._fill(SYMBOLS, single=True, message="", grid=SYMBOL_GRID)
         self._place(rect)
 
     def show_candidates(self, word: str, tabs: list[tuple[str, list[str]]]):
@@ -97,16 +117,16 @@ class Picker(QWidget):
             self.update()
 
     # --- layout ---
-    def _fill(self, tabs, single: bool, message: str):
-        self.tabs = [(name, words[:(SINGLE if single else WORDS)[0] * (SINGLE if single else WORDS)[1]])
-                     for name, words in tabs]
+    def _fill(self, tabs, single: bool, message: str, grid=None):
+        self.grid = grid or (SINGLE if single else WORDS)
+        self.tabs = [(name, words[:self.grid[0] * self.grid[1]]) for name, words in tabs]
         self.current, self.single, self.message = 0, single, message
         self._hover = None
         self._layout()
         self.update()
 
     def _layout(self):
-        cols, rows = SINGLE if self.single else WORDS
+        cols, rows = self.grid
         cw, ch = _CELL_SINGLE if self.single else _CELL_WORD
         if not self.single and self.tabs:
             fm = QFontMetrics(themes.font(_FONT_WORD, 500))
@@ -175,7 +195,7 @@ class Picker(QWidget):
         for i, word in enumerate(words):
             r = self._cells[i]
             hot = self._hover == ("cell", i)
-            first = self.current == 0 and i == 0
+            first = self.lead and self.current == 0 and i == 0
             if hot:
                 p.setPen(Qt.NoPen)
                 p.setBrush(self._c("accbg"))
@@ -214,7 +234,7 @@ class Picker(QWidget):
             p.setFont(themes.font(10.5, 600, num=True))
             p.setPen(self._c("acct") if on else self._c("muted"))
             p.drawText(QRectF(r.x() + 10, r.y() + 20, r.width() - 12, 14), Qt.AlignLeft | Qt.AlignVCenter,
-                       f"{len(words) - (i == 0)} 個")
+                       f"{len(words) - (i == 0 and self.lead)} 個")
 
     # --- the mouse ---
     def _hit(self, pos):

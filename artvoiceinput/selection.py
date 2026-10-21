@@ -610,6 +610,46 @@ def read_caret() -> tuple[str, str] | None:
         return None
 
 
+def caret_rect() -> tuple | None:
+    """Any thread: (x, y, 0, h) of the caret in physical screen pixels, from the character before it (or after it
+    at a line's start), or None when unknown. In a terminal: the cursor's cell."""
+    try:
+        uia, U = _uia()
+        el = uia.GetFocusedElement()
+        pattern = el.GetCurrentPattern(U.UIA_TextPatternId)
+        if not pattern:
+            return None
+        pattern = pattern.QueryInterface(U.IUIAutomationTextPattern)
+        if _proc_name(el.CurrentProcessId) in _TERMINALS or el.CurrentClassName == "TermControl":
+            cursor = _term_cursor(pattern)
+            if cursor is None:
+                return None
+            x, y, _, h = _char_rect(*cursor)
+            return x, y, 0, h
+        ranges = pattern.GetSelection()
+        if ranges.Length == 0:
+            return None
+        caret = ranges.GetElement(0)
+        for before in (True, False):
+            r = caret.Clone()   # collapsed to the caret, then one character before (or after) it
+            if before:
+                r.MoveEndpointByRange(_END, caret, _START)
+                moved = r.MoveEndpointByUnit(_START, _CHAR, -1)
+            else:
+                r.MoveEndpointByRange(_START, caret, _END)
+                moved = r.MoveEndpointByUnit(_END, _CHAR, 1)
+            if not moved or r.GetText(-1) in ("", "\r", "\n", "\r\n"):
+                continue
+            rects = [int(v) for v in r.GetBoundingRectangles() or []]
+            if len(rects) >= 4 and rects[3] > 0:
+                x, y, w, h = rects[-4:] if before else rects[:4]
+                return (x + w if before else x), y, 0, h
+        return None
+    except Exception:
+        log.debug("reading the caret's place failed", exc_info=True)
+        return None
+
+
 def visible_text() -> str:
     """The text visible in the focused control (UI Automation TextPattern), "" if it has none."""
     try:

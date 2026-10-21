@@ -64,7 +64,7 @@ from .output import (backspace, copy_text, paste_text, press_chord, press_delete
 from . import picker as picker_mod
 from .picker import Picker
 from .reading import reading_key
-from .selection import (Context, ContextProbe, focus_info, move_cursor_after, term_watcher,
+from .selection import (Context, ContextProbe, caret_rect, focus_info, move_cursor_after, term_watcher,
                         terminal_in_front)
 from .session import Session, foreground
 from .tray import Tray, promote as tray_promote
@@ -190,7 +190,8 @@ class App(QObject):
         self._pack_of: dict[str, str] = {}      # ticked packs' words -> the pack's name
         self._load_packs()
         self.memory = Memory()
-        self._menu = None                        # ("pick", Selection) while the 選字 menu is up
+        self._menu = None                        # ("pick", Selection) while the 選字 menu is up, ("symbols", _Press,
+                                                 # Selection or None) the symbol keyboard
         self._pick_gen = 0                       # mouse presses so far: a selection read late is dropped
 
         self._busy, self._busy_lock = 0, threading.Lock()   # decoding jobs queued or running
@@ -816,6 +817,8 @@ class App(QObject):
                     return
                 self.session.replaced_selection(d.sel.before, text, foreground(), d.sel.before + d.sel.text)
             else:
+                if self._menu and self._menu[0] == "symbols":
+                    self._close_menu()   # speech typed at the caret: the keyboard was for where it was
                 d.lead = " " if self.session.clean() and _space_between(self.session.buffer[-1:], text) else ""
                 paste_text(d.lead + text)
                 self.session.dictated(d.lead + text, None, foreground())
@@ -1435,6 +1438,9 @@ class App(QObject):
                     self._on_main(lambda: self.undo(press.probe.result() if press.key == "listen" else None))
                 elif step.type == rules.COMMAND and step.value == rules.STOP:
                     self._on_main(lambda: self._stop_listen() if self._listening else None)
+                elif step.type == rules.COMMAND and step.value == rules.KEYBOARD:
+                    rect = sel.rect if sel is not None and sel.rect else caret_rect()
+                    self._on_main(lambda r=rect: self._open_symbols(press, sel, r))
             if stop:
                 log.info("listen: off, sent")
                 self._on_main(lambda: self._stop_listen() if self._listening else None)
@@ -1839,10 +1845,29 @@ class App(QObject):
     def _forget_menu(self):
         self._menu = None
 
+    def _open_symbols(self, press: _Press, sel, rect):
+        """Main thread: the symbol keyboard (符號 / 鍵盤) under the caret or the selection, else by the mouse."""
+        self._close_menu()
+        log.info("symbol keyboard at %s", rect)
+        self._menu = ("symbols", press, sel)
+        self.picker.show_symbols(rect)
+
+    def _type_symbol(self, press: _Press, sel, symbol: str):
+        """Main thread: a symbol picked: typed at the caret or over the selection; a pair around them."""
+        log.info("symbol: %s", symbol)
+        if symbol in picker_mod.PAIRS:
+            self._wrap(press, list(symbol), sel)
+        elif sel is not None:
+            self._replace_selection(press, sel, symbol)
+        else:
+            self._type_text(symbol)
+
     def on_menu_pick(self, word: str):
         menu = self._menu
         self._menu = None
-        if menu and menu[0] == "pick" and word:
+        if menu and menu[0] == "symbols" and word:
+            self._type_symbol(menu[1], menu[2], word)
+        elif menu and menu[0] == "pick" and word:
             if word == menu[1].text.strip():   # the word that is there now (the menu's first): kept as it is
                 log.info("menu pick: kept %s", word)
                 return
@@ -2007,12 +2032,13 @@ def _inside(ctx) -> bool:
 def _no_mark_first(command) -> bool:
     """An operation that takes back what is before the caret: Backspace (刪除) would delete a mark the commit added
     and seem to do nothing (2026-10-15); 復原 (撤銷) showed the 。 for a moment before taking back the last update
-    (2026-10-16)."""
+    (2026-10-16). The symbol keyboard: the symbol picked may be the mark (2026-10-22)."""
     op = command[0] if command is not None else None
     if op is None or not op.steps:
         return False
     st = op.steps[0]
-    return (st.type, st.value) in ((rules.KEYS, "Backspace"), (rules.COMMAND, rules.UNDO))
+    return (st.type, st.value) in ((rules.KEYS, "Backspace"), (rules.COMMAND, rules.UNDO),
+                                   (rules.COMMAND, rules.KEYBOARD))
 
 
 def _clipboard_text() -> str:
