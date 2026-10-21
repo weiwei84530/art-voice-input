@@ -550,6 +550,9 @@ class Shell(QWidget):
         self.home.setGraphicsEffect(self._home_fx)
         self._page_fx = QGraphicsOpacityEffect(self.stack)
         self.stack.setGraphicsEffect(self._page_fx)
+        # the first frame's state before anything shows: an opacity effect starts at 0.7, and the page was painted
+        # so before the animation's first tick (a page's first showing is slow; the user saw it flash, 2026-10-21)
+        self._frame(0.0)
         self.home.show()
         self.stack.show()
         self.strip.show()
