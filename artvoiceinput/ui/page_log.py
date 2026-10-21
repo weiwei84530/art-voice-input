@@ -1,7 +1,8 @@
 """辨識紀錄 (design 1, the user's pick): a timeline, newest first. A session (listening on, or what was done while
 it was off) is a node with its time and length; each event under it shows its time, a colored dot and tag for its kind,
 what changed on the screen (new text green, removed struck through red), a yellow ! when the 詞庫 may have shaped it
-and a copy button for a finished sentence. What was heard and why are the row's tooltip. Filters by kind."""
+and a copy button for a finished sentence. What was heard and why are the row's tooltip. Filters by kind. Only the
+newest PAGE rows are built at first; scrolling near the end (or 顯示更早的紀錄) adds the next PAGE."""
 from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QCursor, QPainter
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QWidget
@@ -13,7 +14,9 @@ from .kit import Choice, T, Tip, button, dim, icon, label
 FILTERS = [("all", "全部"), ("text", "文字"), ("cmd", "指令"), ("fix", "選字與復原")]
 KIND_COLORS = {"text": "#FF453A", "cmd": "#3D7BFF", "pick": "#A259FF", "undo": "#8A9099", "hint": "#D9822B"}
 SETTLED = ("#C8323E", "#E8525C")   # 定稿, light and dark: the text red a little deeper (2026-10-21, the user's pick)
-MAX_ROWS = 300   # rows drawn, newest first
+PAGE = 40        # rows drawn at first, and added each time the list is scrolled to its end (2026-10-22: building
+                 # all 300 at once made the page slow to open)
+NEAR_END = 240   # px from the scroll's end where the next rows are added
 LINE_X = 77      # the timeline's x
 
 
@@ -191,7 +194,15 @@ class LogPage(QWidget):
         self.body = QVBoxLayout()
         self.body.setSpacing(0)
         v.addLayout(self.body)
+        self.more = button("", self._more)
+        self.more.hide()
+        v.addWidget(self.more, 0, Qt.AlignHCenter)
         v.addStretch(1)
+        self._want = PAGE   # rows to show: PAGE, more after scrolling
+        self._items = []    # what _draw would show, newest first: ("node", title, meta) or ("row", r)
+        self._built = 0     # items built so far
+        self._rows = 0      # rows among them
+        self._scroll = None
 
     def load(self):
         pass
@@ -214,16 +225,38 @@ class LogPage(QWidget):
             self._dirty = True
 
     def shown(self):
-        self._draw()
+        """The page opened: the newest rows again, rebuilt only when something changed or more were added."""
+        if getattr(self, "_dirty", True) or self._want != PAGE:
+            self._want = PAGE
+            self._draw()
 
     def showEvent(self, e):
+        if self._scroll is None:   # the page frame's scroll area: rows added near its end
+            w = self.parentWidget()
+            while w is not None and not hasattr(w, "verticalScrollBar"):
+                w = w.parentWidget()
+            if w is not None:
+                self._scroll = w.verticalScrollBar()
+                self._scroll.valueChanged.connect(self._scrolled)
+                self._scroll.rangeChanged.connect(lambda *_: self._scrolled())
         if getattr(self, "_dirty", False):
             self._draw()
         super().showEvent(e)
 
     def _pick(self, key):
         self.filter = key
+        self._want = PAGE
         self._draw()
+
+    def _scrolled(self, *_):
+        bar = self._scroll
+        if (self.isVisible() and self._built < len(self._items) and bar.maximum() > 0
+                and bar.value() >= bar.maximum() - NEAR_END):
+            self._more()
+
+    def _more(self):
+        self._want = self._rows + PAGE
+        self._build()
 
     def _clear(self):
         self.win.clear_log.emit()
@@ -233,32 +266,46 @@ class LogPage(QWidget):
         return self.filter == "all" or k == self.filter or (self.filter == "fix" and k in ("pick", "undo"))
 
     def _draw(self):
+        """All again from the newest, as many rows as were shown (new rows while listening keep what was loaded)."""
         self._dirty = False
         while self.body.count():
             w = self.body.takeAt(0).widget()
             if w is not None:
                 w.hide()
                 w.deleteLater()
-        dark = self.win.theme["dark"]
-        left = MAX_ROWS
+        self._items, self._built, self._rows = [], 0, 0
         for g in reversed(self.sessions):
             rows = [r for r in reversed(g["rows"]) if self._keep(r)]
-            if not rows or left <= 0:
+            if not rows:
                 continue
             head = "麥克風開著" if g["listening"] else "沒開麥克風時"
             meta = f"{_span(_seconds(g['start'], g['end']))} · {len(rows)} 筆" if g["listening"] else f"{len(rows)} 筆"
-            self.body.addWidget(Node(f"{g['start'][:5]}　{head}", meta))
-            for r in rows[:left]:
-                e = Entry(r, dark)
-                e.link.connect(lambda key: key == "packs" and self.win.show_packs())
-                e.copy.connect(self._copy)
-                self.body.addWidget(e)
-            left -= len(rows)
-        if self.body.count() == 0:
+            self._items.append(("node", f"{g['start'][:5]}　{head}", meta))
+            self._items += [("row", r) for r in rows]
+        if not self._items:
             empty = dim("開麥克風後，每段話聽到什麼、畫面上變成什麼會顯示在這裡" if self.filter == "all"
                         else "這次執行還沒有這類紀錄", wrap=True)
             empty.setContentsMargins(4, 12, 4, 12)
             self.body.addWidget(empty)
+        self._build()
+
+    def _build(self):
+        """Items built up to _want rows (a session's node comes with its first row)."""
+        dark = self.win.theme["dark"]
+        while self._built < len(self._items) and self._rows < self._want:
+            item = self._items[self._built]
+            self._built += 1
+            if item[0] == "node":
+                self.body.addWidget(Node(item[1], item[2]))
+                continue
+            e = Entry(item[1], dark)
+            e.link.connect(lambda key: key == "packs" and self.win.show_packs())
+            e.copy.connect(self._copy)
+            self.body.addWidget(e)
+            self._rows += 1
+        left = sum(1 for it in self._items[self._built:] if it[0] == "row")
+        self.more.setText(f"顯示更早的紀錄（還有 {left} 筆）")
+        self.more.setVisible(left > 0)
 
     def _copy(self, text: str):
         QApplication.clipboard().setText(text)

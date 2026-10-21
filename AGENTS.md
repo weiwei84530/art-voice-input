@@ -324,7 +324,8 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   右 Alt `vk:a5`, the tray icon on the taskbar turning the microphone on/off, 5 minutes' auto-off only), fixed height,
   each one short line, no list of what it sets; 開始教學 does nothing yet (the tutorial comes later), 跳過教學，直接開始使用 finishes.
   Focus rings only after Tab. With --debug, 系統 has 進入設定精靈 (dark, nothing cleared, applies like the real one).
-- 辨識紀錄 (`logbook.py`, `set_log`): one row per event, grouped per listening session, newest first, heard vs the
+- 辨識紀錄 (`logbook.py`, `set_log`): one row per event, grouped per listening session, newest first, 40 built at
+  first and 40 more near the scroll's end or from 顯示更早的紀錄 (all 300 at once took ~1s to open, 2026-10-22), heard vs the
   screen's change as a diff, details in the tooltip; copy icon on rows that settled text; an orange book (the 詞庫 tile's) when the 詞庫
   may have shaped the text (`logbook.bank_of`; good news, not a warning). Text fixed as typed is 定稿 (its tag and dot the text red a
   little deeper, #C8323E); a pause's re-decode that changed the text is 整句修正; speech typed at a new caret is
