@@ -15,6 +15,7 @@ from .kit import Slides, T, button, crossfade, draw_icon, logo_renderer, prop
 from .page_mic import TEST_HEARD, LevelMeter
 
 CARD_W, CARD_H = 600, 560
+BUTTON_W, START_W = 168, 240   # 略過 / 跳過 / 下一步 and 開始教學, 40 high (2026-10-22, the user's request)
 SPEECH = 0.3           # a level this high is speech for 你剛剛說's cut
 QUIET_AFTER = 0.7      # seconds under SPEECH that end what was said
 MAX_SAY = 8.0          # speech longer than this is decoded anyway
@@ -397,8 +398,8 @@ class MicStep(QWidget):
         self.said.setWordWrap(True)
         v.addWidget(self.said)
         v.addStretch(1)
-        self.next = button("略過", self.done.emit, wiz=True)   # 46 high by the style sheet (setFixedHeight lost to it)
-        self.next.setFixedWidth(200)
+        self.next = button("略過", self.done.emit, wiz=True)   # 40 high by the style sheet (setFixedHeight lost to it)
+        self.next.setFixedWidth(BUTTON_W)
         v.addWidget(self.next, 0, Qt.AlignHCenter)
 
         self.probe = audio.LevelProbe(keep=KEEP)
@@ -532,7 +533,7 @@ class PackStep(QWidget):
         v.addWidget(_label("之後在「詞庫」可以隨時加減，也能自己加詞。", 12.5, muted=True))
         v.addStretch(1)
         self.next = button("跳過", self.done.emit, wiz=True)
-        self.next.setFixedWidth(200)
+        self.next.setFixedWidth(BUTTON_W)
         v.addWidget(self.next, 0, Qt.AlignHCenter)
         BackButton(self).move(16, 18)
 
@@ -558,12 +559,12 @@ class StyleStep(QWidget):
         super().__init__()
         self.win = win
         v = QVBoxLayout(self)
-        v.setContentsMargins(40, 30, 40, 16)   # 30: room for the four rows and the 46px button
+        v.setContentsMargins(40, 40, 40, 16)
         v.setSpacing(0)
         v.addWidget(_label("你想怎麼開關麥克風？", 24, 700))
         v.addSpacing(6)
         v.addWidget(_label("選一個起點，之後都能在「麥克風」頁改。", 13.5, muted=True))
-        v.addSpacing(12)
+        v.addSpacing(14)
         self.options = {}
         for key, *rest in OPTIONS:
             o = Option(key, *rest)
@@ -573,7 +574,8 @@ class StyleStep(QWidget):
             self.options[key] = o
         v.addStretch(1)
         tutorial = button("開始教學", None, pri=True, wiz=True)   # the tutorial comes later (the user's decision)
-        v.addWidget(tutorial)
+        tutorial.setFixedWidth(START_W)
+        v.addWidget(tutorial, 0, Qt.AlignHCenter)
         v.addSpacing(6)
         skip = TextLink("跳過教學，直接開始使用")
         skip.clicked.connect(self.done.emit)
