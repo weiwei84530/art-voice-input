@@ -30,6 +30,7 @@ class SettingsWindow(Shell):
         for key, page in (("mic", self.mic_page), ("look", self.look_page), ("cmd", self.cmd_page),
                           ("bank", self.bank_page), ("log", self.log_page), ("sys", self.sys_page)):
             self.add_page(key, page)
+            page.installEventFilter(self)
         self.theme.changed.connect(self._theme_changed)
 
     # --- shared by the pages ---
@@ -56,9 +57,20 @@ class SettingsWindow(Shell):
             tile.update()
 
     def _theme_changed(self):
+        """Pages in view are redrawn now, the others when shown: rebuilding a long 辨識紀錄 unseen held the window
+        long enough that the cross-fade of 外觀模式 never got painted (2026-10-21)."""
         for frame in self.pages.values():
             if hasattr(frame.page, "restyle"):
-                frame.page.restyle()
+                if frame.page.isVisible():
+                    frame.page.restyle()
+                else:
+                    frame.page.restyle_due = True
+
+    def eventFilter(self, obj, e):
+        if e.type() == QEvent.Show and getattr(obj, "restyle_due", False):
+            obj.restyle_due = False
+            obj.restyle()
+        return super().eventFilter(obj, e)
 
     # --- the app's interface ---
     def load_values(self):
