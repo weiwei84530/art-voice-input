@@ -41,12 +41,13 @@ class Style:
     bright: float = 1.0  # opacity, times the usual
 
 
+# 錄音紅 first, as the microphone is the first button look; 暖陽 冰藍 草本 side by side read as R G B (2026-10-22)
 STYLES = [
+    Style("red", "錄音紅", ("#ff453a", "#ff6b5e", "#ff2d20", "#ff453a"), 0.0, 1.0),
     Style("siri", "彩虹", ("#3d7bff", "#a259ff", "#ff4fa3", "#ff9f43", "#29d3ff", "#3d7bff"), 0.18, 0.2),
     Style("aurora", "極光", ("#14e8b5", "#2fa8ff", "#7b5cff", "#14e8b5", "#5cffd0", "#14e8b5"), 0.08, 0.3),
     Style("sunset", "暖陽", ("#ff7a3d", "#ff3d6e", "#ffc23d", "#ff7a3d", "#ff5c8a", "#ff7a3d"), 0.1, 0.3),
     Style("ocean", "冰藍", ("#7fd6ff", "#3a8dff", "#c8f0ff", "#7fd6ff", "#4fa8ff", "#7fd6ff"), 0.06, 0.4),
-    Style("red", "錄音紅", ("#ff453a", "#ff6b5e", "#ff2d20", "#ff453a"), 0.0, 1.0),
     # added 2026-10-16 (the user's requests): 草本, quiet Japanese greens (青磁 celadon, 抹茶, 苔 moss, a pale washi
     # green), turning slowly, for a calm, zen feel; 紫金, a rainbow of purple flowing into orange-yellow and back
     Style("herb", "草本", ("#7ebea5", "#a8c97f", "#5b8a72", "#d8e3c3", "#8aa88a", "#7ebea5"), 0.05, 0.25),
@@ -408,7 +409,7 @@ class EdgeGlow:
         if g == self._screen:
             return
         self._screen = g
-        st = self._style or STYLES[0]
+        st = self._style or BY_ID["siri"]
         d = min(round(DEPTH * st.depth * _REACH[self.motion]), g.height() // 4, g.width() // 4)
         _, top, bottom, left, right = EDGES[self.edges]
         side_top, side_h = g.top() + (d if top else 0), g.height() - (d if top else 0) - (d if bottom else 0)

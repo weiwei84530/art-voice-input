@@ -66,8 +66,7 @@ def defaults(newline: bool = True, send: bool = True, dev: bool = False) -> list
     """The spoken operations (the user's own setup, 2026-10-14/17), in the order the 自訂操作 tab groups them:
     typing (換行 / 下一行 Shift+Enter, 空白, 括號 （ ）, 引號 「」), changing (刪除 Backspace, 復原 / 撤銷), the
     clipboard (全選 / 複製 / 剪下 / 貼上) and ending (送出 Enter, listening goes on; 結束 turns it off). No key
-    rules since 2026-10-16: the hotkey is config.hotkey. dev (--debug): also the user's own 標點 = "- ", a row of
-    自訂 (not a default operation: ui/page_cmd.BUILT lists the default rows without it; the user's request, 2026-10-17)."""
+    rules since 2026-10-16: the hotkey is config.hotkey. dev (--debug): also the user's own `dev_rules`."""
     out = [Rule(SPEECH, phrase=p, steps=[Step(KEYS, "Shift+Enter")]) for p in ("換行", "下一行")] if newline else []
     out += [Rule(SPEECH, phrase="空白", steps=[Step(KEYS, "Space")]),
             Rule(SPEECH, phrase="括號", steps=[Step(WRAP, ["（", "）"])]),
@@ -83,8 +82,16 @@ def defaults(newline: bool = True, send: bool = True, dev: bool = False) -> list
         out.append(Rule(SPEECH, phrase="送出", steps=[Step(KEYS, "Enter")]))
     out.append(Rule(SPEECH, phrase="結束", steps=[Step(COMMAND, STOP)]))
     if dev:
-        out.append(Rule(SPEECH, phrase="標點", steps=[Step(TEXT, "- ")]))
+        out += dev_rules()
     return out
+
+
+def dev_rules() -> list[Rule]:
+    """The user's own rows of 自訂 with --debug, not default operations (ui/page_cmd.BUILT lists the default rows
+    without them): 標點 = "- " (2026-10-17) and 貼上圖片 = Alt+V, Claude Code's image paste (2026-10-22). A launch
+    with --debug adds those missing (config.Config.from_data)."""
+    return [Rule(SPEECH, phrase="標點", steps=[Step(TEXT, "- ")]),
+            Rule(SPEECH, phrase="貼上圖片", steps=[Step(KEYS, "Alt+V")])]
 
 
 def upgrade(rules: list[Rule], version: int) -> list[Rule]:

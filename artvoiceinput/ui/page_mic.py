@@ -96,7 +96,7 @@ class MinutesChip(QFrame):
         self.box.setValidator(QIntValidator(*CUSTOM_MINUTES[:2], self.box))
         self.box.setAlignment(Qt.AlignCenter)
         self.box.setFixedSize(34, 18)
-        self.box.setFont(theme.font(12.5, 700, num=True))
+        self.box.setFont(theme.font(12.5, 700))   # the chips' font, not Bahnschrift (2026-10-22, the user's request)
         self.box.setAccessibleName("自訂分鐘數")
         self.box.editingFinished.connect(self._typed)
         self.unit = QLabel("分")

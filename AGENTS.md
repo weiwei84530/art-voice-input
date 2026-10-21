@@ -108,7 +108,8 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
   shows nothing. Listening started from it or anywhere else bursts it away; it doesn't come back when listening ends,
   only at the next click into a text box (2026-10-20). Placed at the click because UIA caret positions are wrong in Notion, LINE, web pages.
 - **Floating button** (`show_float`; 未偵測到輸入區域時隱藏 `float_text_only` and 錄音時隱藏按鈕
-  = not `float_keep`, both unticked by default; `float_pos`): never takes focus, draggable; fades in (180ms) and out
+  = not `float_keep`, both unticked by default; `float_pos`, [] until dragged: 24px in from the right edge, halfway down, away from title
+  bars, tabs and notices, 2026-10-22): never takes focus, draggable; fades in (180ms) and out
   (160ms) as the focus comes and goes.
   Starting to listen grows it to 1.5 and fades it out in `glow.FADE_MS`; ending reverses it. Kept on screen
   (`float_keep`) it shrinks to 0.88 while listening and its orb plays faster (2026-10-20).
@@ -155,7 +156,8 @@ and runs (nothing decoded when nothing was said since the last commit).
   (`WRAP`, caret put back between), or a command: 復原, 結束錄音, 全選 / 複製 / 剪下 / 貼上. Defaults
   (`rules.defaults`, rows fixed but the phrase; empty turns off): 換行、下一行 Shift+Enter, 空白, 括號 （）,
   引號 「」, 刪除 Backspace, 復原 / 撤銷, clipboard four, 送出 Enter (listening goes on), 結束. With --debug the
-  defaults (`rules.defaults(dev=True)`) also have the user's 標點 = "- " as a 自訂 row. 自訂 rows can't take
+  defaults (`rules.defaults(dev=True)`) also have the user's `rules.dev_rules` as 自訂 rows (標點 = "- ", 貼上圖片 = Alt+V);
+  a --debug launch adds them when missing. 自訂 rows can't take
   a command a default row has. Problems shown in red when the tab comes into view. The engine still has situations,
   multi-step and key rules (old configs only).
 - Edit commands: ordinary apps get Ctrl+A/C/X/V. Terminals: 複製 puts our read selection on the clipboard (Ctrl+C
@@ -318,8 +320,9 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   (`App._paused`: no hotkey, floating button, bubble or listening). 1 microphone: name, device, meter; status 試著說…
   → 正在聽… (speech coming in, decoding) → green dot + 聽到了 when 你剛剛說 shows (decoded on the worker; trial, the
   user decides whether it stays); the icon over 阿特語音輸入法 at 26px (34 stood apart from it), no 已經裝好了; 略過 (plain) becomes 下一步 then. 2 packs, 3 columns, two lines of whole sample
-  terms, no counts; 跳過 / 下一步. 3 簡單 / 標準 / 全自動 (`wizard.PRESETS`), fixed height; the picked one's settings
-  as chips in a box under them; 開始教學 does nothing yet (the tutorial comes later), 跳過教學，直接開始使用 finishes.
+  terms, no counts; 跳過 / 下一步. 3 便利 / 容易 / 懶惰 / 簡約 (`wizard.PRESETS`, 2026-10-22; 簡約: nothing on screen,
+  右 Alt `vk:a5`, the tray icon on the taskbar turning the microphone on/off, 5 minutes' auto-off only), fixed height,
+  each one short line, no list of what it sets; 開始教學 does nothing yet (the tutorial comes later), 跳過教學，直接開始使用 finishes.
   Focus rings only after Tab. With --debug, 系統 has 進入設定精靈 (dark, nothing cleared, applies like the real one).
 - 辨識紀錄 (`logbook.py`, `set_log`): one row per event, grouped per listening session, newest first, heard vs the
   screen's change as a diff, details in the tooltip; copy icon on rows that settled text; an orange book (the 詞庫 tile's) when the 詞庫
@@ -328,7 +331,7 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   plain 文字, the why in its tip (2026-10-21).
 - 詞庫 tab: four collapsible sections, one open (`hotword_section`): 詞包, 詞庫列表, 選字記憶 (shown as
   這個ying3片是 → 這個影片是), 英文強制替換; each with its own remembered 排序.
-- Glow (`glow.py`, off by default): styles with editable parameters (`glow_edits`, 已編輯 + 恢復預設), up to 6 colors,
+- Glow (`glow.py`, off by default): 錄音紅 first (beside the mic look; 暖陽 冰藍 草本 together read as RGB), styles with editable parameters (`glow_edits`, 已編輯 + 恢復預設), up to 6 colors,
   edges (a style's parameter like the others, `glow.edges_for`, 2026-10-21; the preview shows only those), motions 柔光 / 波浪 / 流星 / 漣漪 (`glow_motion`); four click-through strips; colors by numpy LUT;
   moving motions at 48 fps unless 節流模式 (柔光 24). 流星's position is summed per frame (`EdgeGlow._lap`).
 - 按鈕樣式 (`orbs.py`, `button_look`): mic + ten orb looks in the glow's colors (蝕光 the latest), drawn on a canvas
@@ -337,7 +340,7 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   listening (0.88 under the pointer read as no shrink) nor after a click until the pointer leaves; orbs play at 0.6x their loop at rest, 1.6x while listening (`orbs.IDLE_SPEED` /
   `ACTIVE_SPEED`, 2026-10-20). 光環 / 虹膜 middles take clicks (alpha 1/255 disc: fully clear pixels pass clicks).
 - Sounds (`cues.py`, `artvoiceinput/cues/*.wav`, built by `dev/build_cues.py`): 12 sets, 無, 自定義; Blip default; the
-  start sound's length is silenced for the VAD. 音量 (`cue_volume` 10-100%, a slider in the 提示音 title row,
+  start sound's length is silenced for the VAD. 音量 (`cue_volume` 10-100%, default 80, a slider in the 提示音 title row,
   2026-10-21): scaled copies in `cache/cues`. Played from the wav file (winsound can't play memory async).
 - ▶ 預覽 / ▶ 試聽 read 播放中… and are disabled while playing.
 

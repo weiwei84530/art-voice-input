@@ -1,7 +1,7 @@
 """The setup wizard (2026-10-21, the user's design C: one card on the wall, its content changing): shown over the
 settings window at the first launch and after 清空並重新設定, before the home page. Three steps: the microphone heard
 (the level meter; 略過 turns into 下一步 once what was said is decoded and shown as 你剛剛說), term
-packs ticked (跳過 / 下一步), and a starting setup picked (簡單 / 標準 / 全自動, `PRESETS`). Light or dark with the
+packs ticked (跳過 / 下一步), and a starting setup picked (便利 / 容易 / 懶惰 / 簡約, `PRESETS`). Light or dark with the
 window. Closed before the end, it comes back at the next launch (`Config.setup_done`)."""
 import time
 
@@ -20,22 +20,24 @@ QUIET_AFTER = 0.7      # seconds under SPEECH that end what was said
 MAX_SAY = 8.0          # speech longer than this is decoded anyway
 KEEP = 12.0            # seconds of audio the probe keeps
 
-# what each starting setup sets (the user's design, 2026-10-21); the 麥克風 page shows the same settings
+# what each starting setup sets (the user's design, 2026-10-21; 簡約 and the names 2026-10-22); the 麥克風 page
+# shows the same settings
 PRESETS = {
-    "simple": dict(auto_listen=False, show_bubble=False, show_float=True, float_text_only=False, float_keep=True,
-                   auto_off_minutes=1, stop_on_enter=False, auto_off=False),
     "std": dict(auto_listen=False, show_bubble=True, show_float=True, float_text_only=True, float_keep=True,
                 auto_off_minutes=5, stop_on_enter=True, auto_off=True),
+    "simple": dict(auto_listen=False, show_bubble=False, show_float=True, float_text_only=False, float_keep=True,
+                   auto_off_minutes=1, stop_on_enter=False, auto_off=False),
     "auto": dict(auto_listen=True, show_bubble=False, show_float=False, auto_off_minutes=0, stop_on_enter=False,
                  auto_off=True),
+    # nothing on screen: 右 Alt or the tray icon, shown on the taskbar, turns the microphone on and off
+    "minimal": dict(auto_listen=False, show_bubble=False, show_float=False, auto_off_minutes=5, stop_on_enter=False,
+                    auto_off=False, hotkey="vk:a5", tray_pinned=True, tray_click="mic"),
 }
 OPTIONS = [
-    ("simple", "簡單", "麥克風由你親手開關", "剛開始用語音輸入，或想每一步都自己決定",
-     ["浮動按鈕一直顯示", "點輸入框不自動開", "1 分鐘沒講話就關"]),
-    ("std", "標準", "點進輸入框，點一下小氣泡就講", "想方便，又想保留一點掌控",
-     ["語音氣泡", "沒有輸入框時藏起浮動按鈕", "5 分鐘沒講話就關", "送出訊息後關", "離開輸入框後關"]),
-    ("auto", "全自動", "點進輸入框就開始聽", "打字量大，想把雙手完全空出來",
-     ["點進輸入框自動開麥克風", "不顯示浮動按鈕", "沒講話也不會關", "離開輸入框後關"]),
+    ("std", "便利", "點進輸入框，點一下小氣泡就講", "想方便，又想保留一點掌控"),
+    ("simple", "容易", "麥克風由你親手開關", "剛開始用語音輸入，或想每一步都自己決定"),
+    ("auto", "懶惰", "點進輸入框就開始聽", "打字量大，想把雙手完全空出來"),
+    ("minimal", "簡約", "按右 Alt 或點工作列圖示開關", "畫面上不想多出任何按鈕"),
 ]
 
 
@@ -220,7 +222,7 @@ class PackTile(KeyFocus, QAbstractButton):
 
 class Illus:
     """The options' small pictures, drawn on a 120x76 grid: the floating button with the pointer on it, a text box
-    with the bubble beside it clicked, a glowing text box hearing speech."""
+    with the bubble beside it clicked, a glowing text box hearing speech, the Alt key beside the tray icon."""
 
     @staticmethod
     def paint(p: QPainter, key: str, r: QRectF):
@@ -266,6 +268,17 @@ class Illus:
             p.drawEllipse(QPointF(102, 38), 11, 11)
             mic(102, 37.5, 1.05)
             pointer(106, 45, 0.82)
+        elif key == "minimal":
+            p.setPen(QPen(T("line"), 1.5))
+            p.setBrush(tile)
+            p.drawRoundedRect(QRectF(14, 22, 46, 32), 5, 5)
+            p.setPen(ink)
+            p.setFont(theme.font(13, 700))
+            p.drawText(QRectF(14, 22, 46, 30), Qt.AlignCenter, "Alt")
+            p.save()
+            p.translate(78, 23)
+            appicon.paint(p, 28)
+            p.restore()
         else:
             glow = QColor(acc)
             glow.setAlphaF(0.28)
@@ -284,13 +297,13 @@ class Illus:
 
 
 class Option(KeyFocus, QAbstractButton):
-    """A starting setup: picture, name and what it is for (what it sets is in the Summary under the three)."""
+    """A starting setup: picture, name and what it is for."""
     PIC = QRectF(8, 7, 84, 56)
     TEXT_X = 107
 
-    def __init__(self, key, name, lead, who, sets):
+    def __init__(self, key, name, lead, who):
         super().__init__()
-        self.key, self.name, self.lead, self.who, self.sets = key, name, lead, who, sets
+        self.key, self.name, self.lead, self.who = key, name, lead, who
         self.setCheckable(True)
         self.setCursor(Qt.PointingHandCursor)
         self.setFocusPolicy(Qt.TabFocus)
@@ -333,56 +346,6 @@ class Option(KeyFocus, QAbstractButton):
         p.setPen(T("muted"))
         p.setFont(theme.font(12))
         p.drawText(QRectF(x, 36, self.width() - x - 12, 20), Qt.AlignLeft | Qt.AlignVCenter, self.who)
-
-
-def _chips(sets, width: float) -> list[QRectF]:
-    """Where each chip goes, wrapped within width."""
-    fm = QFontMetrics(theme.font(12))
-    x, y, out = 0.0, 0.0, []
-    for text in sets:
-        w = fm.horizontalAdvance(text) + 18
-        if x and x + w > width:
-            x, y = 0.0, y + 26
-        out.append(QRectF(x, y, w, 22))
-        x += w + 6
-    return out
-
-
-class Summary(QWidget):
-    """The picked setup again under the three, with what it sets as chips (the user's request, 2026-10-21: the
-    options keep their height). As tall as the longest list needs, so nothing moves when another is picked."""
-    W = 520
-
-    def __init__(self):
-        super().__init__()
-        self.option = None
-        rows = max(_chips(o[4], self.W - 32)[-1].bottom() for o in OPTIONS)
-        self.setFixedSize(self.W, int(38 + rows + 12))
-
-    def show_option(self, option):
-        self.option = option
-        self.update()
-
-    def paintEvent(self, _):
-        if self.option is None:
-            return
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        p.setPen(Qt.NoPen)
-        p.setBrush(T("bg"))
-        p.drawRoundedRect(QRectF(self.rect()), 8, 8)
-        p.setPen(T("ink"))
-        p.setFont(theme.font(14, 700))
-        p.drawText(QRectF(16, 9, self.W - 32, 22), Qt.AlignLeft | Qt.AlignVCenter,
-                   f"選了「{self.option.name}」，會這樣設定")
-        p.setFont(theme.font(12))
-        for text, c in zip(self.option.sets, _chips(self.option.sets, self.W - 32)):
-            c.translate(16, 38)
-            p.setPen(Qt.NoPen)
-            p.setBrush(T("accbg"))
-            p.drawRoundedRect(c, 11, 11)
-            p.setPen(T("acct"))
-            p.drawText(c, Qt.AlignCenter, text)
 
 
 class MicStep(QWidget):
@@ -605,9 +568,6 @@ class StyleStep(QWidget):
             v.addWidget(o)
             v.addSpacing(6)
             self.options[key] = o
-        v.addSpacing(4)
-        self.summary = Summary()
-        v.addWidget(self.summary)
         v.addStretch(1)
         tutorial = button("開始教學", None, pri=True, wiz=True)   # the tutorial comes later (the user's decision)
         tutorial.setFixedHeight(46)
@@ -625,7 +585,6 @@ class StyleStep(QWidget):
         self.choice = key
         for k, o in self.options.items():
             o.setChecked(k == key)
-        self.summary.show_option(self.options[key])
 
 
 class Card(QWidget):

@@ -45,7 +45,8 @@ class Config:
     # (glow.PARAM_KEYS)
     glow_edits: dict = field(default_factory=dict)
     # the floating microphone button's place (show_float), as fractions of the screen's free range
-    float_pos: list = field(default_factory=lambda: [0.98, 0.88])
+    # [] until dragged: the right edge, halfway down (floatbtn.EDGE; 2026-10-22, away from title bars, tabs and notices)
+    float_pos: list = field(default_factory=list)
     # the floating button only while text can be typed where the focus is and listening is off; False: always, while
     # listening too, a click turning it off (2026-10-16, the user's request). The 一般 tab calls it
     # 未偵測到輸入區域時隱藏, unticked by default (2026-10-17)
@@ -87,7 +88,7 @@ class Config:
     packs: list = field(default_factory=list)
     start_sound: str = "blip"     # cues.py id played when the recording indicator shows, "" for none
     stop_sound: str = "blip"      # cues.py id played when the recording ends, "" for none
-    cue_volume: int = 100         # 提示音's 音量, percent (cues.VOLUME_RANGE)
+    cue_volume: int = 80          # 提示音's 音量, percent (cues.VOLUME_RANGE)
     # development only, to be removed before release (recordings.py): on exactly when launched with --debug
     save_recordings: bool = field(default_factory=lambda: DEBUG)
     # the setup wizard (ui/wizard.py, 2026-10-21) was finished: until then the settings window opens on it at launch.
@@ -135,6 +136,9 @@ class Config:
             cfg.rules = rules.simplify(old)
         else:   # before custom operations (2026-10-11): one hotkey (read above) and the 換行 / 送出 switches
             cfg.rules = rules.defaults(data.get("newline_command", True), data.get("send_command", True))
+        if DEBUG:   # the user's own debug rows come back when missing (2026-10-22, the user's request)
+            said = {rules.normalize(p) for r in cfg.rules if r.source == rules.SPEECH for p in rules.phrases(r.phrase)}
+            cfg.rules += [r for r in rules.dev_rules() if rules.normalize(r.phrase) not in said]
         return cfg
 
     def save(self) -> None:

@@ -152,11 +152,11 @@ class Preview(QWidget):
         p.setPen(T("ink"))
         p.drawText(QPointF(x, y + fm.ascent()), a)
         bx = x + fm.horizontalAdvance(a)
+        p.drawText(QPointF(bx, y + fm.ascent()), b)
+        # the mark over the text, as its window covers the draft on screen (the text tinted, not black; 2026-10-22)
         p.setPen(Qt.NoPen)
         p.setBrush(self.mark)
         p.drawRoundedRect(QRectF(bx, y, fm.horizontalAdvance(b), fm.height()), 2, 2)
-        p.setPen(T("ink"))
-        p.drawText(QPointF(bx, y + fm.ascent()), b)
         p.restore()
         p.setPen(QPen(T("line"), 1))
         p.setBrush(Qt.NoBrush)
@@ -674,7 +674,7 @@ class LookPage(QWidget):
         self._glow_edited("edges", key)
 
     def _params(self) -> dict:
-        style_id = self.cfg.glow or glowmod.STYLES[0].id
+        style_id = self.cfg.glow or "siri"
         base = glowmod.params(glowmod.BY_ID[style_id])
         edits = self.cfg.glow_edits.get(style_id, {})
         return {**base, **{k: v for k, v in edits.items() if k in glowmod.PARAM_KEYS}}

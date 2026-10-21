@@ -29,6 +29,7 @@ _ROOM = 2.2      # the window, times the button: the orb's light grown on a clic
 _HOVER = 1.12    # the size under the pointer, times the size at rest
 _ACTIVE = 0.88   # the size while listening (kept on screen)
 _BURST = 1.5     # the size it grows to as it fades out
+EDGE = 24        # the place before it is dragged: this far in from the right edge (Config.float_pos [])
 _GWL_EXSTYLE, _WS_EX_NOACTIVATE, _WS_EX_TOPMOST = -20, 0x08000000, 0x8
 
 
@@ -364,9 +365,13 @@ class FloatButton(_OnTop):
         if screen is not self._screen:
             self._screen = screen
             a = screen.availableGeometry()
-            fx, fy = self.place
-            self.move(a.left() + round(fx * (a.width() - self.bsize)) - self.margin,
-                      a.top() + round(fy * (a.height() - self.bsize)) - self.margin)
+            if self.place:
+                fx, fy = self.place
+                self.move(a.left() + round(fx * (a.width() - self.bsize)) - self.margin,
+                          a.top() + round(fy * (a.height() - self.bsize)) - self.margin)
+            else:   # never dragged: EDGE px in from the right edge, halfway down
+                self.move(a.right() + 1 - EDGE - self.bsize - self.margin,
+                          a.top() + (a.height() - self.bsize) // 2 - self.margin)
 
     def _resized(self):
         self._screen = None

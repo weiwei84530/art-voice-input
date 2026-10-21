@@ -149,9 +149,9 @@ class SysPage(QWidget):
         for key, name in CLICKS:
             self.click.addItem(name, key)
         self.click.currentIndexChanged.connect(self._click)
-        row("圖示固定在工作列", "右下角直接看得到，不收進 ^ 箭頭裡",
+        row("圖示固定在工作列", "右下角直接看得到，不收進隱藏的圖示",
             hbox(self.pin, self.pin_note, None, hbox(label("點一下"), TrayMark(), self.click, spacing=6), spacing=10),
-            info="左鍵點圖示做的事在右邊選，右鍵打開選單。關閉時圖示回到 ^ 箭頭裡")
+            info="左鍵點圖示做的事在右邊選，右鍵打開選單。關閉時圖示收回隱藏的圖示裡")
         # 節流模式 (moved here from 外觀與聲音, 2026-10-20, the user's request): the orbs and the glow draw less, and
         # this window skips its animations (kit.calm)
         self.lite = Switch(name="節流模式")
@@ -277,7 +277,7 @@ class SysPage(QWidget):
         self._pin_note()
 
     def _pin_note(self):
-        self.pin_note.setText(_state(self.cfg.tray_pinned, "顯示在工作列" if self.cfg.tray_pinned else "收在 ^ 箭頭裡"))
+        self.pin_note.setText(_state(self.cfg.tray_pinned, "顯示在工作列" if self.cfg.tray_pinned else "收在隱藏的圖示裡"))
 
     def _click(self):
         self.cfg.tray_click = self.click.currentData()

@@ -744,7 +744,7 @@ class CmdPage(QWidget):
             rows = [r for r in self.rows if (BUILT[_key(r["type"], r["value"])][0] if r["builtin"] else 4) == gi]
             if not rows and gi != 4:
                 continue
-            count = f"{len(rows)} 句" if gi != 4 else (f"{len(rows)} 句" if rows else "還沒有")
+            count = f"{len(rows)} 句" if rows else ""   # 自訂 empty: no count (還沒有 crowded its cell, 2026-10-22)
             span = len(rows) + (1 if gi == 4 else 0)
             grid.addWidget(GroupLabel(name, hint, count, first), line, 0, span, 1)
             for i, row in enumerate(rows):
