@@ -245,6 +245,11 @@ def dark_frame(w, dark: bool):
         pass
 
 
+_COLOR_WORDS = {"Basic colors": "基本顏色", "Pick Screen Color": "從螢幕取色", "Hue:": "色相", "Sat:": "飽和度",
+                "Val:": "亮度", "Red:": "紅", "Green:": "綠", "Blue:": "藍", "Alpha channel:": "透明度", "HTML:": "色碼",
+                "OK": "確定", "Cancel": "取消"}
+
+
 def pick_color(parent, color: QColor, title: str, alpha: bool = False) -> QColor:
     """Qt's color dialog in the window's theme (2026-10-22, the user's report): the window's style sheet reached it,
     its text light on the dialog's own light background in dark mode and the line edits' padding cutting the spin
@@ -265,8 +270,23 @@ def pick_color(parent, color: QColor, title: str, alpha: bool = False) -> QColor
         " QColorDialog QSpinBox::down-button { subcontrol-position: bottom right; }"
         f" QColorDialog QSpinBox::up-arrow {{ image: url({theme.UP}); width: 10px; height: 10px; }}"
         f" QColorDialog QSpinBox::down-arrow {{ image: url({theme._DOWN}); width: 10px; height: 10px; }}")
-    dark_frame(dialog, T("tile").lightness() < 128)
-    return dialog.currentColor() if dialog.exec() == QDialog.Accepted else QColor()
+    # its words in Chinese (the long "Alpha channel:" pushed its row out of line) and no 自訂顏色 wells (a row of empty
+    # squares nothing here uses; 2026-10-22, the user's request)
+    for w in dialog.findChildren(QLabel) + dialog.findChildren(QPushButton):
+        name = w.text().replace("&", "")
+        if name in _COLOR_WORDS:
+            w.setText(_COLOR_WORDS[name])
+        elif name in ("Custom colors", "Add to Custom Colors"):
+            w.hide()
+    wells = [w for w in dialog.findChildren(QWidget) if w.metaObject().className() == "QColorWell"]
+    if len(wells) > 1:
+        wells[1].hide()
+    # the title bar once the dialog is up: winId() before it showed made the settings window's widgets native, and
+    # its page transitions broke into pieces (2026-10-22, the user's report)
+    QTimer.singleShot(0, lambda: dark_frame(dialog, T("tile").lightness() < 128))
+    picked = dialog.currentColor() if dialog.exec() == QDialog.Accepted else QColor()
+    dialog.deleteLater()
+    return picked
 
 
 class Switch(QAbstractButton):
