@@ -245,6 +245,7 @@ class App(QObject):
         self.book = LogBook(self._log_changed)   # the 辨識紀錄 page, kept for this session only
         self.settings.clear_log.connect(self._clear_log)
         self.settings.glow_preview.connect(self._preview_glow)
+        self.settings.wizard_heard.connect(self._wizard_heard)
         self._heard_at = 0.0                     # when speech last began while listening (auto_off_minutes)
         self._idle_timer = QTimer(self, interval=5000, timeout=self._check_idle)
         self._idle_timer.start()
@@ -1864,6 +1865,22 @@ class App(QObject):
         self.book.sessions.clear()
         self.settings.set_log(self.book.sessions)
 
+    def _wizard_heard(self, audio):
+        """The setup wizard's 你剛剛說: what was said, decoded on the worker (None while the model isn't ready)."""
+        if self.recognizer is None:
+            self.settings.wizard_said(None)
+            return
+
+        def run():
+            try:
+                text = format_text(self.recognizer.recognize(audio))
+            except Exception:
+                log.exception("wizard decode failed")
+                text = ""
+            log.info("wizard heard: %s", text)
+            self.main.emit(lambda: self.settings.wizard_said(text))
+        self.worker.submit(run)
+
     def open_settings(self):
         self.settings.load_values()
         self.settings.set_log(self.book.sessions)
@@ -2137,4 +2154,6 @@ def main():
 
     recover_mute()   # killed while listening last time: the speakers come back (not in App: tests build one)
     app = App(qapp)  # noqa: F841 (keep reference alive)
+    if not app.cfg.setup_done:   # first launch, or 清空並重新設定 last time: the setup wizard
+        app.open_settings()
     return qapp.exec()

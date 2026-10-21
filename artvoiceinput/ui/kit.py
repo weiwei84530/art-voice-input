@@ -6,8 +6,8 @@ from PySide6.QtCore import (Property, QByteArray, QEasingCurve, QEvent, QObject,
                             QRect, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal)
 from PySide6.QtGui import QColor, QCursor, QFont, QFontMetrics, QGuiApplication, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import (QAbstractButton, QApplication, QButtonGroup, QFrame, QHBoxLayout, QLabel, QLayout,
-                               QPushButton, QSizePolicy, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QAbstractButton, QApplication, QButtonGroup, QFrame, QGraphicsOpacityEffect, QHBoxLayout,
+                               QLabel, QLayout, QPushButton, QSizePolicy, QVBoxLayout, QWidget)
 
 from . import theme
 
@@ -103,6 +103,25 @@ def icon(name: str, color: QColor, size: int = 16, width: float = 2.0, dpr: floa
     draw_icon(p, name, QRectF(0, 0, size, size), color, width)
     p.end()
     return QIcon(pm)
+
+
+def crossfade(win: QWidget, ms: int = 220):
+    """The window as it looks now laid over it and faded out while what changes under it comes in (外觀模式, the
+    setup wizard coming and going); not with 節流模式."""
+    if calm() or not win.isVisible():
+        return
+    cover = QLabel(win)
+    cover.setPixmap(win.grab())
+    cover.setGeometry(win.rect())
+    cover.setAttribute(Qt.WA_TransparentForMouseEvents)
+    fx = QGraphicsOpacityEffect(cover, opacity=1.0)
+    cover.setGraphicsEffect(fx)
+    cover.show()
+    cover.raise_()
+    anim = QPropertyAnimation(fx, b"opacity", cover, duration=ms, startValue=1.0, endValue=0.0,
+                              easingCurve=QEasingCurve.InOutQuad)
+    anim.finished.connect(cover.deleteLater)
+    anim.start()
 
 
 def prop(w, **props):

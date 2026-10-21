@@ -12,6 +12,7 @@ class SettingsWindow(Shell):
     glow_preview = Signal(str)      # a glow style picked or changed: shown for a moment
     capture_hotkey = Signal(bool)   # 快捷鍵: take the next press (True), or stop waiting for it
     clear_log = Signal()            # 清除紀錄 on the 辨識紀錄 page
+    wizard_heard = Signal(object)   # the setup wizard heard speech (16 kHz audio): App decodes it (wizard_said)
 
     def __init__(self, cfg, hotwords, memory):
         super().__init__(theme.Theme(cfg.theme))
@@ -32,6 +33,7 @@ class SettingsWindow(Shell):
             self.add_page(key, page)
             page.installEventFilter(self)
         self.theme.changed.connect(self._theme_changed)
+        self.wizard = None
 
     # --- shared by the pages ---
     def save(self):
@@ -111,7 +113,35 @@ class SettingsWindow(Shell):
     def showEvent(self, e):
         if not e.spontaneous():   # opened again, not restored from the taskbar (that keeps the page)
             self.show_home_now()
+            if not self.cfg.setup_done and (self.wizard is None or self.wizard.isHidden()):
+                self.start_wizard()
         super().showEvent(e)
+
+    # --- the setup wizard ---
+    def start_wizard(self):
+        """The wizard over the window from its first step (first launch, 清空並重新設定)."""
+        from .wizard import Wizard
+        if self.wizard is None:
+            self.wizard = Wizard(self)
+            self.wizard.mic_step.heard_audio.connect(self.wizard_heard.emit)
+            self.wizard.finished.connect(self._wizard_done)
+        if self.isVisible():
+            from .kit import crossfade
+            crossfade(self, 320)
+        self.show_home_now()
+        self.wizard.begin()
+        self.wizard.show()
+        self.wizard.raise_()
+        self.min_button.raise_()
+        self.close_button.raise_()
+
+    def wizard_said(self, text):
+        if self.wizard is not None:
+            self.wizard.mic_step.show_said(text)
+
+    def _wizard_done(self):
+        self.data_changed()   # the preset and packs saved and applied
+        self.refresh_tiles()
 
     def hideEvent(self, e):
         self.mic_page.stop_capture()

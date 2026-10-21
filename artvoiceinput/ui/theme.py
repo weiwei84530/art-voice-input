@@ -87,6 +87,8 @@ def qss(t: dict) -> str:
 * {{ color: {t['ink']}; }}
 QWidget#page, QWidget#scrollBody, QScrollArea, QScrollArea > QWidget > QWidget {{ background: transparent; }}
 QLabel {{ background: transparent; }}
+QLabel[muted="true"] {{ color: {t['muted']}; }}
+QLabel[ok="true"] {{ color: {t['ins']}; }}
 QLabel[dim="true"] {{ color: {t['muted']}; font-size: 12px; }}
 QLabel[h2="true"] {{ font-size: 24px; font-weight: 700; }}
 QLabel[h3="true"] {{ font-size: 15px; font-weight: 700; }}

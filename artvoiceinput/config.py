@@ -85,6 +85,9 @@ class Config:
     cue_volume: int = 100         # 提示音's 音量, percent (cues.VOLUME_RANGE)
     # development only, to be removed before release (recordings.py): on exactly when launched with --debug
     save_recordings: bool = field(default_factory=lambda: DEBUG)
+    # the setup wizard (ui/wizard.py, 2026-10-21) was finished: until then the settings window opens on it at launch.
+    # A fresh install and 清空並重新設定 start without it; a config.json from before the wizard counts as set up
+    setup_done: bool = False
     rules: list = field(default_factory=lambda: rules.defaults(dev=DEBUG))   # custom operations (rules.Rule)
     rules_version: int = RULES_VERSION
 
@@ -101,6 +104,8 @@ class Config:
         """A config from saved data (config.json, or an exported file: userdata.py), older formats migrated."""
         known = {k: v for k, v in data.items() if k in cls.__dataclass_fields__ and k not in ("rules", "rules_version")}
         cfg = cls(**known)
+        if "setup_done" not in data:
+            cfg.setup_done = True
         if "show_bubble" not in data and "show_float" not in data:
             # on_focus, one choice of "", bubble, float, listen until the evening of 2026-10-16, split in two; the
             # floating button's checkbox (a few hours that day) before it

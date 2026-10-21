@@ -33,13 +33,17 @@ def resolve_device(name: str):
 class LevelProbe:
     """The microphone's loudness for 測試麥克風 (the 麥克風 page): a stream of its own, so it works whether listening
     is on or not (Windows shares the device). `level` is the loudest block since the last read, 0..1 over -60..0
-    dBFS."""
+    dBFS. With `keep` seconds the latest audio is kept too (`recent`: the setup wizard's 你剛剛說)."""
     FLOOR_DB = -60.0
+    RATE = 16000
 
-    def __init__(self):
+    def __init__(self, keep: float = 0.0):
         self._stream = None
         self._peak = 0.0
         self._lock = threading.Lock()
+        self._keep = int(keep * self.RATE)
+        self._chunks = []
+        self._kept = 0
 
     def start(self, device_name: str = ""):
         """Raises what sounddevice raises when the device can't be opened."""
@@ -57,6 +61,8 @@ class LevelProbe:
                 pass
             self._stream = None
         self._peak = 0.0
+        with self._lock:
+            self._chunks, self._kept = [], 0
 
     @property
     def running(self) -> bool:
@@ -66,6 +72,17 @@ class LevelProbe:
         rms = float(np.sqrt(np.mean(np.square(data[:, 0])))) if frames else 0.0
         with self._lock:
             self._peak = max(self._peak, rms)
+            if self._keep:
+                self._chunks.append(data[:, 0].copy())
+                self._kept += frames
+                while self._chunks and self._kept - len(self._chunks[0]) >= self._keep:
+                    self._kept -= len(self._chunks.pop(0))
+
+    def recent(self, seconds: float) -> np.ndarray:
+        """The last `seconds` of audio kept (16 kHz mono float32)."""
+        with self._lock:
+            audio = np.concatenate(self._chunks) if self._chunks else np.zeros(0, np.float32)
+        return audio[-int(seconds * self.RATE):]
 
     def read(self) -> float:
         with self._lock:

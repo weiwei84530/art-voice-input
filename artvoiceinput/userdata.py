@@ -4,8 +4,8 @@ setting (config.json, 自訂操作 included) and the 詞庫: the word list with 
 
 Importing replaces the settings, but those tied to this computer (LOCAL: the microphone, autostart, the floating
 button's place), and merges the 詞庫 (the user's choice): what the file has is added, an entry both have takes the
-file's, packs ticked on either side stay ticked. 還原預設 puts everything back as installed, the 詞庫 too: the
-packs as shipped, none ticked.
+file's, packs ticked on either side stay ticked. 清空並重新設定 (`reset`) puts everything back as installed, the 詞庫
+too: the packs as shipped, none ticked; the setup wizard follows.
 """
 import json
 import shutil
@@ -18,7 +18,7 @@ from .config import Config
 
 FORMAT = "artvoiceinput-data"
 VERSION = 1
-LOCAL = ("mic", "autostart", "float_pos")
+LOCAL = ("mic", "autostart", "float_pos", "setup_done")
 
 
 def export(path: Path, cfg, hotwords, memory) -> None:

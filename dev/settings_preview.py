@@ -1,6 +1,6 @@
 """Shows the redesigned settings window on a copy of the settings, so nothing of the user's is written.
 
-    .venv/Scripts/python dev/settings_preview.py [page] [--dark] [--shot out.png]
+    .venv/Scripts/python dev/settings_preview.py [page | wizard[2|3]] [--dark] [--shot out.png]
 """
 import shutil
 import sys
@@ -71,6 +71,11 @@ def main():
     scroll = next((int(a[7:]) for a in args if a.startswith("scroll=")), 0)
     page = next((a for a in args if not a.startswith("--") and not a.endswith(".png") and "=" not in a), None)
     shot = next((a for a in args if a.endswith(".png")), None)
+    if page and page.startswith("wizard"):   # wizard, wizard2, wizard3: the setup wizard at that step
+        win.start_wizard()
+        step = int(page[6:] or 1) - 1
+        QTimer.singleShot(200, lambda: win.wizard.go(step))
+        page = None
     if page:
         QTimer.singleShot(200, lambda: win.open_page(page))
         if scroll:
@@ -79,7 +84,7 @@ def main():
         def grab():
             win.grab().save(shot)
             app.quit()
-        QTimer.singleShot(1600 if page else 600, grab)
+        QTimer.singleShot(1600 if page or win.wizard else 600, grab)
     app.exec()
 
 

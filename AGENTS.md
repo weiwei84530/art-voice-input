@@ -75,7 +75,7 @@ automatically; read it before reviving or redesigning something). Module docstri
 | `picker.py` | the 選字 menu |
 | `floatbtn.py` / `orbs.py` | floating button and bubble (`OrbButton`), the ten 按鈕樣式 looks |
 | `glow.py` | screen-edge glow while listening |
-| `ui/` | settings window (2026-10 redesign): `theme.py` tokens + QSS, `kit.py` widgets, `shell.py` home and transition, `window.py` app interface, `page_*.py` the six pages |
+| `ui/` | settings window (2026-10 redesign): `theme.py` tokens + QSS, `kit.py` widgets, `shell.py` home and transition, `window.py` app interface, `page_*.py` the six pages, `wizard.py` setup wizard, `sheet.py` in-window question |
 | `logbook.py` | 辨識紀錄 rows |
 | `config.py` / `userdata.py` | `Config` (load migrates old keys) / settings file export, import, reset |
 | `hotkey.py` / `keys.py` | low-level hooks, hotkey capture, key names |
@@ -291,8 +291,18 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   swatches, phrase chips, dates, the 回首頁 strip) a hint shows after the pointer rests 1s (`kit.TipRouter`);
   辨識紀錄's row tips show as soon as the pointer comes (`quick_tip`, 2026-10-21: a page read by sweeping). All are `kit.Tip` (120ms fade), never Qt's tooltip.
 - 設定檔 (`userdata.py`): 匯出 writes all settings and the 詞庫 (list, aliases, 選字記憶, pack files) to one JSON; 匯入
-  replaces settings except `userdata.LOCAL` (mic, autostart, float place) and merges the 詞庫 (file wins); 還原預設
-  resets everything including the 詞庫.
+  replaces settings except `userdata.LOCAL` (mic, autostart, float place, setup_done) and merges the 詞庫 (file
+  wins). 清空並重新設定 (a button, like a phone's factory reset, 2026-10-21) asks in a `ui/sheet.py` card (window
+  dimmed; 先匯出設定檔… link), then resets everything including the 詞庫 and 辨識紀錄 (models, cache and dev
+  recordings stay) and opens the setup wizard.
+- **Setup wizard** (`ui/wizard.py`, 2026-10-21, design C of https://claude.ai/artifact/LFjmoPLHVf1bz7irmzKy6i): over
+  the whole window, one card on the wall, light or dark with the window. Shown when the settings window opens while
+  `setup_done` is false (a new install, after 清空並重新設定; `app.main` opens it at launch; a config.json from
+  before the wizard counts as done); closed before the end it comes back. 1 microphone: name, device, meter; 略過
+  (plain) becomes 下一步 (orange) once speech is over `TEST_HEARD` for 150ms, with a green dot + 聽到了; what was said
+  is decoded on the worker and shown as 你剛剛說 (trial, the user decides whether it stays). 2 packs, 3 columns,
+  whole sample terms only; 跳過 / 下一步. 3 簡單 / 標準 / 全自動 (`wizard.PRESETS`), picked one shows its settings as
+  chips; 開始教學 does nothing yet (the tutorial comes later), 跳過教學，直接開始使用 finishes.
 - 辨識紀錄 (`logbook.py`, `set_log`): one row per event, grouped per listening session, newest first, heard vs the
   screen's change as a diff, details in the tooltip; copy icon on rows that settled text; an orange book (the 詞庫 tile's) when the 詞庫
   may have shaped the text (`logbook.bank_of`; good news, not a warning). Text fixed as typed is 定稿 (its tag and dot the text red a

@@ -3,39 +3,19 @@ import os
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QPainter, QPen
-from PySide6.QtWidgets import (QFileDialog, QGraphicsOpacityEffect, QGridLayout, QHBoxLayout, QLabel, QMessageBox,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QMessageBox, QVBoxLayout, QWidget
 
 from .. import __version__, paths, userdata
 from . import theme
-from .kit import (Choice, Info, Switch, T, button, calm, card, dim, draw_icon, hbox, icon, label, sep, set_calm, titled,
-                  vbox)
+from .kit import (Choice, Info, Switch, T, button, card, crossfade, dim, draw_icon, hbox, icon, label, sep,
+                  set_calm, titled, vbox)
 
 
 def _state(on: bool, text: str) -> str:
     """A switch's note, led by the state it describes (開： / 關：, 2026-10-21, the user's request)."""
     return f"<b>{'開' if on else '關'}：</b>{text}"
-
-
-def _crossfade(win: QWidget):
-    """The window as it looks now laid over it and faded out (220ms) while the new colors come in under it; not
-    with 節流模式."""
-    if calm() or not win.isVisible():
-        return
-    cover = QLabel(win)
-    cover.setPixmap(win.grab())
-    cover.setGeometry(win.rect())
-    cover.setAttribute(Qt.WA_TransparentForMouseEvents)
-    fx = QGraphicsOpacityEffect(cover, opacity=1.0)
-    cover.setGraphicsEffect(fx)
-    cover.show()
-    cover.raise_()
-    anim = QPropertyAnimation(fx, b"opacity", cover, duration=220, startValue=1.0, endValue=0.0,
-                              easingCurve=QEasingCurve.InOutQuad)
-    anim.finished.connect(cover.deleteLater)
-    anim.start()
 
 
 class Drop(QWidget):
@@ -153,7 +133,9 @@ class SysPage(QWidget):
         drop.dropped.connect(self._import_file)
         drop.clicked.connect(self._import_pick)
         export = button("匯出設定檔…", self._export, pri=True)
-        reset = button("還原成預設值", self._reset, link=True)
+        # 清空並重新設定 (2026-10-21, the user's design: like a phone's factory reset): everything cleared, then the
+        # setup wizard from its first step
+        reset = button("清空並重新設定…", self._reset, danger=True)
         row("設定檔", "所有設定與詞庫存成一個檔案，換電腦時帶走",
             vbox(drop, 10, hbox(export, None, reset, spacing=8), spacing=0))
         # names on one line, values on the next, all values alike (the folder link was a button: the buttons'
@@ -217,7 +199,7 @@ class SysPage(QWidget):
     def _apply_mode(self):
         if self.win.theme.mode == self.cfg.theme:
             return
-        _crossfade(self.window())   # the old look, the card already moved, fades away over the new colors
+        crossfade(self.window())   # the old look, the card already moved, fades away over the new colors
         self.win.theme.set_mode(self.cfg.theme)
 
     def _mode_note(self):
@@ -279,10 +261,16 @@ class SysPage(QWidget):
                     f"詞包新增 {n['pack_terms']} 個詞")
 
     def _reset(self):
-        if QMessageBox.question(self, "還原成預設值", "把所有設定還原成預設，並清空詞庫（詞庫列表、選字記憶、英文強制"
-                                                  "替換，詞包恢復原始內容並取消勾選）？\n這個動作無法復原，需要的話先匯出。"
-                                ) != QMessageBox.Yes:
-            return
+        from .sheet import Sheet
+        sheet = Sheet(self.window(), "清空所有資料並重新設定？",
+                      "設定、詞庫列表、選字記憶、英文強制替換和詞包的修改都會清掉，無法復原。\n"
+                      "辨識模型會保留，清空後回到設定精靈。", "清空並重新設定", "先匯出設定檔…")
+        sheet.linked.connect(self._export)
+        sheet.accepted.connect(self._reset_now)
+        sheet.open()
+
+    def _reset_now(self):
         userdata.reset(self.cfg, self.win.hotwords, self.win.memory)
+        self.win.clear_log.emit()
         self.win.data_changed()
-        self.notice("已還原預設")
+        self.win.start_wizard()
