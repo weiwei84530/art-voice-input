@@ -44,8 +44,8 @@ from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtGui import QAction, QCursor, QGuiApplication
 from PySide6.QtWidgets import QApplication, QMenu
 
-from . import (appicon, autostart, candidates, config, cues, edit, models, packs, paths, recordings, rules, sounds,
-               spelling, syllables)
+from . import (appicon, autostart, candidates, config, cues, edit, models, numforms, packs, paths, recordings, rules,
+               sounds, spelling, syllables)
 from .asr import SAMPLE_RATE, Recognizer
 from .config import Config
 from .floatbtn import Bubble, FloatButton
@@ -113,9 +113,12 @@ def _one_command(raw: str, names: list) -> str:
 
 
 def _pickable(text: str) -> bool:
-    """Short enough for the 選字 menu to open by itself: up to 4 Chinese characters or 3 English words."""
+    """Short enough for the 選字 menu to open by itself: up to 4 Chinese characters or 3 English words, or a number
+    or letters-and-digits word, or English number words alone (One, two; numforms)."""
     t = text.strip()
-    return bool(_PICK_ZH.fullmatch(t) or _PICK_EN.fullmatch(t) and t.isascii())
+    words = numforms.english(t)
+    return bool(_PICK_ZH.fullmatch(t) or _PICK_EN.fullmatch(t) and t.isascii() or numforms.is_number_word(t)
+                or words and not re.search("[A-Za-z]", words))
 
 
 def _double_click_time() -> float:
@@ -1775,7 +1778,12 @@ class App(QObject):
         text = sel.text.strip()
         tabs = []
         try:
-            if is_latin(text):
+            digits = numforms.english(text)   # One, two -> 1, 2 (2026-10-22): first
+            if digits:
+                tabs.append(("數字", [digits]))
+            if numforms.is_number_word(text):   # 123 -> 一百二十三, a12 -> A12, full-width (2026-10-22)
+                tabs = numforms.tabs(text)
+            elif is_latin(text):
                 known = self._known_terms(terms)
                 # Chinese X-ASR wrote as English (How the -> 好的; 2026-10-21, the user's request): first next to
                 # Chinese
@@ -1793,7 +1801,7 @@ class App(QObject):
                 tabs.append(("大小寫", forms))
                 if zh and not (left or right):
                     tabs.append(("中文", zh))
-            else:
+            elif not digits:
                 found = candidates.ranked(text)
                 if len(text) == 1:
                     key = reading_key(text)
@@ -1871,11 +1879,14 @@ class App(QObject):
             if word == menu[1].text.strip():   # the word that is there now (the menu's first): kept as it is
                 log.info("menu pick: kept %s", word)
                 return
-            self._apply_pick(menu[1], word)
+            text = menu[1].text
+            number = numforms.is_number_word(text) or word == numforms.english(text)   # nothing learned
+            self._apply_pick(menu[1], word, learn=not number)
 
-    def _apply_pick(self, sel, word: str):
+    def _apply_pick(self, sel, word: str, learn: bool = True):
         """A pick replaces the selection. A single character is learned with its context (smart picks); a word
-        gains hotword weight and the word it replaced loses some."""
+        gains hotword weight and the word it replaced loses some. learn False (another way to write a number):
+        nothing learned."""
         text = sel.text.strip()
         lead = sel.text.index(text)
         log.info("menu pick: %s -> %s", text, word)
@@ -1898,12 +1909,13 @@ class App(QObject):
                 before = before[:-1]
         line = sel.before + sel.text + sel.after
         start = len(sel.before) + lead
-        self.memory.record(line, start, start + len(text), word)
-        if self.cfg.save_recordings:
-            recordings.note("pick", before=text, after=word, line=line)
-        self.hotwords.picked(text, word)
-        self._suggest_pack(word)
-        self.settings.refresh_hotwords()
+        if learn:
+            self.memory.record(line, start, start + len(text), word)
+            if self.cfg.save_recordings:
+                recordings.note("pick", before=text, after=word, line=line)
+            self.hotwords.picked(text, word)
+            self._suggest_pack(word)
+            self.settings.refresh_hotwords()
         self.session.replaced_selection(before, word, foreground())
         self.record.emit({"time": time.strftime("%H:%M:%S"), "kind": "選字", "main": f"{text} → {word}", "copy": word,
                           "steps": []})

@@ -226,9 +226,13 @@ sentence end → 嗎 questions → trailing punctuation.
 - **Symbol keyboard** (2026-10-22, the user's request; design A of
   https://claude.ai/artifact/FSX49ZChyWMdwvv5i8kPcG): said 符號 or 鍵盤 (`rules.KEYBOARD`, rules_version 15), the
   選字 menu opens under the caret (`selection.caret_rect`, else the selection, else the mouse) with `picker.SYMBOLS`:
-  全形 (marks, then pairs), 半形, 小寫, 大寫 a-z (5x6 cells; 2026-10-22); a click types the symbol (over a selection), a pair (`picker.PAIRS`, also the
+  全形 (marks, then pairs), 半形, 英文 A-Z, 數字 0-9 and ０-９ (5x6 cells, "" a gap; 2026-10-22); a click types the symbol (over a selection), a pair (`picker.PAIRS`, also the
   half-width () [] {}) around the caret or selection like 括號, and closes it; no 。 is added before it. Speech typed
   while it is open closes it. Only full- and half-width symbols (no emoji: Win+. has them; no letters or 注音).
+- **Numbers in 選字** (`numforms.py`, 2026-10-22, the user's request): a selected number (123, 3.14, full-width
+  too) opens the menu by itself with 中文 (一百二十三, 一二三 by digit, 壹佰貳拾參) and 全形 / 半形; letters with digits
+  (a12) 大小寫 and 全形; English number words (One, two -> 1, 2; numforms.english) a 數字 tab first. Nothing is
+  learned from these picks. Not offered (the user's choice): near-sounding numbers, 千分位, 三十五 -> 35.
 - **詞庫 list** (`hotwords.py`, `hotword-list.json`; code says hotwords, UI says 詞庫 / 優先度): 優先度 shown as
   stored − 100 (0% nothing, +100% top, negative red). A pick of 2+ characters or English moves the picked word +25%
   and the replaced one −25%. Typed words are top. English replaced by English goes down too, to −50% at most (2026-10-21, TTS-measured: `hotwords` docstring); English for Chinese or back lowers no English; case forms are separate hotwords. Single characters never listed. ✕ puts a

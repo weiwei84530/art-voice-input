@@ -11,7 +11,7 @@ sees what is chosen (a click on it keeps it); tab counts leave it out. Light or 
 somewhere else.
 
 The same menu is the symbol keyboard (2026-10-22, design A of https://claude.ai/artifact/FSX49ZChyWMdwvv5i8kPcG, the
-user's pick): said 符號 or 鍵盤, it opens under the caret with SYMBOLS' tabs (全形, 半形, 小寫, 大寫), no word leading the first; a click types
+user's pick): said 符號 or 鍵盤, it opens under the caret with SYMBOLS' tabs (全形, 半形, 英文, 數字), no word leading the first; a click types
 the symbol, a pair (PAIRS) with the caret put back between, and closes it.
 """
 import ctypes
@@ -36,13 +36,13 @@ _TAB_H = 38       # a tab: its name over its count
 _TAB_GAP = 4
 _RAIL_MIN = 62
 SYMBOL_GRID = (5, 6)   # columns, rows of the symbol keyboard, in the single characters' cells, filled top to bottom
-# 全形: two columns of marks, then two of pairs; letters a-z for what speech spells badly (2026-10-22)
+# 全形: two columns of marks, then two of pairs; capital letters and digits for what speech spells badly (2026-10-22)
 SYMBOLS = [("全形", ["，", "。", "、", "；", "：", "？", "！", "……", "——", "～", "·", "※",
                      "「」", "『』", "（）", "【】", "《》", "〈〉", "〔〕", "“”", "‘’", "［］"]),
            ("半形", ["@", "#", "$", "%", "&", "*", "_", "-", "+", "=", "/", "\\", "|", "<", ">", "~", "^", "`", "'",
                      '"', ":", ";", "!", "?", "()", "[]", "{}"]),
-           ("小寫", [chr(c) for c in range(ord("a"), ord("z") + 1)]),
-           ("大寫", [chr(c) for c in range(ord("A"), ord("Z") + 1)])]
+           ("英文", [chr(c) for c in range(ord("A"), ord("Z") + 1)]),
+           ("數字", [c for start in (0x30, 0x35, 0xFF10, 0xFF15) for c in [chr(start + d) for d in range(5)] + [""]])]
 PAIRS = {w for _, ws in SYMBOLS for w in ws if len(w) == 2 and w not in ("……", "——")}
 
 
@@ -79,7 +79,7 @@ class Picker(QWidget):
     @property
     def candidates(self) -> list[str]:
         """Every candidate, tab after tab (not the word that is there now)."""
-        return [w for i, (_, words) in enumerate(self.tabs) for w in (words[1:] if i == 0 and self.lead else words)]
+        return [w for i, (_, words) in enumerate(self.tabs) for w in (words[1:] if i == 0 and self.lead else words) if w]
 
     def show_loading(self, word: str, rect):
         self._answered = False
@@ -98,7 +98,7 @@ class Picker(QWidget):
         """tabs: (name, words) with words, in order; the first is opened."""
         if tabs:
             tabs = [(tabs[0][0], [word] + tabs[0][1])] + list(tabs[1:])
-        self._fill(tabs, single=len(word) == 1 and not word.isascii(), message="沒有候選字")
+        self._fill(tabs, single=len(word) == 1 and "㐀" <= word <= "鿿", message="沒有候選字")
         if self.isVisible():
             QTimer.singleShot(0, self._clamp)
 
@@ -196,6 +196,8 @@ class Picker(QWidget):
             p.drawText(self._list, Qt.AlignCenter, "沒有候選字")
             return
         for i, word in enumerate(words):
+            if not word:   # a gap (the symbol keyboard's digits: a column each five)
+                continue
             r = self._cells[i]
             hot = self._hover == ("cell", i)
             first = self.lead and self.current == 0 and i == 0
@@ -237,7 +239,7 @@ class Picker(QWidget):
             p.setFont(themes.font(10.5, 600, num=True))
             p.setPen(self._c("acct") if on else self._c("muted"))
             p.drawText(QRectF(r.x() + 10, r.y() + 20, r.width() - 12, 14), Qt.AlignLeft | Qt.AlignVCenter,
-                       f"{len(words) - (i == 0 and self.lead)} 個")
+                       f"{sum(map(bool, words)) - (i == 0 and self.lead)} 個")
 
     # --- the mouse ---
     def _hit(self, pos):
@@ -245,8 +247,8 @@ class Picker(QWidget):
             if r.contains(pos):
                 return "tab", i
         if self.tabs:
-            for i in range(len(self.tabs[self.current][1])):
-                if self._cells[i].contains(pos):
+            for i, word in enumerate(self.tabs[self.current][1]):
+                if word and self._cells[i].contains(pos):
                     return "cell", i
         return None
 
