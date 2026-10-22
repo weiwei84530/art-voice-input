@@ -85,8 +85,10 @@ _COMMAND_SLACK = 2
 # seconds of silence at both ends (dev/cmdlab, 2026-10-17, the user's recordings of continuous listening: commands
 # 96.7% -> 98.7%, 換行 missed 21 -> 8 times, still no text taken for a command). X-ASR writes a command as English
 # when the audio does not start and end in silence (換行 -> Hang Hung, 刪除 -> Central): the padding alone fixed 23
-# of the 31 misses. Most commands then need one decode instead of up to two.
-_FIRST_MAX = 1.2
+# of the 31 misses. Most commands then need one decode instead of up to two. 1.2 -> 1.5 (2026-10-22, with
+# config.skip_short): of the user's commands of 1.2-1.5s of speech 413/421 found; of 88 texts that long 5 taken for
+# a command (7 up to 1.6s), all but 過後 -> 括號 the user's command typed as text then (Hang Hung, One home -> 換行).
+_FIRST_MAX = 1.5
 _PAD = 0.3
 # A piece of more than _ALONE_MAX seconds of speech is not decoded alone: it goes straight to the open sentence's
 # decode, whose tail still runs a command said at its end (_ran_tail). The user's commands of continuous listening
@@ -1204,11 +1206,7 @@ class App(QObject):
             self._take_restored()
             if not quick and self.cfg.skip_alone and piece.end - piece.start > _ALONE_MAX * SAMPLE_RATE:
                 self._spans = [p for p in self._spans if p.start >= anchor] + [piece]
-                if piece.hi - anchor > _DRAFT_MAX * SAMPLE_RATE:
-                    spans, self._spans = self._spans, []
-                    self._commit_job(start, anchor, piece.hi, piece.hi, ctx, spans=spans)
-                else:
-                    self._refine_job(start, anchor, piece, ctx)
+                self._sentence_job(start, anchor, piece, ctx)
                 return
             audio = self.listener.audio(piece.lo, piece.hi)
             t0 = time.monotonic()
@@ -1221,6 +1219,11 @@ class App(QObject):
                 self._quick_done = piece.hi
                 log.info("quick piece: %s", raw)
             self._spans = [p for p in self._spans if p.start >= anchor] + [piece]
+            if not raw and not quick and self.cfg.skip_short and self._command_words():
+                # a short piece the boosted-first decode found no command in is not decoded alone again: the
+                # sentence's decode, commands boosted, runs one at its tail (config.skip_short, 2026-10-22)
+                self._sentence_job(start, anchor, piece, ctx, short=True)
+                return
             raw = raw or self._decode(audio, ctx, commands=True)
             t_asr = time.monotonic() - t0
             log.info("piece %.2fs: %s", t_asr, raw)
@@ -1260,6 +1263,14 @@ class App(QObject):
                                  info={"heard": formatted, "entry": entry})
         except Exception:
             log.exception("piece failed")
+
+    def _sentence_job(self, start: int, anchor: int, piece, ctx, short: bool = False):
+        """A piece not decoded alone: the open sentence is decoded again up to it (committed past _DRAFT_MAX)."""
+        if piece.hi - anchor > _DRAFT_MAX * SAMPLE_RATE:
+            spans, self._spans = self._spans, []
+            self._commit_job(start, anchor, piece.hi, piece.hi, ctx, spans=spans)
+        else:
+            self._refine_job(start, anchor, piece, ctx, short=short)
 
     def _refine_job(self, start: int, anchor: int, piece, ctx, short: bool = False, info: dict | None = None):
         """The draft's open sentence (audio from `anchor`) decoded again up to this pause. Text up to the last ，
@@ -1312,7 +1323,8 @@ class App(QObject):
             return False
         steps = []
         said = format_text(tail, True, steps)
-        op, typed = self._command(said, ctx, steps)
+        # raw for spelled letters (B L I P.) over a selected word, only when the piece is all that was said
+        op, typed = self._command(said, ctx, steps, "" if head.strip() else tail)
         if op is not None or typed:
             log.info("piece with the speech before it: %s | %s", head, said)
             entry = {"time": time.strftime("%H:%M:%S"), "asr": to_traditional(tail),

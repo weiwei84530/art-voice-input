@@ -195,7 +195,7 @@ class SysPage(QWidget):
         about.setColumnStretch(3, 1)
         row("關於", "阿特語音輸入法 Art VoiceInput", about, last=True)
         v.addWidget(frm)
-        self.skip = None
+        self.debug_switches = []   # (switch, its note, config field, note when on, note when off)
         if config.DEBUG:
             self._debug_card(v)
         v.addStretch(1)
@@ -205,12 +205,17 @@ class SysPage(QWidget):
         """With --debug: test options, plain (2026-10-22, the user's request). Options come and go as tests end; the
         card shows only while it has one, so keep this method and its row() for the next."""
         options = []
-        # long pieces straight to the sentence's decode (config.skip_alone, app._ALONE_MAX)
-        self.skip = Switch(name="長句不單獨辨識")
-        self.skip.toggled.connect(self._skip)
-        self.skip_note = label("")
-        options.append(("長句不單獨辨識", "超過 2 秒的一段話直接整句辨識，停頓後早一點出字",
-                        hbox(self.skip, self.skip_note, None, spacing=10)))
+
+        def switch(field, title, sub, on, off):
+            sw, note = Switch(name=title), label("")
+            sw.toggled.connect(lambda v, f=field: self._debug_set(f, v))
+            self.debug_switches.append((sw, note, field, on, off))
+            options.append((title, sub, hbox(sw, note, None, spacing=10)))
+        # pieces not decoded alone, straight to the sentence's decode (2026-10-22: the pause's latency)
+        switch("skip_alone", "長句不單獨辨識", "超過 2 秒的一段話直接整句辨識，停頓後早一點出字",
+               "長句直接整句辨識", "先單獨辨識再整句（舊做法）")
+        switch("skip_short", "短句不單獨辨識", "2 秒內的一段話不是指令就直接整句辨識，短句早點出字",
+               "只先查一次指令", "單獨辨識兩三次（舊做法）")
         # the setup wizard at once, dark, nothing cleared (2026-10-21, the user's request; it applies what is picked
         # like the real one)
         options.append(("設定精靈", "直接進入設定精靈（暗色），不清空任何資料",
@@ -255,9 +260,9 @@ class SysPage(QWidget):
         self.click.blockSignals(False)
         self.lite.set_quiet(self.cfg.orb_lite)
         self._lite_note()
-        if self.skip is not None:
-            self.skip.set_quiet(self.cfg.skip_alone)
-            self._skip_note()
+        for sw, _, field, *_ in self.debug_switches:
+            sw.set_quiet(getattr(self.cfg, field))
+        self._debug_notes()
         set_calm(self.cfg.orb_lite)
 
     def summary(self) -> str:
@@ -300,13 +305,15 @@ class SysPage(QWidget):
         self.lite_note.setText(_state(self.cfg.orb_lite, "動畫從簡" if self.cfg.orb_lite else "動畫完整播放"))
 
     # --- Debug ---
-    def _skip(self, on: bool):
-        self.cfg.skip_alone = on
+    def _debug_set(self, field: str, on: bool):
+        setattr(self.cfg, field, on)
         self.win.save()
-        self._skip_note()
+        self._debug_notes()
 
-    def _skip_note(self):
-        self.skip_note.setText(_state(self.cfg.skip_alone, "長句直接整句辨識" if self.cfg.skip_alone else "先單獨辨識再整句（舊做法）"))
+    def _debug_notes(self):
+        for _, note, field, on, off in self.debug_switches:
+            value = getattr(self.cfg, field)
+            note.setText(_state(value, on if value else off))
 
     # --- autostart ---
     def _auto(self, on: bool):
