@@ -24,16 +24,17 @@ KEEP = 12.0            # seconds of audio the probe keeps
 # what each starting setup sets (the user's design, 2026-10-21; 簡約 and the names 2026-10-22); the 麥克風 page
 # shows the same settings
 PRESETS = {
-    "std": dict(auto_listen=False, show_bubble=True, show_float=True, float_text_only=True, float_keep=True,
+    "std": dict(auto_listen=False, show_bubble=True, float_away=False, float_box=True, float_rec=True,
                 auto_off_minutes=5, stop_on_enter=True, auto_off=True),
-    "simple": dict(auto_listen=False, show_bubble=False, show_float=True, float_text_only=False, float_keep=True,
+    "simple": dict(auto_listen=False, show_bubble=False, float_away=True, float_box=True, float_rec=True,
                    auto_off_minutes=1, stop_on_enter=False, auto_off=False),
-    "auto": dict(auto_listen=True, show_bubble=False, show_float=False, auto_off_minutes=0, stop_on_enter=False,
-                 auto_off=True),
+    "auto": dict(auto_listen=True, show_bubble=False, float_away=False, float_box=False, float_rec=False,
+                 auto_off_minutes=0, stop_on_enter=False, auto_off=True),
     # nothing on screen, no glow: 右 Alt or the tray icon, shown on the taskbar, turns the microphone on and off;
     # 送出 doesn't turn it off (stop_on_enter)
-    "minimal": dict(auto_listen=False, show_bubble=False, show_float=False, auto_off_minutes=5, stop_on_enter=False,
-                    auto_off=False, hotkey="vk:a5", tray_pinned=True, tray_click="mic", glow=""),
+    "minimal": dict(auto_listen=False, show_bubble=False, float_away=False, float_box=False, float_rec=False,
+                    auto_off_minutes=5, stop_on_enter=False, auto_off=False, hotkey="vk:a5", tray_pinned=True,
+                    tray_click="mic", glow=""),
 }
 OPTIONS = [
     ("std", "標準", "點進輸入框，點一下小氣泡就講", "想方便，又想保留一點掌控"),

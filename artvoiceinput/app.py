@@ -512,16 +512,16 @@ class App(QObject):
 
     # --- the floating button and leaving text (2026-10-16) ---
     def _update_float(self, event: str = ""):
-        """Main thread: with show_float the floating button fades in while the focus is where text can be typed
-        (the user's request, 2026-10-16: listening is for editing text), anywhere with float_text_only off. When
-        listening starts ("start") it grows and fades out with the glow, and comes back as the glow goes ("stop"),
-        unless float_keep keeps it on screen."""
+        """Main thread: the floating button shows by its three ticks (2026-10-22, the user's design): the focus in
+        a text box (float_box), anywhere else (float_away), while listening (float_rec). When listening starts
+        ("start") without float_rec it grows and fades out with the glow, and comes back as the glow goes ("stop")."""
         b = self.float_btn
-        if not self.cfg.show_float or self._quitting or self._paused:
+        if self._quitting or self._paused:
             show = False
+        elif self._listening:
+            show = self.cfg.float_rec
         else:
-            show = (self._box is not None or not self.cfg.float_text_only) \
-                and (not self._listening or self.cfg.float_keep)
+            show = self.cfg.float_box if self._box is not None else self.cfg.float_away
         b.setToolTip("關閉麥克風" if self._listening else "開啟麥克風")
         b.set_active(self._listening and show)
         if show:
@@ -574,7 +574,7 @@ class App(QObject):
 
     def _float_clicked(self):
         """Main thread: the floating button turns listening on, as a tap of the key would (the text goes to the
-        window that has the focus: the button never takes it); kept on screen while listening (float_keep), it
+        window that has the focus: the button never takes it); kept on screen while listening (float_rec), it
         turns listening off (it is smaller and plays faster while listening)."""
         if self._listening:
             self._stop_listen()

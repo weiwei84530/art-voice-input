@@ -2,9 +2,9 @@
 and the device."""
 import time
 
-from PySide6.QtCore import QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIntValidator, QPainter, QPen
-from PySide6.QtWidgets import (QAbstractButton, QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
+from PySide6.QtWidgets import (QAbstractButton, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
                                QLineEdit, QVBoxLayout, QWidget)
 
 from .. import audio
@@ -16,6 +16,10 @@ from .kit import (Choice, Info, Pill, Switch, T, button, card, dim, hbox, label,
 NEARS = [("", "不使用", "點進輸入框時什麼都不做"),
          ("bubble", "語音氣泡", "點擊處旁出現小按鈕，點一下開麥克風"),
          ("listen", "自動開麥克風", "點進輸入框時直接開麥克風")]
+# when the floating button shows (2026-10-22, the user's design: like NEARS, but any number ticked)
+FLOATS = [("float_away", "未偵測到輸入區域時顯示", "游標在不能打字的地方時也顯示"),
+          ("float_box", "偵測到輸入區域時顯示", "游標在可以打字的地方時顯示"),
+          ("float_rec", "錄音時顯示", "變小轉快，點一下關麥克風")]
 # small chips on one line (2026-10-21: the room went to the cards' illustrations)
 OFFS = [(0, "不關閉")] + [(m, f"{m} 分") for m in (1, 3, 5, 10, 30)]
 CUSTOM_MINUTES = (1, 240, 15)   # the 自訂 chip: lowest, highest, first offered
@@ -193,11 +197,12 @@ class KeyCap(QWidget):
 
 
 class Option(QAbstractButton):
-    """A radio row: a ring (filled orange when picked), a name and a line under it."""
+    """A radio row: a ring (filled orange when picked), a name and a line under it; check: a box with a tick
+    instead, for rows ticked independently."""
 
-    def __init__(self, name: str, desc: str):
+    def __init__(self, name: str, desc: str, check: bool = False):
         super().__init__()
-        self.name, self.desc = name, desc
+        self.name, self.desc, self.check = name, desc, check
         self.setCheckable(True)
         self.setCursor(Qt.PointingHandCursor)
         self.setFixedHeight(46)
@@ -221,7 +226,19 @@ class Option(QAbstractButton):
             p.setBrush(T("accbg") if self.isChecked() else T("tile2"))
             p.drawRoundedRect(r, 6, 6)
         c = r.center().y()
-        if self.isChecked():
+        if self.check:
+            box = QRectF(8.75, c - 7.25, 14.5, 14.5)
+            if self.isChecked():
+                p.setPen(Qt.NoPen)
+                p.setBrush(T("acc"))
+                p.drawRoundedRect(box.adjusted(-0.75, -0.75, 0.75, 0.75), 4, 4)
+                p.setPen(QPen(T("tile"), 2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+                p.drawPolyline([QPointF(12, c), QPointF(15, c + 3), QPointF(20.5, c - 3)])
+            else:
+                p.setPen(QPen(T("muted"), 1.5))
+                p.setBrush(Qt.NoBrush)
+                p.drawRoundedRect(box, 3.5, 3.5)
+        elif self.isChecked():
             p.setPen(Qt.NoPen)
             p.setBrush(T("acc"))
             p.drawEllipse(QRectF(8, c - 8, 16, 16))
@@ -302,28 +319,20 @@ class MicPage(QWidget):
         grid.addWidget(self.near_card, 0, 1)
 
         # 浮動按鈕
-        # design M2 (2026-10-20, the user's pick): a 顯示浮動按鈕 row with its switch, the two options hanging under it
+        # three ticks like 點進輸入框時's rows (2026-10-22, the user's design; any one ticked turns it on)
         self.float_card, c = card()
         self._illustrate(self.float_card, c, "float")
         self.float_pill = Pill()
         c.addLayout(hbox(label("浮動按鈕", h3=True), Info("停在螢幕上的按鈕，點一下開麥克風，拖到哪就留在哪；樣子和大小在"
                                                        "「外觀與聲音」設定"), None, self.float_pill, spacing=6))
-        self.float_switch = Switch(name="顯示浮動按鈕")
-        self.float_switch.toggled.connect(self._float)
-        c.addLayout(_row(titled("顯示浮動按鈕", "停在螢幕上，點一下開麥克風，拖到哪就留在哪"), self.float_switch))
-        branch = QFrame(objectName="branch")
-        b_box = QVBoxLayout(branch)
-        b_box.setContentsMargins(12, 2, 0, 2)
-        b_box.setSpacing(12)
-        self.float_text_only = QCheckBox("未偵測到輸入區域時隱藏")
-        self.float_hide = QCheckBox("錄音時隱藏按鈕")
-        for b, tip in ((self.float_text_only, "勾選時，游標不在可以打字的地方就隱藏浮動按鈕；不勾就到處都顯示"),
-                       (self.float_hide, "勾選時，開麥克風時按鈕放大淡出，關掉後縮回來；不勾按鈕會留著，變小、轉快，"
-                                         "麥克風開著時再點一下就關掉")):
-            b.setCursor(Qt.PointingHandCursor)
-            b.toggled.connect(self._float_opts)
-            b_box.addLayout(hbox(b, Info(tip), None, spacing=6))
-        c.addWidget(branch)
+        self.floats = {}
+        box = vbox(spacing=2)
+        for key, name, desc in FLOATS:
+            o = Option(name, desc, check=True)
+            o.clicked.connect(lambda on, k=key: self._float(k, on))
+            self.floats[key] = o
+            box.addWidget(o)
+        c.addLayout(box)
         c.addStretch(1)
         grid.addWidget(self.float_card, 0, 2)
         v.addLayout(grid)
@@ -396,9 +405,6 @@ class MicPage(QWidget):
         cfg = self.cfg
         self._show_hotkey()
         self._show_near()
-        self.float_switch.set_quiet(cfg.show_float)
-        self.float_text_only.setChecked(cfg.float_text_only)
-        self.float_hide.setChecked(not cfg.float_keep)
         self._show_float()
         self._show_off()
         self.auto_off.set_quiet(cfg.auto_off)
@@ -483,24 +489,17 @@ class MicPage(QWidget):
             o.setChecked(k == key)
         self.near_pill.set({"": "未使用", "bubble": "語音氣泡", "listen": "自動開"}[key], bool(key))
 
-    def _float(self, on: bool):
-        self.cfg.show_float = on
+    def _float(self, key: str, on: bool):
+        setattr(self.cfg, key, on)
         self.win.save()
         self._show_float()
         self._show_no_way()
 
-    def _float_opts(self):
-        if self.win._loading:
-            return
-        self.cfg.float_text_only = self.float_text_only.isChecked()
-        self.cfg.float_keep = not self.float_hide.isChecked()
-        self.win.save()
-
     def _show_float(self):
+        for k, o in self.floats.items():
+            o.setChecked(getattr(self.cfg, k))
         on = self.cfg.show_float
         self.float_pill.set("已開啟" if on else "未開啟", on)
-        for b in (self.float_text_only, self.float_hide):
-            b.setEnabled(on)
 
     def _show_no_way(self):
         self.no_way.setVisible(not (self.cfg.hotkey or self.cfg.auto_listen or self.cfg.show_bubble

@@ -32,11 +32,11 @@ def _colors_of(style_id: str, edits: dict) -> list:
 
 class OrbSample(OrbButton):
     """The floating button's look, animated, at its real size; a click plays listening starting and ending as the
-    floating button would: grown and faded out with 錄音時隱藏按鈕 (`keep()` False), else smaller and faster."""
+    floating button would: grown and faded out without 錄音時顯示 (`keep()` False), else smaller and faster."""
 
     def __init__(self, parent, size: int = 44):
         super().__init__(size, room=1.7, parent=parent)
-        self.keep = lambda: False   # the page gives float_keep
+        self.keep = lambda: False   # the page gives float_rec
         self._back = QTimer(self, singleShot=True, timeout=self._end)
         self.clicked.connect(self._demo)
         self.setToolTip("點一下看開關麥克風時的動畫")
@@ -377,7 +377,7 @@ class LookPage(QWidget):
         top.setColumnStretch(0, 1)
         top.setColumnStretch(1, 1)
         self.preview = Preview()
-        self.preview.orb.keep = lambda: self.cfg.float_keep
+        self.preview.orb.keep = lambda: self.cfg.float_rec
         top.addWidget(self.preview, 0, 0)
         # 草稿反白顏色: named colors in three columns, 自訂 last
         c_mark, c = card()

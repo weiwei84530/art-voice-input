@@ -8,12 +8,12 @@ colors), animated only while shown.
 Motions (`OrbButton`, the user's design of 2026-10-16, turned around 2026-10-20): one look at rest, no hover color, the
 orb's loop played slowly (`orbs.IDLE_SPEED`). The pointer over it grows it a little, springing. When listening
 starts it grows quickly and fades out as the glow fades in (`glow.FADE_MS`); when listening ends it shrinks back
-from that size and fades in as the glow fades out. With `float_keep` (錄音時隱藏按鈕 unticked) the floating button
+from that size and fades in as the glow fades out. With `float_rec` (錄音時顯示) the floating button
 stays: while listening it is smaller (`_ACTIVE`) and its loop plays faster (`orbs.ACTIVE_SPEED`), so it reads as
 recording, and a click turns listening off. Its window has room around the button (`_ROOM`) for the orb's light and
 for growing; the room is transparent, so clicks there go through. The button's place is the middle of it.
-With 未偵測到輸入區域時隱藏 unticked (`float_text_only`, the 一般 tab) the floating
-button shows wherever the focus is. 按鈕大小 (`button_scale`, 75-125%) scales both buttons.
+Where it shows is the 麥克風 page's three ticks (`float_away`, `float_box`, `float_rec`).
+按鈕大小 (`button_scale`, 75-125%) scales both buttons.
 """
 import ctypes
 

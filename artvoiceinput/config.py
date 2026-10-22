@@ -50,23 +50,20 @@ class Config:
     # the floating microphone button's place (show_float), as fractions of the screen's free range
     # [] until dragged: the right edge, halfway down (floatbtn.EDGE; 2026-10-22, away from title bars, tabs and notices)
     float_pos: list = field(default_factory=list)
-    # the floating button only while text can be typed where the focus is and listening is off; False: always, while
-    # listening too, a click turning it off (2026-10-16, the user's request). The 一般 tab calls it
-    # 未偵測到輸入區域時隱藏, unticked by default (2026-10-17)
-    float_text_only: bool = False
-    # float_keep: the floating button stays while listening (a click jumps it and turns listening off) instead of
-    # growing and fading out with the glow (2026-10-16, the user's request). Shown inverted as 錄音時隱藏按鈕,
-    # unticked by default (2026-10-17)
-    float_keep: bool = True
+    # when the floating button shows (2026-10-22, the user's design: three ticks, any one turns it on): the focus
+    # where nothing can be typed (未偵測到輸入區域時顯示), in a text box (偵測到輸入區域時顯示), while listening (錄音時顯示:
+    # it stays smaller and faster and a click turns listening off; unticked it grows and fades out with the glow)
+    float_away: bool = True
+    float_box: bool = True
+    float_rec: bool = True
     # when the focus comes into a text box (2026-10-16, the user's requests): "" nothing, "bubble" a small microphone
     # bubble by the caret (a click listens), "float" the draggable floating button, shown only while text can be
     # typed where the focus is, "listen" listening turns on, and off when the focus leaves for a place where nothing
     # can be typed
     # 輸入框旁的按鈕 (the 外觀 tab, two checkboxes; 2026-10-16, the user's design: they were one choice with
     # auto_listen): the bubble by the click that put the focus in a text box, and the draggable floating button
-    # (kept on screen with float_keep, a fixed place to turn listening off); either may go with auto_listen
+    # (kept on screen with float_rec, a fixed place to turn listening off); either may go with auto_listen
     show_bubble: bool = True
-    show_float: bool = True
     # 點進輸入框時 自動開麥克風 (the 麥克風 page): a left click that puts the focus in a text box turns listening on,
     # at the moments the bubble would show (2026-10-20, the user's design; keyboard focus does nothing). One choice
     # with show_bubble (點進輸入框時: 不使用 / bubble / this), so at most one of them is on
@@ -119,8 +116,15 @@ class Config:
             # on_focus, one choice of "", bubble, float, listen until the evening of 2026-10-16, split in two; the
             # floating button's checkbox (a few hours that day) before it
             on_focus = data.get("on_focus") or ("float" if data.get("float_button") else "")
-            cfg.show_bubble, cfg.show_float = on_focus == "bubble", on_focus == "float"
+            cfg.show_bubble = on_focus == "bubble"
             cfg.auto_listen = on_focus == "listen"
+            data = {**data, "show_float": on_focus == "float"}
+        if "float_box" not in data:
+            # show_float with 未偵測到輸入區域時隱藏 (float_text_only) and 錄音時隱藏按鈕 (not float_keep) until 2026-10-22
+            shown = data.get("show_float", True)
+            cfg.float_box = shown
+            cfg.float_away = shown and not data.get("float_text_only", False)
+            cfg.float_rec = shown and data.get("float_keep", True)
         if cfg.auto_listen:
             cfg.show_bubble = False
         if data.get("glow") == "custom":   # the 自訂 style (2026-10-16, a few hours): 彩虹 changed that way
@@ -146,6 +150,11 @@ class Config:
             said = {rules.normalize(p) for r in cfg.rules if r.source == rules.SPEECH for p in rules.phrases(r.phrase)}
             cfg.rules += [r for r in rules.dev_rules() if rules.normalize(r.phrase) not in said]
         return cfg
+
+    @property
+    def show_float(self) -> bool:
+        """The floating button shows somewhere: any of its three ticks."""
+        return self.float_away or self.float_box or self.float_rec
 
     def save(self) -> None:
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)

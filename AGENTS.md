@@ -107,12 +107,14 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
   box (focus read 120ms after the click); goes on typing / wheel (at once) or focus leaving (fade). Keyboard focus
   shows nothing. Listening started from it or anywhere else bursts it away; it doesn't come back when listening ends,
   only at the next click into a text box (2026-10-20). Placed at the click because UIA caret positions are wrong in Notion, LINE, web pages.
-- **Floating button** (`show_float`; 未偵測到輸入區域時隱藏 `float_text_only` and 錄音時隱藏按鈕
-  = not `float_keep`, both unticked by default; `float_pos`, [] until dragged: 24px in from the right edge, halfway down, away from title
+- **Floating button** (2026-10-22, the user's design: three ticks, multi-select, any one turns it on, `show_float`
+  derived): 未偵測到輸入區域時顯示 `float_away`, 偵測到輸入區域時顯示 `float_box`, 錄音時顯示 `float_rec` (old configs:
+  show_float with float_text_only / float_keep migrated in `Config.from_data`); `float_pos`, [] until dragged: 24px in
+  from the right edge, halfway down, away from title
   bars, tabs and notices, 2026-10-22): never takes focus, draggable; fades in (180ms) and out
   (160ms) as the focus comes and goes.
   Starting to listen grows it to 1.5 and fades it out in `glow.FADE_MS`; ending reverses it. Kept on screen
-  (`float_keep`) it shrinks to 0.88 while listening and its orb plays faster (2026-10-20).
+  (`float_rec`) it shrinks to 0.88 while listening and its orb plays faster (2026-10-20).
 - **Pieces**: the microphone opens unseen; silero VAD ends a piece at 0.3s silence (0.5s lead-in, 0.25s tail kept).
   Sample numbers continue across sessions (a reset made queued jobs read the new session's audio: text typed twice);
   the new session's state is reset by a worker job queued after the old ones. Audio is kept as chunks and trimmed
@@ -294,8 +296,8 @@ bled large into the tile's bottom right (tilted 5°; hover lifts it up-right, tu
 (transition Fly): the block shrinks to a 56px strip that goes home, the icon flies to the page title. Pages: 麥克風
 (design M2: no section labels since 2026-10-21; each of the three cards opens with its illustration (`ui/illus.py`,
 round 13's L1-L3 drawn in Qt, played while the pointer is on the card, a still frame at rest, never with 節流模式;
-clicks are cartoon bursts); hotkey card, 點進輸入框時 radio, floating button card with a 顯示浮動按鈕 row and its two
-options under it; no orange outline on cards (outlines answer the pointer only); each card's state pill (`kit.Pill`) is solid
+clicks are cartoon bursts); hotkey card, 點進輸入框時 radio, floating button card with three tick rows drawn like the radio rows (no switch,
+no ⓘ on them); no orange outline on cards (outlines answer the pointer only); each card's state pill (`kit.Pill`) is solid
 orange and breathes while on, all pills in step with the clock; auto-off small chips on one line with 送出訊息後關閉 and 離開輸入框後關閉 under them, device with 測試麥克風
 (`audio.LevelProbe`, its own stream; meter design I1: 24 segments, the last six warmer, a falling peak tick; stops
 when the page hides), mute), 外觀與聲音 (on one screen, no scrolling: preview beside the mark colors (design A3,
