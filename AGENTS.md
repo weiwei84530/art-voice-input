@@ -1,4 +1,4 @@
-﻿# Art VoiceInput — notes for coding agents
+# Art VoiceInput — notes for coding agents
 
 Windows dictation app: sherpa-onnx speech recognition, typed into whatever has the focus, with spoken commands and
 mouse-driven fixes. This file holds the working rules, the current design and the lessons worth keeping. Why things
