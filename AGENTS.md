@@ -168,9 +168,10 @@ and runs (nothing decoded when nothing was said since the last commit).
   clears Claude Code's input), 剪下 also deletes, 貼上 replaces the selection (if the terminal copied the selection
   itself on select, the clipboard text before it is pasted: `output.watch_clipboard` / `text_before`), 全選 a
   notice. Backspace / Delete / text steps act on a terminal selection, not the cursor.
-- Punctuation names (`punctuation_names`): 逗號 句號 句點 問號 驚嘆號 感嘆號 頓號 分號 冒號 點點點 刪節號 省略號;
-  appended after existing punctuation; replace a selection; a mark said right after an added one replaces it.
-  點點點 is not boosted (it ran away).
+- Punctuation names (`punctuation_names`, `edit.SYMBOLS`; 2026-10-22 the user's list): 逗號 / 逗點, 句號 / 句點, 頓號,
+  問號, 驚嘆號 (驚歎號 as X-ASR may write it), 分號, 冒號, 刪節號 / 省略號, 破折號 ——, 斜線 / (half-width); no 感嘆號 or
+  點點點. 語音指令 shows one keycap per mark, two names on two lines, 5x2. Appended after existing punctuation;
+  replace a selection; a mark said right after an added one replaces it (`edit.MARKS`: not —— or /).
 - Described characters (`describe_char`): everything before 的 exactly one dictionary word, no lead-in (節日的節 →
   節; 顯示的是 → 示). Spelled letters over a selected English word type that word (`edit.spelled`, counts as a pick).
 - Not carried over from press-and-talk yet: `period_to_comma` (selected 。 → ，+ utterance + 。; checkbox hidden,

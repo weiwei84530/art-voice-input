@@ -880,7 +880,11 @@ class Keycap(QWidget):
             p.drawText(QPointF(box.center().x() - ink.center().x(), box.center().y() - ink.center().y()), self.glyph)
             p.setPen(T("muted"))
             p.setFont(theme.font(11.5))
-            p.drawText(QRectF(0, 33, self.width(), 16), Qt.AlignCenter, self.name)
+            # names on lines of their own (逗號 over 逗點), the block centered under the glyph
+            lines = self.name.split("\n")
+            top = 33 + (self.height() - 54 - 16 * (len(lines) - 1)) / 2
+            for i, line in enumerate(lines):
+                p.drawText(QRectF(0, top + 16 * i, self.width(), 16), Qt.AlignCenter, line)
         else:
             p.setFont(theme.font(self.glyph_px, 600))
             p.drawText(QRectF(0, 0, self.width(), self.height() - 3), Qt.AlignCenter, self.glyph)

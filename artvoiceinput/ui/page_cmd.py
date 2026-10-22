@@ -35,8 +35,10 @@ BUILT = {
     (rules.COMMAND, rules.STOP): (4, "", "關閉麥克風", "cmd", "不按 Enter"),
 }
 KINDS = [(rules.KEYS, "按下按鍵"), (rules.TEXT, "打出文字"), (rules.WRAP, "左右包住")]
-PUNCTS = [("，", "逗號"), ("，", "逗點"), ("。", "句號"), ("。", "句點"), ("？", "問號"), ("！", "驚嘆號"),
-          ("！", "感嘆號"), ("、", "頓號"), ("；", "分號"), ("：", "冒號"), ("……", "點點點"), ("……", "刪節號"), ("……", "省略號")]
+# 說標點的名字's keycaps: one per mark, its names together (2026-10-22, the user's design); edit.SYMBOLS but
+# 驚歎號 (a way X-ASR writes 驚嘆號)
+PUNCTS = [("，", "逗號\n逗點"), ("。", "句號\n句點"), ("、", "頓號"), ("？", "問號"), ("！", "驚嘆號"),
+          ("；", "分號"), ("：", "冒號"), ("……", "刪節號\n省略號"), ("——", "破折號"), ("/", "斜線")]
 
 
 def _key(kind, value):
@@ -660,7 +662,7 @@ class CmdPage(QWidget):
         g.setContentsMargins(0, 4, 0, 0)
         g.setSpacing(6)
         for i, (glyph, name) in enumerate(PUNCTS):
-            g.addWidget(Keycap(glyph, name), i // 6, i % 6)
+            g.addWidget(Keycap(glyph, name, size=(0, 70)), i // 5, i % 5)
         c.addWidget(self.keys)
         mods.addWidget(self.punct_card, 0, 0)
         self.desc_card, c = card(spacing=8)

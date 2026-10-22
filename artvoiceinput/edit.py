@@ -18,8 +18,12 @@ import re
 
 from pypinyin import Style, pinyin
 
-SYMBOLS = {"句號": "。", "句點": "。", "逗號": "，", "逗點": "，", "問號": "？", "驚嘆號": "！", "感嘆號": "！",
-           "驚歎號": "！", "感歎號": "！", "頓號": "、", "分號": "；", "冒號": "：", "點點點": "……", "刪節號": "……", "省略號": "……"}
+# 驚歎號 is how X-ASR may write 驚嘆號; 感嘆號 and 點點點 dropped, 逗點 / 破折號 / 斜線 added (2026-10-22, the user's
+# choice)
+SYMBOLS = {"逗號": "，", "逗點": "，", "句號": "。", "句點": "。", "頓號": "、", "問號": "？", "驚嘆號": "！",
+           "驚歎號": "！", "分號": "；", "冒號": "：", "刪節號": "……", "省略號": "……", "破折號": "——", "斜線": "/"}
+# the marks a commit's added 。 gives way to when said right after it (not —— or /)
+MARKS = {"，", "。", "、", "？", "！", "；", "：", "……"}
 
 _PUNCT = re.compile(r"[\s，。、！？；：,.!?;:…]+")
 _TRAILING = re.compile(r"[。，,.！？!?；;]+$")

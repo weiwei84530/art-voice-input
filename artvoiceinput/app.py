@@ -998,7 +998,7 @@ class App(QObject):
                     s.replaced_selection(sel.before, typed, foreground(), sel.before + sel.text)
                 else:
                     self._notify(_SEL_LOST)
-            elif typed in edit.SYMBOLS.values() and self._marked is not None and s.clean() \
+            elif typed in edit.MARKS and self._marked is not None and s.clean() \
                     and s.buffer == self._marked:
                 # the mark a commit added (after 換行 or the like) gives way to the one said now: not 。。
                 s.changed(s.buffer[:-1] + typed)
