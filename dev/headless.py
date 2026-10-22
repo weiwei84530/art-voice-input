@@ -14,12 +14,14 @@ user's config run without audio), clip:TEXT (the box's clipboard; the real one i
 probe cannot read the caret's line), set:NAME=VALUE (change a setting in memory only; apply: as the settings window does after a change), packs:ID+ID (tick term packs, in memory only) or key:BACK (the
 user presses Backspace n times: key:BACK*3), key:ENTER (the user presses Enter), pick:N / pickw:WORD (click a row of the 選字 menu), feed:WAV (while
 continuous listening is on: WAV and 1s of silence reach the microphone; feed:WAV+WAV joins clips with 0.6s pauses),
-logshot:NAME (the 辨識紀錄 tab saved as <dir>/NAME.png), wait:SEC (silence for SEC seconds), tap0 (a tap; the next step starts at once, while queued work
+logshot:NAME (the 辨識紀錄 tab saved as <dir>/NAME.png), realtime (feed: steps play at the microphone's own speed, not 3x:
+for timing; each pause's and command's latency is printed as [延遲]), wait:SEC (silence for SEC seconds), tap0 (a tap; the next step starts at once, while queued work
 still runs), racemove:WORD (the caret moves after the last WORD, at the end when empty, right
 before the next draft update reaches the document). Settings are never saved; hotwords and smart picks live in <dir> (hotwords.test.json,
 smart-picks.test.json, emptied at the start), never in the real files.
 """
 import json
+import logging
 import shutil
 import sys
 import time
@@ -222,6 +224,20 @@ def pump(sec):
         time.sleep(0.01)
 
 
+class Latency(logging.Handler):
+    """Prints the app's latency lines (a pause shown, a command done, after the VAD ended the piece)."""
+
+    def emit(self, record):
+        msg = record.getMessage()
+        if "after the piece ended" in msg:
+            print(f"      [延遲] {msg}")
+
+
+logging.getLogger().addHandler(Latency())
+logging.getLogger().setLevel(logging.INFO)
+realtime = []
+
+
 def feed(audio):
     """What the microphone hears while listening: audio and 1s of silence."""
     audio = np.concatenate([audio, np.zeros(16000, np.float32)])
@@ -229,7 +245,7 @@ def feed(audio):
     for i in range(0, len(audio), 480):
         A.listener._queue.put(audio[i:i + 480])
         if i % 4800 == 0:
-            pump(0.1)   # real time: 0.3s of audio every 0.1s
+            pump(0.3 if realtime else 0.1)   # 0.3s of audio every 0.1s, unless realtime
             if box.text != seen:
                 seen = box.text
                 print(f"      [{i / 16000:4.1f}s] {seen!r}")
@@ -443,6 +459,10 @@ try:
             feed(np.concatenate(parts[:-1]))
             pump(3.0)
             print(f"[{step}] → 文字框：{box.text[:box.caret] + '|' + box.text[box.caret:]!r}{menu()}")
+            continue
+        if step == "realtime":
+            realtime.append(True)
+            print("[即時速度]")
             continue
         if step == "click":
             user_input()

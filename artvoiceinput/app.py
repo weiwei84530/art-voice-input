@@ -919,6 +919,8 @@ class App(QObject):
         if d.placed and d.typed == d.final:
             d.shown = upto
             self.book.heard(info, before, d.typed, settled)
+            if info and info.get("piece_at") and not info.get("redo"):
+                log.info("pause shown %.2fs after the piece ended", time.monotonic() - info["piece_at"])
 
     def _commit(self, text: str, start: int, anchor: int, at: int, ctx, command=None, final: bool = False,
                 spans: list = ()):
@@ -975,6 +977,8 @@ class App(QObject):
             self.book.command(entry, op, typed, before if drafted else "", d.typed if drafted else "", added,
                               drafted, sel.text if sel is not None and typed else None)
             self._run_command(command, ctx, sel)
+            if entry.get("piece_at"):
+                log.info("command done %.2fs after the piece ended", time.monotonic() - entry["piece_at"])
         self._overlay_idle()
         self._input_done()
 
@@ -1198,7 +1202,7 @@ class App(QObject):
             ctx = probe.result() if probe is not None else Context()
             start, anchor = state["start"], state["anchor"]
             self._take_restored()
-            if not quick and piece.end - piece.start > _ALONE_MAX * SAMPLE_RATE:
+            if not quick and self.cfg.skip_alone and piece.end - piece.start > _ALONE_MAX * SAMPLE_RATE:
                 self._spans = [p for p in self._spans if p.start >= anchor] + [piece]
                 if piece.hi - anchor > _DRAFT_MAX * SAMPLE_RATE:
                     spans, self._spans = self._spans, []
@@ -1222,7 +1226,8 @@ class App(QObject):
             log.info("piece %.2fs: %s", t_asr, raw)
             steps = []
             formatted = format_text(raw, True, steps)
-            entry = {"time": time.strftime("%H:%M:%S"), "asr": to_traditional(raw), "asr_s": t_asr, "steps": steps}
+            entry = {"time": time.strftime("%H:%M:%S"), "asr": to_traditional(raw), "asr_s": t_asr, "steps": steps,
+                     "piece_at": piece.at}
             op, typed = self._command(formatted, ctx, steps, raw)
             names = self._command_words()
             if op is None and not typed and state["alone"] and names and self._short(raw, names) \
@@ -1295,7 +1300,7 @@ class App(QObject):
         settled = self._text_of(settled, ctx, steps, keep_end=True) if settled else ""
         live = self._text_of(live, ctx, steps, keep_end=True)
         log.info("draft %.2fs: %s | %s", time.monotonic() - t0, settled, live)
-        info = dict(info or {}, redo_s=time.monotonic() - t0, bank=bank_of({"steps": steps}))
+        info = dict(info or {}, redo_s=time.monotonic() - t0, bank=bank_of({"steps": steps}), piece_at=piece.at)
         self.main.emit(lambda: self._refine(start, anchor, settled, live, after, piece.hi, ctx, info, prior))
 
     def _ran_tail(self, text, tokens, times, index, piece, ctx, start, anchor, t0, info=None) -> bool:
@@ -1311,7 +1316,8 @@ class App(QObject):
         if op is not None or typed:
             log.info("piece with the speech before it: %s | %s", head, said)
             entry = {"time": time.strftime("%H:%M:%S"), "asr": to_traditional(tail),
-                     "asr_s": time.monotonic() - t0, "steps": steps, "alone": (info or {}).get("heard")}
+                     "asr_s": time.monotonic() - t0, "steps": steps, "alone": (info or {}).get("heard"),
+                     "piece_at": piece.at}
             entry.update(kind="操作", main=op.phrase) if op else entry.update(kind="輸入", main=typed, copy=typed)
             self._spans = []
             head = self._text_of(head, ctx, []) if head.strip() else ""

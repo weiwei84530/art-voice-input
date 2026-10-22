@@ -45,6 +45,7 @@ class Piece:
     start: int       # the speech: [start, end)
     end: int
     hi: int
+    at: float = 0.0  # time.monotonic() when the VAD handed it over (the pause's latency in the log)
 
 
 class Listener:
@@ -189,7 +190,7 @@ class Listener:
                 start, end = offset + seg.start, offset + seg.start + len(seg.samples)
                 vad.pop()
                 piece = Piece(max(prev_end, start - int(LEAD * SAMPLE_RATE)), start, end,
-                              end + int(TAIL * SAMPLE_RATE))
+                              end + int(TAIL * SAMPLE_RATE), time.monotonic())
                 prev_end = end
                 try:
                     self._on_piece(piece)
@@ -208,7 +209,7 @@ class Listener:
                 quick_end = end
                 if alone and end - start <= QUICK_MAX * SAMPLE_RATE:
                     try:
-                        self._on_quick(Piece(lo, start, end, min(total, end + int(TAIL * SAMPLE_RATE))))
+                        self._on_quick(Piece(lo, start, end, min(total, end + int(TAIL * SAMPLE_RATE)), time.monotonic()))
                     except Exception:
                         log.exception("listen: quick piece handler failed")
 

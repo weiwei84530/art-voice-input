@@ -91,6 +91,9 @@ class Config:
     cue_volume: int = 80          # 提示音's 音量, percent (cues.VOLUME_RANGE)
     # development only, to be removed before release (recordings.py): on exactly when launched with --debug
     save_recordings: bool = field(default_factory=lambda: DEBUG)
+    # a piece of more than app._ALONE_MAX of speech goes straight to the open sentence's decode (2026-10-22); False
+    # decodes it alone first as before. No setting yet: for comparing the two (dev/headless.py set:skip_alone=0)
+    skip_alone: bool = True
     # the setup wizard (ui/wizard.py, 2026-10-21) was finished: until then the settings window opens on it at launch.
     # A fresh install and 清空並重新設定 start without it; a config.json from before the wizard counts as set up
     setup_done: bool = False
