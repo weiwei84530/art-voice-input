@@ -88,6 +88,11 @@ _COMMAND_SLACK = 2
 # of the 31 misses. Most commands then need one decode instead of up to two.
 _FIRST_MAX = 1.2
 _PAD = 0.3
+# A piece of more than _ALONE_MAX seconds of speech is not decoded alone: it goes straight to the open sentence's
+# decode, whose tail still runs a command said at its end (_ran_tail). The user's commands of continuous listening
+# took 0.69s of speech (median), 1.34s (p90), 1.59s (p99), 2.03s (p99.9) of 2408 (2026-10-22); the decode alone took
+# 0.25s (median) before the sentence's 0.51s, so a pause in plain speech shows its text that much sooner.
+_ALONE_MAX = 2.0
 _WORDS = re.compile(r"[㐀-䶿一-鿿]|[A-Za-z0-9]+")   # a Chinese character or an English word counts one
 _SEL_LOST = "找不到選取的文字，沒有修改"   # a terminal selection that moved or the cursor could not reach
 # from the call to PlaySound until the start sound has left the speakers: measured 0.17s on the user's machine
@@ -1193,6 +1198,14 @@ class App(QObject):
             ctx = probe.result() if probe is not None else Context()
             start, anchor = state["start"], state["anchor"]
             self._take_restored()
+            if not quick and piece.end - piece.start > _ALONE_MAX * SAMPLE_RATE:
+                self._spans = [p for p in self._spans if p.start >= anchor] + [piece]
+                if piece.hi - anchor > _DRAFT_MAX * SAMPLE_RATE:
+                    spans, self._spans = self._spans, []
+                    self._commit_job(start, anchor, piece.hi, piece.hi, ctx, spans=spans)
+                else:
+                    self._refine_job(start, anchor, piece, ctx)
+                return
             audio = self.listener.audio(piece.lo, piece.hi)
             t0 = time.monotonic()
             raw = self._command_first(audio, piece)
@@ -1259,6 +1272,10 @@ class App(QObject):
             text, tokens, times = self.recognizer.recognize_timed(audio, bias)
             if self._ran_tail(text, tokens, times, index, piece, ctx, start, anchor, t0, info):
                 return
+        if info is None:   # a long piece, not decoded alone (_ALONE_MAX): what it said is the sentence's tail
+            _, tail = _split_at(text, tokens, times, index, piece.start - _MARK_SLACK)
+            info = {"heard": format_text(tail, True),
+                    "entry": {"time": time.strftime("%H:%M:%S"), "asr": to_traditional(tail), "steps": []}}
         settled, live, after = "", text, anchor
         # a blank token (between English letters) is no mark: "" in _MARKS is True, and counting it settled a whole
         # sentence that was then typed again (2026-10-15)

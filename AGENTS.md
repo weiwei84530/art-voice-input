@@ -146,7 +146,10 @@ An utterance that is exactly an operation's phrase, a punctuation name or a desc
 and runs (nothing decoded when nothing was said since the last commit).
 - Decoding (`App._command_first`): a piece with at most 1.2s of speech is decoded first with commands boosted
   (score 5, commands alone: hotwords and packs competed) and padded with 0.3s of zeros at both ends, then plainly if
-  that is no command. Command phrases are kept out of 詞庫 biasing (`_bias_words`: 括號 at 200% made 逗號 / 換行
+  that is no command. A piece of more than 2s of speech (`_ALONE_MAX`; the user's commands: p99.9 2.03s) is not
+  decoded alone: straight to the open sentence's decode, 0.25s sooner (2026-10-22, the user's request for speed);
+  its tail still runs a command (`_ran_tail`). Decoding threads stay 3 (4: +40%, 6: twice as slow, 2 the same).
+  Command phrases are kept out of 詞庫 biasing (`_bias_words`: 括號 at 200% made 逗號 / 換行
   into 括號). A piece that, decoded with the speech before it, ends exactly in a command runs as one (`_split_at`,
   `_ran_tail`). Repeats the boost made (結束結束結束) count once (`_one_command`).
 - Sound-alike (`_alike`, `candidates.sounds_alike`): same tones required, fuzzy pairs, dictionary readings of the
