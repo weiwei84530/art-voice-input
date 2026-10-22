@@ -151,8 +151,9 @@ and runs (nothing decoded when nothing was said since the last commit).
   that is no command. A piece of more than 2s of speech (`_ALONE_MAX`; the user's commands: p99.9 2.03s) is not
   decoded alone: straight to the open sentence's decode, 0.25s sooner (2026-10-22, the user's request for speed);
   its tail still runs a command (`_ran_tail`); Debug card switch `skip_alone`. Decoding threads stay 3 (4: +40%, 6: twice as slow, 2 the same). Boosted-first gate `_FIRST_MAX` 1.5s (1.2 until 2026-10-22: commands
-  2370 -> 2395 of 2402). `skip_short` (Debug card, off): a short piece no command after the boosted-first decode goes
-  to the sentence's decode, under test ("對" 2.09 -> 1.08s, long sentences slower).
+  2370 -> 2395 of 2402). `skip_short` (Debug card, on): a short piece with no command after the boosted-first decode is
+  boosted once more over it and 1s before, then the sentence's plain decode (對 1.25 -> 0.69s; commands 2415/2420
+  as before; boosting the whole sentence too made long sentences slower).
   Command phrases are kept out of 詞庫 biasing (`_bias_words`: 括號 at 200% made 逗號 / 換行
   into 括號). A piece that, decoded with the speech before it, ends exactly in a command runs as one (`_split_at`,
   `_ran_tail`). Repeats the boost made (結束結束結束) count once (`_one_command`).

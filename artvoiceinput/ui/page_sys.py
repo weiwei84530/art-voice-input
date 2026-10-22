@@ -215,7 +215,7 @@ class SysPage(QWidget):
         switch("skip_alone", "長句不單獨辨識", "超過 2 秒的一段話直接整句辨識，停頓後早一點出字",
                "長句直接整句辨識", "先單獨辨識再整句（舊做法）")
         switch("skip_short", "短句不單獨辨識", "2 秒內的一段話不是指令就直接整句辨識，短句早點出字",
-               "只先查一次指令", "單獨辨識兩三次（舊做法）")
+               "短句少辨識兩次", "單獨辨識兩三次（舊做法）")
         # the setup wizard at once, dark, nothing cleared (2026-10-21, the user's request; it applies what is picked
         # like the real one)
         options.append(("設定精靈", "直接進入設定精靈（暗色），不清空任何資料",

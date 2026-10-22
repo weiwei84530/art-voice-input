@@ -1219,11 +1219,23 @@ class App(QObject):
                 self._quick_done = piece.hi
                 log.info("quick piece: %s", raw)
             self._spans = [p for p in self._spans if p.start >= anchor] + [piece]
-            if not raw and not quick and self.cfg.skip_short and self._command_words():
-                # a short piece the boosted-first decode found no command in is not decoded alone again: the
-                # sentence's decode, commands boosted, runs one at its tail (config.skip_short, 2026-10-22)
-                self._sentence_job(start, anchor, piece, ctx, short=True)
-                return
+            names = self._command_words()
+            if not raw and not quick and self.cfg.skip_short and names:
+                # a short piece the boosted-first decode found no command in (config.skip_short, 2026-10-22): the
+                # commands boosted once more over it and 1s before it (a command said right after speech), else
+                # straight to the sentence's plain decode. The user's commands: as found as before (2415 of 2420),
+                # with one short decode and one of the sentence instead of up to two alone and two of the sentence
+                lo = min(piece.lo, max(anchor, piece.start - SAMPLE_RATE))
+                text, tokens, times = self.recognizer.recognize_timed(
+                    self.listener.audio(lo, piece.hi), _bias([(w, _COMMAND_SCORE) for w in names]))
+                head, tail = _split_at(text, tokens, times, [(0, lo)], piece.start - _MARK_SLACK)
+                steps = []
+                op, typed = self._command(format_text(tail, True, steps), ctx, steps,
+                                          "" if head.strip() else tail) if tail else (None, None)
+                if op is None and not typed:
+                    self._sentence_job(start, anchor, piece, ctx)
+                    return
+                raw = _one_command(tail, names)
             raw = raw or self._decode(audio, ctx, commands=True)
             t_asr = time.monotonic() - t0
             log.info("piece %.2fs: %s", t_asr, raw)
@@ -1232,7 +1244,6 @@ class App(QObject):
             entry = {"time": time.strftime("%H:%M:%S"), "asr": to_traditional(raw), "asr_s": t_asr, "steps": steps,
                      "piece_at": piece.at}
             op, typed = self._command(formatted, ctx, steps, raw)
-            names = self._command_words()
             if op is None and not typed and state["alone"] and names and self._short(raw, names) \
                     and piece.lo > anchor:
                 # decoded with the draft's audio before it (as a commit would), a short piece may turn out to be a
@@ -1264,13 +1275,13 @@ class App(QObject):
         except Exception:
             log.exception("piece failed")
 
-    def _sentence_job(self, start: int, anchor: int, piece, ctx, short: bool = False):
+    def _sentence_job(self, start: int, anchor: int, piece, ctx):
         """A piece not decoded alone: the open sentence is decoded again up to it (committed past _DRAFT_MAX)."""
         if piece.hi - anchor > _DRAFT_MAX * SAMPLE_RATE:
             spans, self._spans = self._spans, []
             self._commit_job(start, anchor, piece.hi, piece.hi, ctx, spans=spans)
         else:
-            self._refine_job(start, anchor, piece, ctx, short=short)
+            self._refine_job(start, anchor, piece, ctx)
 
     def _refine_job(self, start: int, anchor: int, piece, ctx, short: bool = False, info: dict | None = None):
         """The draft's open sentence (audio from `anchor`) decoded again up to this pause. Text up to the last ，

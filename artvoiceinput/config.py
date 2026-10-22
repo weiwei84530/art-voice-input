@@ -94,10 +94,10 @@ class Config:
     # a piece of more than app._ALONE_MAX of speech goes straight to the open sentence's decode (2026-10-22); False
     # decodes it alone first as before. A switch in 系統's Debug card (--debug only); dev/headless.py set:skip_alone=0
     skip_alone: bool = True
-    # a short piece the boosted-first decode (app._command_first) found no command in goes to the open sentence's
-    # decode too, not decoded alone again (2026-10-22). Off: two decodes of the whole sentence per short piece made
-    # long sentences cut by short pauses slower (0.55 -> 0.83s). Debug card
-    skip_short: bool = False
+    # a short piece the boosted-first decode (app._command_first) found no command in is not decoded alone again: the
+    # commands boosted over it and 1s before, then the sentence's plain decode (2026-10-22: the user's 對 1.25 ->
+    # 0.69s, long sentences and commands as before; boosting the whole sentence as well made long ones slower). Debug card
+    skip_short: bool = True
     # the setup wizard (ui/wizard.py, 2026-10-21) was finished: until then the settings window opens on it at launch.
     # A fresh install and 清空並重新設定 start without it; a config.json from before the wizard counts as set up
     setup_done: bool = False
