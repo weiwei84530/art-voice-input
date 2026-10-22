@@ -37,7 +37,8 @@ KINDS = [(rules.KEYS, "按下按鍵"), (rules.TEXT, "打出文字"), (rules.WRAP
 # 說標點的名字's keycaps: one per mark, its names together (2026-10-22, the user's design); edit.SYMBOLS but
 # 驚歎號 (a way X-ASR writes 驚嘆號)
 PUNCTS = [("，", "逗號\n逗點"), ("。", "句號\n句點"), ("、", "頓號"), ("？", "問號"), ("！", "驚嘆號"),
-          ("；", "分號"), ("：", "冒號"), ("……", "刪節號\n省略號"), ("——", "破折號"), ("／", "斜線")]
+          ("；", "分號"), ("：", "冒號"), ("……", "刪節號\n省略號"), ("——", "破折號"),
+          ("／", "斜線\n斜槓")]
 
 
 def _key(kind, value):

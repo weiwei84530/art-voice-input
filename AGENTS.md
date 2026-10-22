@@ -169,7 +169,7 @@ and runs (nothing decoded when nothing was said since the last commit).
   itself on select, the clipboard text before it is pasted: `output.watch_clipboard` / `text_before`), 全選 a
   notice. Backspace / Delete / text steps act on a terminal selection, not the cursor.
 - Punctuation names (`punctuation_names`, `edit.SYMBOLS`; 2026-10-22 the user's list): 逗號 / 逗點, 句號 / 句點, 頓號,
-  問號, 驚嘆號 (驚歎號 as X-ASR may write it), 分號, 冒號, 刪節號 / 省略號, 破折號 ——, 斜線 ／; no 感嘆號 or
+  問號, 驚嘆號 (驚歎號 as X-ASR may write it), 分號, 冒號, 刪節號 / 省略號, 破折號 ——, 斜線 / 斜槓 ／; no 感嘆號 or
   點點點. 語音指令 shows the keycaps on one row, each mark's names under it (two on two lines); the card takes 7/10 of the width. Appended after existing punctuation;
   replace a selection; a mark said right after an added one replaces it (`edit.MARKS`: not —— or ／). A 自訂 row with the same phrase runs instead and is not marked as a clash (the user's choice).
 - Described characters (`describe_char`): everything before 的 exactly one dictionary word, no lead-in (節日的節 →
