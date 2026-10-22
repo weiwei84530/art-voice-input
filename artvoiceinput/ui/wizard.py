@@ -24,7 +24,7 @@ KEEP = 12.0            # seconds of audio the probe keeps
 # what each starting setup sets (the user's design, 2026-10-21; 簡約 and the names 2026-10-22); the 麥克風 page
 # shows the same settings
 PRESETS = {
-    "std": dict(auto_listen=False, show_bubble=True, float_away=False, float_box=True, float_rec=True,
+    "std": dict(auto_listen=False, show_bubble=True, float_away=False, float_box=False, float_rec=True,
                 auto_off_minutes=5, stop_on_enter=True, auto_off=True),
     "simple": dict(auto_listen=False, show_bubble=False, float_away=True, float_box=True, float_rec=True,
                    auto_off_minutes=1, stop_on_enter=False, auto_off=False),

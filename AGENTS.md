@@ -66,7 +66,7 @@ automatically; read it before reviving or redesigning something). Module docstri
 | `output.py` | Win32 clipboard paste, key sending, clipboard restore and watch |
 | `selection.py` | UIA: selection, caret line, `focus_info`, `TermWatcher` (terminal mouse selections) |
 | `highlight.py` | draft mark rectangles (`draft_rects`) and `DraftMarks` windows |
-| `rules.py` | spoken operations (自訂操作), `defaults`, `upgrade` / `simplify` (rules_version 14) |
+| `rules.py` | spoken operations (自訂操作), `defaults`, `upgrade` / `simplify` (rules_version 16) |
 | `edit.py` | punctuation names (`symbol`), described characters (`described`), spelled letters (`spelled`) |
 | `candidates.py` | McBopomofo dictionary: `is_word`, `frequency`, `ranked`, `sounds_alike`, fuzzy pairs |
 | `sounds.py` | English near-sounding words (CMUdict + wordfreq, `dict/english.tsv.gz`) |
@@ -158,7 +158,7 @@ and runs (nothing decoded when nothing was said since the last commit).
 - Spoken operations (`rules.py`, 自訂操作 tab): phrase(s) separated by 、 → one step: keys, text, 左右輸入文字
   (`WRAP`, caret put back between), or a command: 復原, 結束錄音, 全選 / 複製 / 剪下 / 貼上. Defaults
   (`rules.defaults`, rows fixed but the phrase; empty turns off): 換行、下一行 Shift+Enter, 空白, 括號 （）,
-  引號 「」, 符號 / 鍵盤 (the symbol keyboard, below), 刪除 Backspace, 復原 / 撤銷, clipboard four, 送出 Enter
+  引號 「」, 符號 (the symbol menu, below), 鍵盤 (Windows' on-screen keyboard osk.exe, `rules.OSK`, rules_version 16; 符號 and 鍵盤 are the 工具 group on 語音指令, 2026-10-22), 刪除 Backspace, 復原 / 撤銷, clipboard four, 送出 Enter
   (listening goes on), 結束. With --debug the
   defaults (`rules.defaults(dev=True)`) also have the user's `rules.dev_rules` as 自訂 rows (標點 = "- ", 貼上圖片 = Alt+V);
   a --debug launch adds them when missing. 自訂 rows can't take
@@ -226,7 +226,7 @@ sentence end → 嗎 questions → trailing punctuation.
   2-3 words as a dictionary word, How the -> 好的; first next to Chinese; the spaces to Chinese go with the pick;
   nothing learned).
 - **Symbol keyboard** (2026-10-22, the user's request; design A of
-  https://claude.ai/artifact/FSX49ZChyWMdwvv5i8kPcG): said 符號 or 鍵盤 (`rules.KEYBOARD`, rules_version 15), the
+  https://claude.ai/artifact/FSX49ZChyWMdwvv5i8kPcG): said 符號 (`rules.KEYBOARD`, rules_version 15; shown as 打開符號選單), the
   選字 menu opens under the caret (`selection.caret_rect`, else the selection, else the mouse) with `picker.SYMBOLS`:
   全形 (marks, then pairs), 半形, 英文 A-Z, 數字 0-9 and ０-９ (5x6 cells, "" a gap; 2026-10-22); a click types the symbol (over a selection), a pair (`picker.PAIRS`, also the
   half-width () [] {}) around the caret or selection like 括號, and closes it; no 。 is added before it. Speech typed
@@ -296,7 +296,7 @@ bled large into the tile's bottom right (tilted 5°; hover lifts it up-right, tu
 (transition Fly): the block shrinks to a 56px strip that goes home, the icon flies to the page title. Pages: 麥克風
 (design M2: no section labels since 2026-10-21; each of the three cards opens with its illustration (`ui/illus.py`,
 round 13's L1-L3 drawn in Qt, played while the pointer is on the card, a still frame at rest, never with 節流模式;
-clicks are cartoon bursts); hotkey card, 點進輸入框時 radio, floating button card with three tick rows drawn like the radio rows (no switch,
+clicks are cartoon bursts); hotkey card, 點進輸入框時 radio, floating button card with three tick rows drawn like the radio rows (偵測到, 錄音時, 未偵測到 last; no switch,
 no ⓘ on them); no orange outline on cards (outlines answer the pointer only); each card's state pill (`kit.Pill`) is solid
 orange and breathes while on, all pills in step with the clock; auto-off small chips on one line with 送出訊息後關閉 and 離開輸入框後關閉 under them, device with 測試麥克風
 (`audio.LevelProbe`, its own stream; meter design I1: 24 segments, the last six warmer, a falling peak tick; stops
@@ -335,7 +335,7 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   (`App._paused`: no hotkey, floating button, bubble or listening). 1 microphone: name, device, meter; status 試著說…
   → 正在聽… (speech coming in, decoding) → green dot + 聽到了 when 你剛剛說 shows (decoded on the worker; trial, the
   user decides whether it stays); the icon over 阿特語音輸入法 at 26px (34 stood apart from it), no 已經裝好了; 略過 (plain) becomes 下一步 then. 2 packs, 3 columns, two lines of whole sample
-  terms, no counts; 跳過 / 下一步. 3 標準 / 簡單 / 自動 / 簡約 (`wizard.PRESETS`, 2026-10-22, rows 80px; buttons 40px high, 168 / 240 wide; 簡約: nothing on screen, no glow, 送出 not closing,
+  terms, no counts; 跳過 / 下一步. 3 標準 (floating button only while listening) / 簡單 / 自動 / 簡約 (`wizard.PRESETS`, 2026-10-22, rows 80px; buttons 40px high, 168 / 240 wide; 簡約: nothing on screen, no glow, 送出 not closing,
   右 Alt `vk:a5`, the tray icon on the taskbar turning the microphone on/off, 5 minutes' auto-off only), fixed height,
   each one short line, no list of what it sets; 開始教學 does nothing yet (the tutorial comes later), 跳過教學，直接開始使用 finishes.
   Focus rings only after Tab. With --debug, 系統 has 進入設定精靈 (dark, nothing cleared, applies like the real one).

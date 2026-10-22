@@ -17,9 +17,9 @@ NEARS = [("", "不使用", "點進輸入框時什麼都不做"),
          ("bubble", "語音氣泡", "點擊處旁出現小按鈕，點一下開麥克風"),
          ("listen", "自動開麥克風", "點進輸入框時直接開麥克風")]
 # when the floating button shows (2026-10-22, the user's design: like NEARS, but any number ticked)
-FLOATS = [("float_away", "未偵測到輸入區域時顯示", "游標在不能打字的地方時也顯示"),
-          ("float_box", "偵測到輸入區域時顯示", "游標在可以打字的地方時顯示"),
-          ("float_rec", "錄音時顯示", "變小轉快，點一下關麥克風")]
+FLOATS = [("float_box", "偵測到輸入區域時顯示", "游標在可以打字的地方時顯示"),
+          ("float_rec", "錄音時顯示", "變小轉快，點一下關麥克風"),
+          ("float_away", "未偵測到輸入區域時顯示", "游標在不能打字的地方時也顯示")]
 # small chips on one line (2026-10-21: the room went to the cards' illustrations)
 OFFS = [(0, "不關閉")] + [(m, f"{m} 分") for m in (1, 3, 5, 10, 30)]
 CUSTOM_MINUTES = (1, 240, 15)   # the 自訂 chip: lowest, highest, first offered

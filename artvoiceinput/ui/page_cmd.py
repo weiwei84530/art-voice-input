@@ -14,22 +14,25 @@ from ..rules import Rule, Step
 from . import theme
 from .kit import Info, Keycap, Switch, T, button, card, dim, draw_icon, hbox, icon, label
 
-GROUPS = [("輸入", "打字時用"), ("修改", "說錯時用"), ("剪貼簿", "搬文字用"), ("結束", "講完時用"), ("自訂", "你自己加的")]
+GROUPS = [("輸入", "打字時用"), ("修改", "說錯時用"), ("剪貼簿", "搬文字用"), ("工具", "用滑鼠點著打"), ("結束", "講完時用"),
+          ("自訂", "你自己加的")]
+CUSTOM = len(GROUPS) - 1
 # the built-in rows (rules.defaults): group, verb, what, how it is shown, a note
 BUILT = {
     (rules.KEYS, "Shift+Enter"): (0, "按下", "Shift+Enter", "key", "在同一格裡換行"),
     (rules.KEYS, "Space"): (0, "按下", "Space", "key", "輸入一個空白"),
     (rules.WRAP, ("（", "）")): (0, "打出", "（ ｜ ）", "wrap", "游標停在中間；有選取時包住選取的字"),
     (rules.WRAP, ("「", "」")): (0, "打出", "「 ｜ 」", "wrap", "游標停在中間；有選取時包住選取的字"),
-    (rules.COMMAND, rules.KEYBOARD): (0, "", "打開符號鍵盤", "cmd", "在游標下方，點一個符號就打出來"),
     (rules.KEYS, "Backspace"): (1, "按下", "Backspace", "key", "有選取時刪掉選取的字"),
     (rules.COMMAND, rules.UNDO): (1, "", "復原上一步", "cmd", "收回剛才打的字或改動，一次一步"),
     (rules.COMMAND, rules.SELECT_ALL): (2, "", "全選", "cmd", "終端機裡無法全選"),
     (rules.COMMAND, rules.COPY): (2, "", "複製", "cmd", "複製選取的文字"),
     (rules.COMMAND, rules.CUT): (2, "", "剪下", "cmd", "剪下選取的文字"),
     (rules.COMMAND, rules.PASTE): (2, "", "貼上", "cmd", "有選取時取代它"),
-    (rules.KEYS, "Enter"): (3, "按下", "Enter", "key", "送出訊息"),
-    (rules.COMMAND, rules.STOP): (3, "", "關閉麥克風", "cmd", "不按 Enter"),
+    (rules.COMMAND, rules.KEYBOARD): (3, "", "打開符號選單", "cmd", "在游標下方，點一個符號就打出來"),
+    (rules.COMMAND, rules.OSK): (3, "", "打開螢幕小鍵盤", "cmd", "Windows 內建的鍵盤，用滑鼠點著打字"),
+    (rules.KEYS, "Enter"): (4, "按下", "Enter", "key", "送出訊息"),
+    (rules.COMMAND, rules.STOP): (4, "", "關閉麥克風", "cmd", "不按 Enter"),
 }
 KINDS = [(rules.KEYS, "按下按鍵"), (rules.TEXT, "打出文字"), (rules.WRAP, "左右包住")]
 PUNCTS = [("，", "逗號"), ("。", "句號"), ("。", "句點"), ("？", "問號"), ("！", "驚嘆號"), ("！", "感嘆號"),
@@ -742,11 +745,11 @@ class CmdPage(QWidget):
         line, first = 0, True
         new_chips = None
         for gi, (name, hint) in enumerate(GROUPS):
-            rows = [r for r in self.rows if (BUILT[_key(r["type"], r["value"])][0] if r["builtin"] else 4) == gi]
+            rows = [r for r in self.rows if (BUILT[_key(r["type"], r["value"])][0] if r["builtin"] else CUSTOM) == gi]
             if not rows and gi != 4:
                 continue
             count = f"{len(rows)} 句" if rows else ""   # 自訂 empty: no count (還沒有 crowded its cell, 2026-10-22)
-            span = len(rows) + (1 if gi == 4 else 0)
+            span = len(rows) + (1 if gi == CUSTOM else 0)
             grid.addWidget(GroupLabel(name, hint, count, first), line, 0, span, 1)
             for i, row in enumerate(rows):
                 w = RuleRow(row, bad, self.cfg.stop_on_enter)
@@ -755,7 +758,7 @@ class CmdPage(QWidget):
                 grid.addWidget(w, line + i, 1)
                 if row is new_row:
                     new_chips = w.chips
-            if gi == 4:
+            if gi == CUSTOM:
                 wrap = QWidget()
                 wl = QVBoxLayout(wrap)
                 wl.setContentsMargins(18, 10, 18, 14)

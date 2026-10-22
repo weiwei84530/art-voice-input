@@ -1444,6 +1444,8 @@ class App(QObject):
                 elif step.type == rules.COMMAND and step.value == rules.KEYBOARD:
                     rect = sel.rect if sel is not None and sel.rect else caret_rect()
                     self._on_main(lambda r=rect: self._open_symbols(press, sel, r))
+                elif step.type == rules.COMMAND and step.value == rules.OSK:
+                    _open_osk()
             if stop:
                 log.info("listen: off, sent")
                 self._on_main(lambda: self._stop_listen() if self._listening else None)
@@ -2044,13 +2046,21 @@ def _inside(ctx) -> bool:
 def _no_mark_first(command) -> bool:
     """An operation that takes back what is before the caret: Backspace (刪除) would delete a mark the commit added
     and seem to do nothing (2026-10-15); 復原 (撤銷) showed the 。 for a moment before taking back the last update
-    (2026-10-16). The symbol keyboard: the symbol picked may be the mark (2026-10-22)."""
+    (2026-10-16). The symbol menu and the on-screen keyboard: what is picked or typed may be the mark
+    (2026-10-22)."""
     op = command[0] if command is not None else None
     if op is None or not op.steps:
         return False
     st = op.steps[0]
     return (st.type, st.value) in ((rules.KEYS, "Backspace"), (rules.COMMAND, rules.UNDO),
-                                   (rules.COMMAND, rules.KEYBOARD))
+                                   (rules.COMMAND, rules.KEYBOARD), (rules.COMMAND, rules.OSK))
+
+
+def _open_osk():
+    """鍵盤 (2026-10-22, the user's request): Windows' on-screen keyboard. ShellExecute, since osk.exe asks for UI
+    access and CreateProcess refuses it; a second call leaves the one already open."""
+    if ctypes.windll.shell32.ShellExecuteW(None, "open", "osk.exe", None, None, 1) <= 32:
+        log.warning("osk.exe did not start")
 
 
 def _clipboard_text() -> str:

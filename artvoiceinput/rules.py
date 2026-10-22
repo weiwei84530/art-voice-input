@@ -23,7 +23,8 @@ UNDO = "undo"        # 復原: double tap and the spoken 復原 by default (the 
 # Code clears its input on Ctrl+C, its mouse selection is not the cursor's, and nothing there selects all
 SELECT_ALL, COPY, CUT, PASTE = "select_all", "copy", "cut", "paste"
 EDIT_COMMANDS = (SELECT_ALL, COPY, CUT, PASTE)
-KEYBOARD = "keyboard"   # 符號 / 鍵盤 (2026-10-22, the user's request): the symbol keyboard (picker.SYMBOLS) at the caret
+KEYBOARD = "keyboard"   # 符號 (2026-10-22, the user's request): the symbol menu (picker.SYMBOLS) at the caret
+OSK = "osk"             # 鍵盤 (2026-10-22, the user's request): Windows' on-screen keyboard (osk.exe)
 # config rules_version: 2 added the tap on a selection that opens 選字, 3 a tap that listens, 4 dropped 連續聽寫,
 # 5 makes 送出 stop listening, 6 turns the double-tap deletes into 復原 and adds the spoken 復原, 7 brings back the
 # double tap on a selection that deletes it, 8 adds the spoken 撤銷 (復原) and 刪除 (Backspace), 9 makes 送出 leave
@@ -31,8 +32,8 @@ KEYBOARD = "keyboard"   # 符號 / 鍵盤 (2026-10-22, the user's request): the 
 # editor (simplify: hold on a selection = 選字 and the spoken 括號 dropped, 2026-10-16), 11 adds the spoken 結束
 # (結束錄音, the user's request the same day), 12 adds 全選 / 複製 / 剪下 / 貼上 (commands) and drops 貼上 = Alt+V,
 # 13 brings the spoken 括號 back as 左右輸入文字 （ ）, 14 adds 引號 「」 (the key rules went to config.hotkey),
-# 15 adds 符號 / 鍵盤 (the symbol keyboard)
-VERSION = 15
+# 15 adds 符號 / 鍵盤 (the symbol keyboard), 16 makes 鍵盤 open Windows' on-screen keyboard
+VERSION = 16
 
 _PUNCT = re.compile(r"[\s，。、！？；：,.!?;:…]+")
 
@@ -66,7 +67,7 @@ class Rule:
 
 def defaults(newline: bool = True, send: bool = True, dev: bool = False) -> list[Rule]:
     """The spoken operations (the user's own setup, 2026-10-14/17), in the order the 自訂操作 tab groups them:
-    typing (換行 / 下一行 Shift+Enter, 空白, 括號 （ ）, 引號 「」, 符號 / 鍵盤 the symbol keyboard), changing (刪除 Backspace, 復原 / 撤銷), the
+    typing (換行 / 下一行 Shift+Enter, 空白, 括號 （ ）, 引號 「」, 符號 the symbol menu, 鍵盤 Windows' on-screen keyboard), changing (刪除 Backspace, 復原 / 撤銷), the
     clipboard (全選 / 複製 / 剪下 / 貼上) and ending (送出 Enter, listening goes on; 結束 turns it off). No key
     rules since 2026-10-16: the hotkey is config.hotkey. dev (--debug): also the user's own `dev_rules`."""
     out = [Rule(SPEECH, phrase=p, steps=[Step(KEYS, "Shift+Enter")]) for p in ("換行", "下一行")] if newline else []
@@ -74,7 +75,7 @@ def defaults(newline: bool = True, send: bool = True, dev: bool = False) -> list
             Rule(SPEECH, phrase="括號", steps=[Step(WRAP, ["（", "）"])]),
             Rule(SPEECH, phrase="引號", steps=[Step(WRAP, ["「", "」"])]),
             Rule(SPEECH, phrase="符號", steps=[Step(COMMAND, KEYBOARD)]),
-            Rule(SPEECH, phrase="鍵盤", steps=[Step(COMMAND, KEYBOARD)]),
+            Rule(SPEECH, phrase="鍵盤", steps=[Step(COMMAND, OSK)]),
             Rule(SPEECH, phrase="刪除", steps=[Step(KEYS, "Backspace")]),
             Rule(SPEECH, phrase="復原", steps=[Step(COMMAND, UNDO)]),
             Rule(SPEECH, phrase="撤銷", steps=[Step(COMMAND, UNDO)]),
@@ -128,6 +129,11 @@ def upgrade(rules: list[Rule], version: int) -> list[Rule]:
         for phrase in ("符號", "鍵盤"):
             if not any(r.source == SPEECH and normalize(r.phrase) == phrase for r in rules):
                 rules.append(Rule(SPEECH, phrase=phrase, steps=[Step(COMMAND, KEYBOARD)]))
+    if version < 16:
+        for r in rules:
+            if r.source == SPEECH and normalize(r.phrase) == "鍵盤" \
+                    and [(st.type, st.value) for st in r.steps] == [(COMMAND, KEYBOARD)]:
+                r.steps = [Step(COMMAND, OSK)]
     if version < 12:
         rules[:] = [r for r in rules if not (r.source == SPEECH and normalize(r.phrase) == "貼上"
                                              and [(st.type, st.value) for st in r.steps] == [(KEYS, "Alt+V")])]
@@ -149,12 +155,12 @@ def phrases(text: str) -> list[str]:
 
 
 def spoken_ok(rule: Rule) -> bool:
-    """A speech rule the simple editor can show: one step of keys, text, 復原, 結束錄音, an edit command or the symbol
-    keyboard."""
+    """A speech rule the simple editor can show: one step of keys, text, 復原, 結束錄音, an edit command, the symbol
+    menu or the on-screen keyboard."""
     if rule.source != SPEECH or len(rule.steps) != 1:
         return False
     st = rule.steps[0]
-    return st.type in (KEYS, TEXT, WRAP) or st.type == COMMAND and st.value in (UNDO, STOP, KEYBOARD) + EDIT_COMMANDS
+    return st.type in (KEYS, TEXT, WRAP) or st.type == COMMAND and st.value in (UNDO, STOP, KEYBOARD, OSK) + EDIT_COMMANDS
 
 
 def simplify(rules: list[Rule]) -> list[Rule]:
