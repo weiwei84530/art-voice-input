@@ -29,7 +29,9 @@ automatically; read it before reviving or redesigning something). Module docstri
 
   Then check the tail of `%LOCALAPPDATA%\ArtVoiceInput\artvoiceinput.log` for "就緒" / errors.
 - `--debug` (`config.DEBUG`, set by `app.main`) keeps every utterance's recording (`save_recordings`, no setting);
-  a release keeps none. There are no developer options in the window. Autostart registers the launch as this run
+  a release keeps none. Developer options live only in 系統's Debug card (`SysPage._debug_card`, 2026-10-22, the
+  user's design: plain, shown only with --debug and while it has an option; options are removed when their test
+  ends, the card's code stays for the next). Autostart registers the launch as this run
   was made.
 - When the user decides something, record it here briefly as the current design (one line of why when it is not
   obvious); don't append dated narrative. Replace what it supersedes; move nothing back from history unless needed.
@@ -148,7 +150,7 @@ and runs (nothing decoded when nothing was said since the last commit).
   (score 5, commands alone: hotwords and packs competed) and padded with 0.3s of zeros at both ends, then plainly if
   that is no command. A piece of more than 2s of speech (`_ALONE_MAX`; the user's commands: p99.9 2.03s) is not
   decoded alone: straight to the open sentence's decode, 0.25s sooner (2026-10-22, the user's request for speed);
-  its tail still runs a command (`_ran_tail`). Decoding threads stay 3 (4: +40%, 6: twice as slow, 2 the same).
+  its tail still runs a command (`_ran_tail`); Debug card switch `skip_alone`. Decoding threads stay 3 (4: +40%, 6: twice as slow, 2 the same).
   Command phrases are kept out of 詞庫 biasing (`_bias_words`: 括號 at 200% made 逗號 / 換行
   into 括號). A piece that, decoded with the speech before it, ends exactly in a command runs as one (`_split_at`,
   `_ran_tail`). Repeats the boost made (結束結束結束) count once (`_one_command`).
@@ -342,7 +344,7 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   terms, no counts; 跳過 / 下一步. 3 標準 (floating button only while listening, 3 minutes' auto-off) / 簡單 / 自動 / 簡約 (`wizard.PRESETS`, 2026-10-22, rows 80px; buttons 40px high, 168 / 240 wide; 簡約: nothing on screen, no glow, 送出 not closing,
   右 Alt `vk:a5`, the tray icon on the taskbar turning the microphone on/off, 5 minutes' auto-off only), fixed height,
   each one short line, no list of what it sets; 開始教學 does nothing yet (the tutorial comes later), 跳過教學，直接開始使用 finishes.
-  Focus rings only after Tab. With --debug, 系統 has 進入設定精靈 (dark, nothing cleared, applies like the real one).
+  Focus rings only after Tab. 系統's Debug card has 進入設定精靈 (dark, nothing cleared, applies like the real one).
 - 辨識紀錄 (`logbook.py`, `set_log`): one row per event, grouped per listening session, newest first, 40 built at
   first and 40 more near the scroll's end or from 顯示更早的紀錄 (all 300 at once took ~1s to open, 2026-10-22), heard vs the
   screen's change as a diff, details in the tooltip; copy icon on rows that settled text; an orange book (the 詞庫 tile's) when the 詞庫

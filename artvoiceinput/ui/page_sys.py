@@ -1,4 +1,5 @@
-"""系統: 外觀模式 (light, dark, Windows'), autostart, the tray icon on the taskbar, the settings file, about."""
+"""系統: 外觀模式 (light, dark, Windows'), autostart, the tray icon on the taskbar, the settings file, about; with
+--debug a Debug card of test options under them."""
 import os
 import time
 from pathlib import Path
@@ -168,12 +169,8 @@ class SysPage(QWidget):
         # 清空並重新設定 (2026-10-21, the user's design: like a phone's factory reset): everything cleared, then the
         # setup wizard from its first step
         reset = button("清空並重新設定…", self._reset, danger=True)
-        # with --debug: the setup wizard at once, dark, nothing cleared (2026-10-21, the user's request; it applies what
-        # is picked like the real one)
-        wizard = button("進入設定精靈", self._wizard_dark)
-        wizard.setVisible(config.DEBUG)
         row("設定檔", "所有設定與詞庫存成一個檔案，換電腦時帶走",
-            vbox(drop, 10, hbox(export, None, wizard, reset, spacing=8), spacing=0))
+            vbox(drop, 10, hbox(export, None, reset, spacing=8), spacing=0))
         # names on one line, values on the next, all values alike (the folder link was a button: the buttons'
         # style-sheet size made it smaller, 2026-10-21)
         about = QGridLayout()
@@ -198,8 +195,46 @@ class SysPage(QWidget):
         about.setColumnStretch(3, 1)
         row("關於", "阿特語音輸入法 Art VoiceInput", about, last=True)
         v.addWidget(frm)
+        self.skip = None
+        if config.DEBUG:
+            self._debug_card(v)
         v.addStretch(1)
         self.restyle()
+
+    def _debug_card(self, v):
+        """With --debug: test options, plain (2026-10-22, the user's request). Options come and go as tests end; the
+        card shows only while it has one, so keep this method and its row() for the next."""
+        options = []
+        # long pieces straight to the sentence's decode (config.skip_alone, app._ALONE_MAX)
+        self.skip = Switch(name="長句不單獨辨識")
+        self.skip.toggled.connect(self._skip)
+        self.skip_note = label("")
+        options.append(("長句不單獨辨識", "超過 2 秒的一段話直接整句辨識，停頓後早一點出字",
+                        hbox(self.skip, self.skip_note, None, spacing=10)))
+        # the setup wizard at once, dark, nothing cleared (2026-10-21, the user's request; it applies what is picked
+        # like the real one)
+        options.append(("設定精靈", "直接進入設定精靈（暗色），不清空任何資料",
+                        hbox(button("進入設定精靈", self._wizard_dark), None)))
+        if not options:
+            return
+        frm, rows = card(margins=(22, 6, 22, 0), spacing=0)
+        rows.addWidget(dim("Debug（--debug 啟動時才有）"))
+        for i, (title, sub, body) in enumerate(options):
+            self._row(rows, title, sub, body, i == len(options) - 1)
+        v.addWidget(frm)
+
+    @staticmethod
+    def _row(into, title, sub, body, last):
+        r = QHBoxLayout()
+        r.setContentsMargins(0, 12, 0, 12)
+        r.setSpacing(24)
+        t = titled(title, sub, 14.5, 700)
+        t.setFixedWidth(LEFT)
+        r.addWidget(t, 0, Qt.AlignTop)
+        r.addLayout(body, 1)
+        into.addLayout(r)
+        if not last:
+            into.addWidget(sep())
 
     def restyle(self):
         self.folder.setStyleSheet(f"color: {T('acct').name()}; text-decoration: underline;")
@@ -220,6 +255,9 @@ class SysPage(QWidget):
         self.click.blockSignals(False)
         self.lite.set_quiet(self.cfg.orb_lite)
         self._lite_note()
+        if self.skip is not None:
+            self.skip.set_quiet(self.cfg.skip_alone)
+            self._skip_note()
         set_calm(self.cfg.orb_lite)
 
     def summary(self) -> str:
@@ -260,6 +298,15 @@ class SysPage(QWidget):
 
     def _lite_note(self):
         self.lite_note.setText(_state(self.cfg.orb_lite, "動畫從簡" if self.cfg.orb_lite else "動畫完整播放"))
+
+    # --- Debug ---
+    def _skip(self, on: bool):
+        self.cfg.skip_alone = on
+        self.win.save()
+        self._skip_note()
+
+    def _skip_note(self):
+        self.skip_note.setText(_state(self.cfg.skip_alone, "長句直接整句辨識" if self.cfg.skip_alone else "先單獨辨識再整句（舊做法）"))
 
     # --- autostart ---
     def _auto(self, on: bool):
