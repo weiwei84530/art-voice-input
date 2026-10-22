@@ -886,5 +886,7 @@ class Keycap(QWidget):
             for i, line in enumerate(lines):
                 p.drawText(QRectF(0, top + 16 * i, self.width(), 16), Qt.AlignCenter, line)
         else:
-            p.setFont(theme.font(self.glyph_px, 600))
-            p.drawText(QRectF(0, 0, self.width(), self.height() - 3), Qt.AlignCenter, self.glyph)
+            p.setFont(theme.font(15 if long else self.glyph_px, 700))
+            ink = p.fontMetrics().tightBoundingRect(self.glyph)
+            box = QRectF(0, 0, self.width(), self.height() - 3)
+            p.drawText(QPointF(box.center().x() - ink.center().x(), box.center().y() - ink.center().y()), self.glyph)

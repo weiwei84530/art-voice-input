@@ -1,4 +1,4 @@
-# Art VoiceInput — notes for coding agents
+﻿# Art VoiceInput — notes for coding agents
 
 Windows dictation app: sherpa-onnx speech recognition, typed into whatever has the focus, with spoken commands and
 mouse-driven fixes. This file holds the working rules, the current design and the lessons worth keeping. Why things
@@ -170,7 +170,7 @@ and runs (nothing decoded when nothing was said since the last commit).
   notice. Backspace / Delete / text steps act on a terminal selection, not the cursor.
 - Punctuation names (`punctuation_names`, `edit.SYMBOLS`; 2026-10-22 the user's list): 逗號 / 逗點, 句號 / 句點, 頓號,
   問號, 驚嘆號 (驚歎號 as X-ASR may write it), 分號, 冒號, 刪節號 / 省略號, 破折號 ——, 斜線 / (half-width); no 感嘆號 or
-  點點點. 語音指令 shows one keycap per mark, two names on two lines, 5x2. Appended after existing punctuation;
+  點點點. 語音指令 shows the keycaps on one row, each mark's names under it (two on two lines); the card takes 7/10 of the width. Appended after existing punctuation;
   replace a selection; a mark said right after an added one replaces it (`edit.MARKS`: not —— or /).
 - Described characters (`describe_char`): everything before 的 exactly one dictionary word, no lead-in (節日的節 →
   節; 顯示的是 → 示). Spelled letters over a selected English word type that word (`edit.spelled`, counts as a pick).
