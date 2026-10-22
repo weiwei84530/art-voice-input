@@ -1229,13 +1229,14 @@ class App(QObject):
                 text, tokens, times = self.recognizer.recognize_timed(
                     self.listener.audio(lo, piece.hi), _bias([(w, _COMMAND_SCORE) for w in names]))
                 head, tail = _split_at(text, tokens, times, [(0, lo)], piece.start - _MARK_SLACK)
-                steps = []
-                op, typed = self._command(format_text(tail, True, steps), ctx, steps,
-                                          "" if head.strip() else tail) if tail else (None, None)
-                if op is None and not typed:
+                tail = _one_command(tail, names)   # the boost may repeat it (結束結束)
+                # spelled letters checked without _command's learning: the path below runs it once more
+                spelt = not head.strip() and ctx.selection is not None and tail                     and edit.spelled(ctx.selection.text, tail)
+                op, typed = self._command(format_text(tail, True, []), ctx, []) if tail else (None, None)
+                if op is None and not typed and not spelt:
                     self._sentence_job(start, anchor, piece, ctx)
                     return
-                raw = _one_command(tail, names)
+                raw = tail
             raw = raw or self._decode(audio, ctx, commands=True)
             t_asr = time.monotonic() - t0
             log.info("piece %.2fs: %s", t_asr, raw)

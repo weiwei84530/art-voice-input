@@ -145,6 +145,8 @@ class Config:
             cfg.highlight_color = f"#{MARK_ALPHA:02X}{mark[3:].upper()}"
         cfg.button_scale = min(max(int(cfg.button_scale), BUTTON_SCALE_RANGE[0]), BUTTON_SCALE_RANGE[1])
         cfg.save_recordings = DEBUG   # no setting (2026-10-20): recordings are kept exactly in debug mode
+        if not DEBUG:   # the Debug card's switches: a release (or a file exported with one off) has no way back
+            cfg.skip_alone = cfg.skip_short = True
         if "rules" in data:
             old = rules.upgrade([rules.Rule.from_dict(d) for d in data["rules"]], data.get("rules_version", 1))
             if "hotkey" not in data:   # the key that recorded (the 自訂操作 key rows, until 2026-10-16)
