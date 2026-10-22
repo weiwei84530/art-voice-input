@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (QAbstractButton, QComboBox, QGraphicsOpacityEffec
                                QSizePolicy, QVBoxLayout, QWidget)
 
 from .. import rules
-from ..edit import SYMBOLS
 from ..keys import MOUSE_VKS, combo_text, is_modifier
 from ..rules import Rule, Step
 from . import theme
@@ -38,7 +37,7 @@ KINDS = [(rules.KEYS, "按下按鍵"), (rules.TEXT, "打出文字"), (rules.WRAP
 # 說標點的名字's keycaps: one per mark, its names together (2026-10-22, the user's design); edit.SYMBOLS but
 # 驚歎號 (a way X-ASR writes 驚嘆號)
 PUNCTS = [("，", "逗號\n逗點"), ("。", "句號\n句點"), ("、", "頓號"), ("？", "問號"), ("！", "驚嘆號"),
-          ("；", "分號"), ("：", "冒號"), ("……", "刪節號\n省略號"), ("——", "破折號"), ("/", "斜線")]
+          ("；", "分號"), ("：", "冒號"), ("……", "刪節號\n省略號"), ("——", "破折號"), ("／", "斜線")]
 
 
 def _key(kind, value):
@@ -729,9 +728,7 @@ class CmdPage(QWidget):
                 n = rules.normalize(ph)
                 if n:
                     count[n] = count.get(n, 0) + 1
-        if self.cfg.punctuation_names:
-            for name in SYMBOLS:
-                count[name] = count.get(name, 0) + 1
+        # a punctuation name is no clash: a row with that phrase runs instead (2026-10-22, the user's choice)
         return {n for n, c in count.items() if c > 1}
 
     def _draw(self, new_row: dict | None = None):

@@ -169,9 +169,9 @@ and runs (nothing decoded when nothing was said since the last commit).
   itself on select, the clipboard text before it is pasted: `output.watch_clipboard` / `text_before`), 全選 a
   notice. Backspace / Delete / text steps act on a terminal selection, not the cursor.
 - Punctuation names (`punctuation_names`, `edit.SYMBOLS`; 2026-10-22 the user's list): 逗號 / 逗點, 句號 / 句點, 頓號,
-  問號, 驚嘆號 (驚歎號 as X-ASR may write it), 分號, 冒號, 刪節號 / 省略號, 破折號 ——, 斜線 / (half-width); no 感嘆號 or
+  問號, 驚嘆號 (驚歎號 as X-ASR may write it), 分號, 冒號, 刪節號 / 省略號, 破折號 ——, 斜線 ／; no 感嘆號 or
   點點點. 語音指令 shows the keycaps on one row, each mark's names under it (two on two lines); the card takes 7/10 of the width. Appended after existing punctuation;
-  replace a selection; a mark said right after an added one replaces it (`edit.MARKS`: not —— or /).
+  replace a selection; a mark said right after an added one replaces it (`edit.MARKS`: not —— or ／). A 自訂 row with the same phrase runs instead and is not marked as a clash (the user's choice).
 - Described characters (`describe_char`): everything before 的 exactly one dictionary word, no lead-in (節日的節 →
   節; 顯示的是 → 示). Spelled letters over a selected English word type that word (`edit.spelled`, counts as a pick).
 - Not carried over from press-and-talk yet: `period_to_comma` (selected 。 → ，+ utterance + 。; checkbox hidden,
@@ -307,8 +307,8 @@ named), button looks beside the glow, whose 自訂顏色、速度與邊緣 slide
 after the sliders, small 發光邊緣 chips, 回到光暈樣式 where the chip was, 恢復預設 across; sounds across, 自定義's start
 and end beside the sets (room kept, the sets don't move); while listening
 ▶ 預覽 / ▶ 試聽 read 錄音中無法使用 and picks play nothing), 語音指令 (design C4: "當我說 [chips] 就 [what]" grouped with an orange bar per group, phrase chips edited in
-place, 自訂 rows choose 按下按鍵 / 打出文字 / 左右包住, 新增一句; a phrase said for two things, punctuation names
-included, is marked; 說標點的名字 and 說「詞的字」 cards below), 詞庫 (design 1: segmented tabs with counts, search,
+place, 自訂 rows choose 按下按鍵 / 打出文字 / 左右包住, 新增一句; a phrase said for two rows
+is marked (a punctuation name is not: the row wins); 說標點的名字 and 說「詞的字」 cards below), 詞庫 (design 1: segmented tabs with counts, search,
 order), 辨識紀錄 (design 1: timeline, filters 全部 / 文字 / 指令 / 選字與復原, 清除紀錄 → `App._clear_log`), 系統
 (design 3: 外觀模式 亮色 / 暗色 / 跟隨系統 with sun / moon / computer icons, autostart, 節流模式, settings file
 drop zone, about; switch notes start with 開： / 關：, about's values one size, the folder path a little smaller;
