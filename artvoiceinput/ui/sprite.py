@@ -121,18 +121,18 @@ class Sprite(QWidget):
         p.setPen(Qt.NoPen)
         p.setBrush(QColor(0, 0, 0, 40 if not self._jump else 26))
         p.drawEllipse(QPointF(SIDE / 2, SIDE - 7), 14 - self._jump * 0.3, 3.2)
-        if self.face == "listen" and not calm():
+        p.save()
+        p.translate(x + ICON / 2, y + ICON)       # leaning on its bottom edge
+        p.rotate(self._tilt + self._shake * 1.6)  # a shake is a turn of the head too
+        p.translate(-ICON / 2, -ICON)
+        if self.face == "listen" and not calm():   # the ripple leans with it (the user's report, 2026-10-24)
             t = ((now - self._t0) % 1.4) / 1.4
             ring = QColor(theme.ACCENT)
             ring.setAlphaF(0.55 * (1 - t))
             p.setPen(QPen(ring, 2))
             p.setBrush(Qt.NoBrush)
             grow = 4 + 10 * t
-            p.drawRoundedRect(QRectF(x - grow, y - grow, ICON + 2 * grow, ICON + 2 * grow), 12 + grow, 12 + grow)
-        p.save()
-        p.translate(x + ICON / 2, y + ICON)       # leaning on its bottom edge
-        p.rotate(self._tilt + self._shake * 1.6)  # a shake is a turn of the head too
-        p.translate(-ICON / 2, -ICON)
+            p.drawRoundedRect(QRectF(-grow, -grow, ICON + 2 * grow, ICON + 2 * grow), 12 + grow, 12 + grow)
         appicon.tile(p, ICON)
         self._paint_face(p, now)
         p.restore()

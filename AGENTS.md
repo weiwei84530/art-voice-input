@@ -371,7 +371,7 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   question; the restarted app's wizard alone in the theme shown before, `window.WIZARD_THEME`, the setting reset).
 - **Tutorial** (`ui/tutorial.py`, 2026-10-24, the user's design; it teaches the setup in use, `wizard.mode_of`:
   標準 bubble, 簡單 the floating button always there, 自動 a click in turns it on and a click outside off, 簡約 no
-  glow, 右 Alt (the hotkey; hotkey.py's 0xE8 ignored) or the tray icon; only 標準's 送出 turns the mic off): over the window after the wizard's 開始教學 (the setup applied, `setup_done` still false,
+  glow, only 右 Alt (the hotkey; hotkey.py's 0xE8 ignored) or the tray icon, both named in the red words; only 標準's 送出 turns the mic off): over the window after the wizard's 開始教學 (the setup applied, `setup_done` still false,
   `Config.tutorial_at` the chapter to come back to) or 系統's 重看教學 (關於 row; `replay`: settings untouched). A
   strip on top (icon, 教學, ten chapter segments, 略過教學 asking in a `Sheet`), a pretend Windows 11 desktop
   (`ui/desk.py`): wallpaper Bloom A1+ of https://claude.ai/artifact/FXMWnBF7Ek4uLwQ3y3JAiM (light and dark, the two
@@ -387,13 +387,14 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   (eyes and a slight lean toward the target from where it lands; no overshoot: it bumped the floating button). A
   click that isn't what it waits for gives the red words (what it waits for) or 繼續 a small cute wiggle, nothing
   else (`_nudge`, 2026-10-24, the user's design; clicks on the bubble or floating button are not stray).
-  Taskbar tray as the wallpaper artifact's (︿, app icon with tray.py's ring while listening, Wi-Fi, volume,
-  battery); floating button 24px in from the right like `floatbtn`.
+  Taskbar tray as Windows 11 lays it out (︿, app icon with tray.py's ring while listening, 英, Wi-Fi, volume,
+  evenly spaced); floating button 24px in from the right like `floatbtn`. The guide's listening ripple leans with it.
   Chapters are generators yielding what they wait for: 打開記事本, 開麥克風 (click → bubble → listening), 念三句
   (2026-10-24, the user's design: a warm-up 今天天氣很好…; 爺爺的視力很好 settles it and is shown with a planted
   勢力; 連對面的招牌都看得清楚 joins the same sentence, then 勢力 → 視力 with a red flash), 定稿 (句號), 換行與復原
-  (下一行: 換行 failed more often), 選字 (planted 請幫我定一張車票, fixed candidates), 選取重講 (一張 → 兩張, then
-  今天天氣很好， selected and 刪除), 節日的節 (named by its example: 詞的字 read abstract; only 節 is typed, never
+  (下一行: 換行 failed more often), 選字 (planted 請幫我定一張車票, fixed candidates), 選取重講 (一張 → 兩張, the 選字 menu
+  opening by itself over 一張 as in the app, the user told to let it be; then 今天天氣很好， selected and 刪除; a
+  click dropping the selection before it is spoken over goes back to selecting it), 節日的節 (named by its example: 詞的字 read abstract; only 節 is typed, never
   the words said for it; the tutorial's own rule, no dictionary), 送出 (chat; the mic turns off), 關麥克風 (結束 or
   the floating button: 正在聽… 或 [the button]; the last lines name a few more commands). Independent of the core: its own microphone (`Ear`: level-based, a pause re-decodes the draft,
   the end judges it) and matching; only decoding is lent (`SettingsWindow.tutorial_decode` = `App._tutorial_decode`:

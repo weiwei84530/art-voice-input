@@ -42,6 +42,7 @@ APP = {
 }
 RED = ("#ff453a", "#ff6b5e", "#ff2d20")   # 錄音紅 (glow.STYLES "red")
 FLASH_S = 1.1               # a corrected span's red fading out
+TRAY_STEP, TRAY_RIGHT = 30, 98   # the tray's items: their spacing, the last one's centre from the right edge
 
 
 def _dark() -> bool:
@@ -733,7 +734,8 @@ class Desk(QWidget):
         return QRect(self.width() // 2 - 20 + x, self.height() - BAR + 2, 40, 40)
 
     def tray_rect(self) -> QRect:
-        return QRect(self.width() - 196, self.height() - BAR + 12, 20, 20)
+        """Art VoiceInput's tray icon (item 1 of the tray)."""
+        return QRect(self.width() - TRAY_RIGHT - TRAY_STEP * 3 - 10, self.height() - BAR + 12, 20, 20)
 
     # --- animation ---
     def showEvent(self, e):
@@ -747,6 +749,8 @@ class Desk(QWidget):
         if calm():
             self._timer.stop()
         self.update(QRect(0, 0, self.width(), self.height() - BAR))
+        if self.listening:   # the tray icon's ring turns (the taskbar is not repainted otherwise)
+            self.update(self.tray_rect())
 
     def open_app(self, w: AppWindow, kind: str):
         """In from a little lower, fading in (at once with 節流模式)."""
@@ -823,16 +827,17 @@ class Desk(QWidget):
                 dash = 16 if kind == self.front() else 6
                 p.drawRoundedRect(QRectF(r.center().x() - dash / 2, r.bottom() - 4, dash, 3), 1.5, 1.5)
             paint_app_icon(p, kind, QRectF(r.center().x() - 11, r.center().y() - 12, 22, 22))
-        # the tray as the wallpaper artifact draws it: ︿, Art VoiceInput's icon (while listening its microphone gives
-        # way to a ring turning, as in tray.py), Wi-Fi, volume, battery, the clock
+        # the tray as Windows 11 lays it out (the user's screenshot, 2026-10-24): ︿, Art VoiceInput's icon (while
+        # listening its microphone gives way to a ring turning, as in tray.py), 英, Wi-Fi, volume, TRAY_STEP apart
         y = top + BAR / 2
+        cx = lambda i: w - TRAY_RIGHT - TRAY_STEP * (4 - i)   # noqa: E731  the centre of item i
         p.setPen(QPen(ink, 1.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
         p.setBrush(Qt.NoBrush)
-        x = w - 208
+        x = cx(0)
         p.drawPolyline([QPointF(x - 4, y + 2), QPointF(x, y - 2), QPointF(x + 4, y + 2)])
         r = QRectF(self.tray_rect())
         p.save()
-        p.translate(r.topLeft())
+        p.translate(r.topLeft() + QPointF(1, 1))
         if self.listening:
             appicon.tile(p, 18)
             ring = QRectF(4, 4, 10, 10)
@@ -847,7 +852,10 @@ class Desk(QWidget):
         else:
             appicon.paint(p, 18)
         p.restore()
-        x = w - 154   # Wi-Fi: two arcs over a dot
+        p.setPen(ink)   # the input method
+        p.setFont(theme.font(12))
+        p.drawText(QRectF(cx(2) - 10, y - 10, 20, 20), Qt.AlignCenter, "英")
+        x = cx(3)   # Wi-Fi: two arcs over a dot
         p.setPen(QPen(ink, 1.5, Qt.SolidLine, Qt.RoundCap))
         p.setBrush(Qt.NoBrush)
         p.drawArc(QRectF(x - 7.5, y - 4.5, 15, 15), 47 * 16, 86 * 16)
@@ -855,7 +863,7 @@ class Desk(QWidget):
         p.setPen(Qt.NoPen)
         p.setBrush(ink)
         p.drawEllipse(QPointF(x, y + 4), 1.4, 1.4)
-        x = w - 138   # volume: the speaker and one wave
+        x = cx(4) - 5   # volume: the speaker and one wave
         speaker = QPainterPath(QPointF(x, y - 2.5))
         for dx, dy in ((3, -2.5), (7, -6), (7, 7), (3, 3.5), (0, 3.5)):
             speaker.lineTo(x + dx, y + dy)
@@ -864,13 +872,6 @@ class Desk(QWidget):
         p.setPen(QPen(ink, 1.4, Qt.SolidLine, Qt.RoundCap))
         p.setBrush(Qt.NoBrush)
         p.drawArc(QRectF(x + 5, y - 3, 7, 7), -60 * 16, 120 * 16)
-        x = w - 118   # battery
-        p.setPen(QPen(ink, 1.3))
-        p.drawRoundedRect(QRectF(x, y - 4.5, 16, 9), 2, 2)
-        p.setPen(Qt.NoPen)
-        p.setBrush(ink)
-        p.drawRoundedRect(QRectF(x + 2, y - 2.5, 10, 5), 1, 1)
-        p.drawRoundedRect(QRectF(x + 16.6, y - 1.5, 1.6, 3), 0.6, 0.6)
         p.setPen(QColor(c["text"]))
         p.setFont(theme.font(10.5))
         now = time.localtime()
