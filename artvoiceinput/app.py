@@ -68,7 +68,7 @@ from .selection import (Context, ContextProbe, caret_rect, focus_info, move_curs
                         terminal_in_front)
 from .session import Session, foreground
 from .tray import Tray, promote as tray_promote
-from .ui.window import SettingsWindow
+from .ui.window import WIZARD_THEME, SettingsWindow
 from .textfmt import format_text, to_traditional
 
 log = logging.getLogger("artvoiceinput")
@@ -86,7 +86,7 @@ _COMMAND_SLACK = 2
 # 96.7% -> 98.7%, 換行 missed 21 -> 8 times, still no text taken for a command). X-ASR writes a command as English
 # when the audio does not start and end in silence (換行 -> Hang Hung, 刪除 -> Central): the padding alone fixed 23
 # of the 31 misses. Most commands then need one decode instead of up to two. 1.2 -> 1.5 (2026-10-22, with
-# config.skip_short): of the user's commands of 1.2-1.5s of speech 413/421 found; of 88 texts that long 5 taken for
+# short pieces' second decode alone skipped): of the user's commands of 1.2-1.5s of speech 413/421 found; of 88 texts that long 5 taken for
 # a command (7 up to 1.6s), all but 過後 -> 括號 the user's command typed as text then (Hang Hung, One home -> 換行).
 _FIRST_MAX = 1.5
 _PAD = 0.3
@@ -1207,7 +1207,7 @@ class App(QObject):
             ctx = probe.result() if probe is not None else Context()
             start, anchor = state["start"], state["anchor"]
             self._take_restored()
-            if not quick and self.cfg.skip_alone and piece.end - piece.start > _ALONE_MAX * SAMPLE_RATE:
+            if not quick and piece.end - piece.start > _ALONE_MAX * SAMPLE_RATE:
                 self._spans = [p for p in self._spans if p.start >= anchor] + [piece]
                 self._sentence_job(start, anchor, piece, ctx)
                 return
@@ -1223,8 +1223,8 @@ class App(QObject):
                 log.info("quick piece: %s", raw)
             self._spans = [p for p in self._spans if p.start >= anchor] + [piece]
             names = self._command_words()
-            if not raw and not quick and self.cfg.skip_short and names:
-                # a short piece the boosted-first decode found no command in (config.skip_short, 2026-10-22): the
+            if not raw and not quick and names:
+                # a short piece the boosted-first decode found no command in (2026-10-22): the
                 # commands boosted once more over it and 1s before it (a command said right after speech), else
                 # straight to the sentence's plain decode. The user's commands: as found as before (2415 of 2420),
                 # with one short decode and one of the sentence instead of up to two alone and two of the sentence
@@ -2084,12 +2084,14 @@ class App(QObject):
             log.exception("autostart failed")
             self.settings.set_status(f"開機啟動設定失敗：{e}")
 
-    def restart(self):
+    def restart(self, wizard_theme: str = ""):
         """清空並重新設定: a new Art VoiceInput is started the way this one was, and this one quits; the new one waits
-        for the lock (RESTARTED)."""
+        for the lock (RESTARTED). wizard_theme: the new one's setup wizard in that theme (the Debug card's 進入設定精靈)."""
         log.info("restart")
         self.settings.hide()
-        args = [a for a in sys.argv[1:] if a != RESTARTED] + [RESTARTED]
+        args = [a for a in sys.argv[1:] if a != RESTARTED and not a.startswith(WIZARD_THEME)] + [RESTARTED]
+        if wizard_theme:
+            args.append(WIZARD_THEME + wizard_theme)
         if paths.FROZEN:   # the installed exe: argv[0] is the exe itself
             QProcess.startDetached(sys.executable, args, os.getcwd())
         else:

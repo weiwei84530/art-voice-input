@@ -1,10 +1,19 @@
 """SettingsWindow: the redesigned settings (shell.py) with its six pages, and the interface the app uses (the
 signals and methods the old SettingsDialog had)."""
+import sys
+
 from PySide6.QtCore import QEvent, Signal
 
 from .. import packs
 from . import theme
 from .shell import Shell
+
+# restarted by the Debug card's 進入設定精靈: the wizard in the theme shown before (the setting itself was reset)
+WIZARD_THEME = "--wizard-theme="
+
+
+def wizard_theme() -> str:
+    return next((a[len(WIZARD_THEME):] for a in sys.argv[1:] if a.startswith(WIZARD_THEME)), "")
 
 
 class SettingsWindow(Shell):
@@ -12,7 +21,7 @@ class SettingsWindow(Shell):
     glow_preview = Signal(str)      # a glow style picked or changed: shown for a moment
     capture_hotkey = Signal(bool)   # 快捷鍵: take the next press (True), or stop waiting for it
     clear_log = Signal()            # 清除紀錄 on the 辨識紀錄 page
-    restart = Signal()              # 清空並重新設定 done: App closes and starts a new one
+    restart = Signal(str)           # 清空並重新設定 done: App closes and starts a new one (the wizard's theme, or "")
     wizard_heard = Signal(object)   # the setup wizard heard speech (16 kHz audio): App decodes it (wizard_said)
 
     def __init__(self, cfg, hotwords, memory):
@@ -136,6 +145,8 @@ class SettingsWindow(Shell):
         if self.isVisible():
             from .kit import crossfade
             crossfade(self, 320)
+        if wizard_theme():   # back to the setting when it is finished (data_changed)
+            self.theme.set_mode(wizard_theme())
         self.show_home_now()
         self.wizard.begin()
         self.wizard.show()

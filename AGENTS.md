@@ -168,10 +168,11 @@ and runs (nothing decoded when nothing was said since the last commit).
   (score 5, commands alone: hotwords and packs competed) and padded with 0.3s of zeros at both ends, then plainly if
   that is no command. A piece of more than 2s of speech (`_ALONE_MAX`; the user's commands: p99.9 2.03s) is not
   decoded alone: straight to the open sentence's decode, 0.25s sooner (2026-10-22, the user's request for speed);
-  its tail still runs a command (`_ran_tail`); Debug card switch `skip_alone`. Decoding threads stay 3 (4: +40%, 6: twice as slow, 2 the same). Boosted-first gate `_FIRST_MAX` 1.5s (1.2 until 2026-10-22: commands
-  2370 -> 2395 of 2402). `skip_short` (Debug card, on): a short piece with no command after the boosted-first decode is
-  boosted once more over it and 1s before, then the sentence's plain decode (對 1.25 -> 0.69s; commands 2415/2420
-  as before; boosting the whole sentence too made long sentences slower).
+  its tail still runs a command (`_ran_tail`). Decoding threads stay 3 (4: +40%, 6: twice as slow, 2 the same). Boosted-first gate `_FIRST_MAX` 1.5s (1.2 until 2026-10-22: commands
+  2370 -> 2395 of 2402). A short piece with no command after the boosted-first decode is boosted once more over it
+  and 1s before, then the sentence's plain decode (對 1.25 -> 0.69s; commands 2415/2420 as before; boosting the
+  whole sentence too made long sentences slower). Both are the only way since 2026-10-24 (the user's decision: text
+  shows sooner; the old decode-alone paths and the Debug card's skip_alone / skip_short switches removed).
   Command phrases are kept out of 詞庫 biasing (`_bias_words`: 括號 at 200% made 逗號 / 換行
   into 括號). A piece that, decoded with the speech before it, ends exactly in a command runs as one (`_split_at`,
   `_ran_tail`). Repeats the boost made (結束結束結束) count once (`_one_command`).
@@ -365,7 +366,8 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   terms, no counts; 跳過 / 下一步. 3 標準 (floating button only while listening, 3 minutes' auto-off) / 簡單 / 自動 / 簡約 (`wizard.PRESETS`, 2026-10-22, rows 80px; buttons 40px high, 168 / 240 wide; 簡約: nothing on screen, no glow, 送出 not closing,
   右 Alt `vk:a5`, the tray icon on the taskbar turning the microphone on/off, 5 minutes' auto-off only), fixed height,
   each one short line, no list of what it sets; 開始教學 (標準 only; the others' button reads 這個模式的教學還在做) or 跳過教學，直接開始使用 finishes.
-  Focus rings only after Tab. 系統's Debug card has 進入設定精靈 (dark, nothing cleared, applies like the real one).
+  Focus rings only after Tab. 系統's Debug card has 進入設定精靈 (2026-10-24: 清空並重新設定 at once, no
+  question; the restarted app's wizard alone in the theme shown before, `window.WIZARD_THEME`, the setting reset).
 - **Tutorial** (`ui/tutorial.py`, 2026-10-24, the user's design; 標準 only so far, the other three setups after it
   runs well): over the window after the wizard's 開始教學 (the setup applied, `setup_done` still false,
   `Config.tutorial_at` the chapter to come back to) or 系統's 重看教學 (關於 row; `replay`: settings untouched). A

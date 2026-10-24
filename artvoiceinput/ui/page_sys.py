@@ -198,7 +198,6 @@ class SysPage(QWidget):
                         Qt.AlignRight | Qt.AlignVCenter)
         row("關於", "阿特語音輸入法 Art VoiceInput", about, last=True)
         v.addWidget(frm)
-        self.debug_switches = []   # (switch, its note, config field, note when on, note when off)
         if config.DEBUG:
             self._debug_card(v)
         v.addStretch(1)
@@ -208,21 +207,9 @@ class SysPage(QWidget):
         """With --debug: test options, plain (2026-10-22, the user's request). Options come and go as tests end; the
         card shows only while it has one, so keep this method and its row() for the next."""
         options = []
-
-        def switch(field, title, sub, on, off):
-            sw, note = Switch(name=title), label("")
-            sw.toggled.connect(lambda v, f=field: self._debug_set(f, v))
-            self.debug_switches.append((sw, note, field, on, off))
-            options.append((title, sub, hbox(sw, note, None, spacing=10)))
-        # pieces not decoded alone, straight to the sentence's decode (2026-10-22: the pause's latency)
-        switch("skip_alone", "長句不單獨辨識", "超過 2 秒的一段話直接整句辨識，停頓後早一點出字",
-               "長句直接整句辨識", "先單獨辨識再整句（舊做法）")
-        switch("skip_short", "短句不單獨辨識", "2 秒內的一段話不是指令就直接整句辨識，短句早點出字",
-               "短句少辨識兩次", "單獨辨識兩三次（舊做法）")
-        # the setup wizard at once, dark, nothing cleared (2026-10-21, the user's request; it applies what is picked
-        # like the real one)
-        options.append(("設定精靈", "直接進入設定精靈（暗色），不清空任何資料",
-                        hbox(button("進入設定精靈", self._wizard_dark), None)))
+        # 清空並重新設定 at once, no question, the wizard in the theme shown now (2026-10-24, the user's request)
+        options.append(("設定精靈", "立刻清空所有資料並重新開啟，設定精靈沿用目前的外觀模式",
+                        hbox(button("進入設定精靈", self._wizard_fresh), None)))
         if not options:
             return
         frm, rows = card(margins=(22, 6, 22, 0), spacing=0)
@@ -263,9 +250,6 @@ class SysPage(QWidget):
         self.click.blockSignals(False)
         self.lite.set_quiet(self.cfg.orb_lite)
         self._lite_note()
-        for sw, _, field, *_ in self.debug_switches:
-            sw.set_quiet(getattr(self.cfg, field))
-        self._debug_notes()
         set_calm(self.cfg.orb_lite)
 
     def summary(self) -> str:
@@ -307,16 +291,6 @@ class SysPage(QWidget):
     def _lite_note(self):
         self.lite_note.setText(_state(self.cfg.orb_lite, "動畫從簡" if self.cfg.orb_lite else "動畫完整播放"))
 
-    # --- Debug ---
-    def _debug_set(self, field: str, on: bool):
-        setattr(self.cfg, field, on)
-        self.win.save()
-        self._debug_notes()
-
-    def _debug_notes(self):
-        for _, note, field, on, off in self.debug_switches:
-            value = getattr(self.cfg, field)
-            note.setText(_state(value, on if value else off))
 
     # --- autostart ---
     def _auto(self, on: bool):
@@ -379,18 +353,14 @@ class SysPage(QWidget):
         sheet.accepted.connect(self._reset_now)
         sheet.open()
 
-    def _wizard_dark(self):
-        self.cfg.theme = "dark"
-        self.cfg.setup_done = False   # the app rests until it is finished, as after 清空並重新設定
-        self.modes.set("dark")
-        self._mode_note()
-        self.win.save()
-        self.win.theme.set_mode("dark")
-        self.win.start_wizard()
+    def _wizard_fresh(self):
+        """The Debug card's 進入設定精靈: 清空並重新設定 without the question; the new app's wizard (only the wizard: the
+        theme setting is reset like the rest) is shown in the theme shown now."""
+        self._reset_now(self.win.theme.mode)
 
-    def _reset_now(self):
+    def _reset_now(self, wizard_theme: str = ""):
         """Cleared and saved, then the app closes and starts again as new (the user's request, 2026-10-21: nothing
         carried over); setup_done is false, so the new one opens on the setup wizard."""
         userdata.reset(self.cfg, self.win.hotwords, self.win.memory)
         self.win.data_changed()
-        self.win.restart.emit()
+        self.win.restart.emit(wizard_theme)

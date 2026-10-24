@@ -91,13 +91,6 @@ class Config:
     cue_volume: int = 80          # 提示音's 音量, percent (cues.VOLUME_RANGE)
     # development only, to be removed before release (recordings.py): on exactly when launched with --debug
     save_recordings: bool = field(default_factory=lambda: DEBUG)
-    # a piece of more than app._ALONE_MAX of speech goes straight to the open sentence's decode (2026-10-22); False
-    # decodes it alone first as before. A switch in 系統's Debug card (--debug only); dev/headless.py set:skip_alone=0
-    skip_alone: bool = True
-    # a short piece the boosted-first decode (app._command_first) found no command in is not decoded alone again: the
-    # commands boosted over it and 1s before, then the sentence's plain decode (2026-10-22: the user's 對 1.25 ->
-    # 0.69s, long sentences and commands as before; boosting the whole sentence as well made long ones slower). Debug card
-    skip_short: bool = True
     # the setup wizard (ui/wizard.py, 2026-10-21) was finished: until then the settings window opens on it at launch.
     # A fresh install and 清空並重新設定 start without it; a config.json from before the wizard counts as set up
     setup_done: bool = False
@@ -148,8 +141,6 @@ class Config:
             cfg.highlight_color = f"#{MARK_ALPHA:02X}{mark[3:].upper()}"
         cfg.button_scale = min(max(int(cfg.button_scale), BUTTON_SCALE_RANGE[0]), BUTTON_SCALE_RANGE[1])
         cfg.save_recordings = DEBUG   # no setting (2026-10-20): recordings are kept exactly in debug mode
-        if not DEBUG:   # the Debug card's switches: a release (or a file exported with one off) has no way back
-            cfg.skip_alone = cfg.skip_short = True
         if "rules" in data:
             old = rules.upgrade([rules.Rule.from_dict(d) for d in data["rules"]], data.get("rules_version", 1))
             if "hotkey" not in data:   # the key that recorded (the 自訂操作 key rows, until 2026-10-16)
