@@ -291,7 +291,6 @@ class SysPage(QWidget):
     def _lite_note(self):
         self.lite_note.setText(_state(self.cfg.orb_lite, "動畫從簡" if self.cfg.orb_lite else "動畫完整播放"))
 
-
     # --- autostart ---
     def _auto(self, on: bool):
         self.cfg.autostart = on

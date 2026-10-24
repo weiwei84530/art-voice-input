@@ -145,7 +145,7 @@ class SettingsWindow(Shell):
         if self.isVisible():
             from .kit import crossfade
             crossfade(self, 320)
-        if wizard_theme():   # back to the setting when it is finished (data_changed)
+        if wizard_theme():   # after the crossfade's snapshot; back to the setting when it is finished (data_changed)
             self.theme.set_mode(wizard_theme())
         self.show_home_now()
         self.wizard.begin()
