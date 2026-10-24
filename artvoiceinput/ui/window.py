@@ -35,6 +35,9 @@ class SettingsWindow(Shell):
             page.installEventFilter(self)
         self.theme.changed.connect(self._theme_changed)
         self.wizard = None
+        self.tutorial = None
+        # the tutorial's decoding (audio, commands, done): the app lends its recognizer (App._tutorial_decode)
+        self.tutorial_decode = None
 
     # --- shared by the pages ---
     def save(self):
@@ -114,8 +117,11 @@ class SettingsWindow(Shell):
     def showEvent(self, e):
         if not e.spontaneous():   # opened again, not restored from the taskbar (that keeps the page)
             self.show_home_now()
-            if not self.cfg.setup_done and (self.wizard is None or self.wizard.isHidden()):
-                self.start_wizard()
+            if not self.cfg.setup_done and (self.wizard is None or self.wizard.isHidden()) and not self.tutoring:
+                if self.cfg.tutorial_at >= 0:
+                    self.start_tutorial(self.cfg.tutorial_at)
+                else:
+                    self.start_wizard()
         super().showEvent(e)
 
     # --- the setup wizard ---
@@ -126,6 +132,7 @@ class SettingsWindow(Shell):
             self.wizard = Wizard(self)
             self.wizard.mic_step.heard_audio.connect(self.wizard_heard.emit)
             self.wizard.finished.connect(self._wizard_done)
+            self.wizard.tutorial.connect(self._wizard_tutorial)
         if self.isVisible():
             from .kit import crossfade
             crossfade(self, 320)
@@ -153,8 +160,57 @@ class SettingsWindow(Shell):
         self.data_changed()   # the preset and packs saved and applied
         self.refresh_tiles()
 
+    def _wizard_tutorial(self):
+        self.data_changed()
+        self.start_tutorial(0)
+
+    # --- the tutorial ---
+    @property
+    def tutoring(self) -> bool:
+        """The tutorial is on: the app rests (App._paused)."""
+        return self.tutorial is not None and self.tutorial.isVisible() and self.isVisible()
+
+    def start_tutorial(self, chapter: int = 0, replay: bool = False):
+        """The tutorial over the window: after the wizard (from chapter, resuming), or 系統's 重看教學 (replay: the
+        settings untouched, nothing remembered)."""
+        from .kit import crossfade
+        from .tutorial import Tutorial
+        if self.tutorial is not None:
+            self.tutorial.stop()
+            self.tutorial.deleteLater()
+        self.tutorial = Tutorial(self, self.tutorial_decode)
+        self.tutorial.finished.connect(self._tutorial_done)
+        self.tutorial.chapter_started.connect(self._tutorial_chapter)
+        if self.isVisible():
+            crossfade(self, 320)
+        self.show_home_now()
+        self.tutorial.show()
+        self.tutorial.raise_()
+        self.min_button.raise_()
+        self.close_button.raise_()
+        self.tutorial.start(chapter, replay)
+        self.applied.emit()   # the app rests
+
+    def _tutorial_chapter(self, i: int):
+        if not self.tutorial.replay:
+            self.cfg.tutorial_at = i
+            self.cfg.save()
+
+    def _tutorial_done(self, _done: bool):
+        if not self.tutorial.replay:
+            self.cfg.tutorial_at = -1
+            self.cfg.setup_done = True
+            self.data_changed()
+        else:
+            self.applied.emit()
+
     def hideEvent(self, e):
         self.mic_page.stop_capture()
+        if self.tutorial is not None and self.tutorial.isVisibleTo(self):
+            # closed midway: the first run comes back at its chapter next time (cfg.tutorial_at); a replay just ends
+            self.tutorial.stop()
+            self.tutorial.hide()
+            self.applied.emit()
         super().hideEvent(e)
 
     def changeEvent(self, e):

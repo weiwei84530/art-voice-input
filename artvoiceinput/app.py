@@ -242,6 +242,7 @@ class App(QObject):
         self.settings.clear_log.connect(self._clear_log)
         self.settings.glow_preview.connect(self._preview_glow)
         self.settings.wizard_heard.connect(self._wizard_heard)
+        self.settings.tutorial_decode = self._tutorial_decode
         self.settings.restart.connect(self.restart)
         self._heard_at = 0.0                     # when speech last began while listening (auto_off_minutes)
         self._idle_timer = QTimer(self, interval=5000, timeout=self._check_idle)
@@ -443,8 +444,10 @@ class App(QObject):
     @property
     def _paused(self) -> bool:
         """Until the setup wizard is finished nothing listens or shows (the user's request, 2026-10-21): no hotkey,
-        floating button, bubble or listening on a click, also with the wizard closed half way."""
-        return not self.cfg.setup_done
+        floating button, bubble or listening on a click, also with the wizard closed half way; nor while the
+        tutorial runs (重看教學 too)."""
+        settings = getattr(self, "settings", None)
+        return not self.cfg.setup_done or (settings is not None and settings.tutoring)
 
     @property
     def _listening(self) -> bool:
@@ -2003,6 +2006,32 @@ class App(QObject):
                 text = ""
             log.info("wizard heard: %s", text)
             self.main.emit(lambda: self.settings.wizard_said(text))
+        self.worker.submit(run)
+
+    def _tutorial_decode(self, audio, commands, done):
+        """The tutorial's speech, decoded on the worker; done(result) on the main thread: None while the model isn't
+        ready, ("cmd", name) when a short piece decoded with commands boosted (padded, as _command_first) is one of
+        them or sounds like one, else ("text", formatted text). Nothing is logged to 辨識紀錄 or learned."""
+        if self.recognizer is None:
+            done(None)
+            return
+
+        def run():
+            result = ("text", "")
+            try:
+                hit = ""
+                if commands:
+                    pad = np.zeros(int(_PAD * SAMPLE_RATE), np.float32)
+                    raw = self.recognizer.recognize(np.concatenate([pad, audio, pad]),
+                                                    _bias([(w, _COMMAND_SCORE) for w in commands]))
+                    raw = _one_command(raw, commands)
+                    said = rules.normalize(to_traditional(raw))
+                    hit = next((n for n in commands if said == rules.normalize(n)), "") or _alike(raw, commands)
+                result = ("cmd", hit) if hit else ("text", format_text(self.recognizer.recognize(audio)))
+            except Exception:
+                log.exception("tutorial decode failed")
+            log.info("tutorial heard: %s", result)
+            self.main.emit(lambda: done(result))
         self.worker.submit(run)
 
     def _toast_clicked(self):

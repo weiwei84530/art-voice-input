@@ -553,8 +553,10 @@ class PackStep(QWidget):
 
 
 class StyleStep(QWidget):
-    """3: the starting setup; 開始教學 (not made yet: does nothing) or 跳過教學 to the home page."""
+    """3: the starting setup; 開始教學 (the tutorial, ui/tutorial.py; only 標準's so far: for the others the button
+    says so and is disabled) or 跳過教學 to the home page."""
     done = Signal()
+    tutorial = Signal()
 
     def __init__(self, win):
         super().__init__()
@@ -574,9 +576,9 @@ class StyleStep(QWidget):
             v.addSpacing(6)
             self.options[key] = o
         v.addStretch(1)
-        tutorial = button("開始教學", None, pri=True, wiz=True)   # the tutorial comes later (the user's decision)
-        tutorial.setFixedWidth(START_W)
-        v.addWidget(tutorial, 0, Qt.AlignHCenter)
+        self.tutorial_button = button("開始教學", self.tutorial.emit, pri=True, wiz=True)
+        self.tutorial_button.setFixedWidth(START_W)
+        v.addWidget(self.tutorial_button, 0, Qt.AlignHCenter)
         v.addSpacing(6)
         skip = TextLink("跳過教學，直接開始使用")
         skip.clicked.connect(self.done.emit)
@@ -590,6 +592,9 @@ class StyleStep(QWidget):
         self.choice = key
         for k, o in self.options.items():
             o.setChecked(k == key)
+        # the other setups' tutorials come after 標準's runs well (the user's decision, 2026-10-24)
+        self.tutorial_button.setEnabled(key == "std")
+        self.tutorial_button.setText("開始教學" if key == "std" else "這個模式的教學還在做")
 
 
 class Card(QWidget):
@@ -622,6 +627,7 @@ def _rounded(r: QRectF, radius: float) -> QPainterPath:
 class Wizard(QWidget):
     """Over the whole settings window: the wall, the faint logo, the card with the three steps sliding."""
     finished = Signal()
+    tutorial = Signal()   # 開始教學: the setup applied, setup_done still false
 
     def __init__(self, win):
         super().__init__(win)
@@ -641,6 +647,7 @@ class Wizard(QWidget):
             back = step.findChild(BackButton)
             back.clicked.connect(lambda _=False, s=step: self.go(self.slides.index - 1))
         self.style_step.done.connect(self._finish)
+        self.style_step.tutorial.connect(self._tutorial)
 
     def begin(self):
         """From the first step, with the current settings."""
@@ -673,15 +680,26 @@ class Wizard(QWidget):
         self.mic_step.stop()
         super().hideEvent(e)
 
-    def _finish(self):
+    def _apply(self):
         cfg = self.win.cfg
         for k, v in PRESETS[self.style_step.choice].items():
             setattr(cfg, k, v)
         cfg.packs = self.pack_step.picked()
-        cfg.setup_done = True
+
+    def _finish(self):
+        self._apply()
+        self.win.cfg.setup_done = True
+        self.win.cfg.tutorial_at = -1
         crossfade(self.win, 320)
         self.hide()
         self.finished.emit()
+
+    def _tutorial(self):
+        """開始教學: the setup applied; the app rests until the tutorial ends (setup_done)."""
+        self._apply()
+        self.win.cfg.tutorial_at = 0
+        self.hide()
+        self.tutorial.emit()
 
     def paintEvent(self, _):
         p = QPainter(self)

@@ -18,7 +18,7 @@ from .config import Config
 
 FORMAT = "artvoiceinput-data"
 VERSION = 1
-LOCAL = ("mic", "autostart", "float_pos", "setup_done")
+LOCAL = ("mic", "autostart", "float_pos", "setup_done", "tutorial_at")
 
 
 def export(path: Path, cfg, hotwords, memory) -> None:

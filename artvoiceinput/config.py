@@ -101,6 +101,9 @@ class Config:
     # the setup wizard (ui/wizard.py, 2026-10-21) was finished: until then the settings window opens on it at launch.
     # A fresh install and 清空並重新設定 start without it; a config.json from before the wizard counts as set up
     setup_done: bool = False
+    # the chapter of the tutorial (ui/tutorial.py, 2026-10-24) to come back to: the wizard's 開始教學 sets 0, each
+    # chapter its own; -1 when not in it. setup_done stays false until the tutorial ends or is skipped
+    tutorial_at: int = -1
     rules: list = field(default_factory=lambda: rules.defaults(dev=DEBUG))   # custom operations (rules.Rule)
     rules_version: int = RULES_VERSION
 

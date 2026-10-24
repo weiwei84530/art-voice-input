@@ -85,7 +85,7 @@ automatically; read it before reviving or redesigning something). Module docstri
 | `glow.py` | screen-edge glow while listening |
 | `appicon.py` | the app icon (design J 光澤: warm diagonal gradient, sheen, white mic): tray, wizard badge, window icon; `dev/build_icon.py` writes `appicon.ico` for the exe |
 | `tray.py` | tray icon (the app icon, a turning ring on its square while listening), `promote` (taskbar, not ^) |
-| `ui/` | settings window (2026-10 redesign): `theme.py` tokens + QSS, `kit.py` widgets, `shell.py` home and transition, `window.py` app interface, `page_*.py` the six pages, `wizard.py` setup wizard, `sheet.py` in-window question |
+| `ui/` | settings window (2026-10 redesign): `theme.py` tokens + QSS, `kit.py` widgets, `shell.py` home and transition, `window.py` app interface, `page_*.py` the six pages, `wizard.py` setup wizard, `tutorial.py` / `desk.py` / `sprite.py` the tutorial, `sheet.py` in-window question |
 | `logbook.py` | 辨識紀錄 rows |
 | `config.py` / `userdata.py` | `Config` (load migrates old keys) / settings file export, import, reset |
 | `hotkey.py` / `keys.py` | low-level hooks, hotkey capture, key names |
@@ -352,22 +352,32 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   user decides whether it stays); the icon over 阿特語音輸入法 at 26px (34 stood apart from it), no 已經裝好了; 略過 (plain) becomes 下一步 then. 2 packs, 3 columns, two lines of whole sample
   terms, no counts; 跳過 / 下一步. 3 標準 (floating button only while listening, 3 minutes' auto-off) / 簡單 / 自動 / 簡約 (`wizard.PRESETS`, 2026-10-22, rows 80px; buttons 40px high, 168 / 240 wide; 簡約: nothing on screen, no glow, 送出 not closing,
   右 Alt `vk:a5`, the tray icon on the taskbar turning the microphone on/off, 5 minutes' auto-off only), fixed height,
-  each one short line, no list of what it sets; 開始教學 does nothing yet (the tutorial comes later), 跳過教學，直接開始使用 finishes.
+  each one short line, no list of what it sets; 開始教學 (標準 only; the others' button reads 這個模式的教學還在做) or 跳過教學，直接開始使用 finishes.
   Focus rings only after Tab. 系統's Debug card has 進入設定精靈 (dark, nothing cleared, applies like the real one).
-- **Tutorial** (planned 2026-10-24, the user's design; 標準 first, the other three setups after it runs well): in
-  the same 960x640 window, a fake simplified Windows 11 desktop (light first) with a 記事本 and a chat app (no
-  terminal: most users never open one), a guide dialog clicked on like a visual novel, waiting at steps for a click
-  or a given sentence read aloud. Independent of the core: its own microphone + X-ASR decode and its own command
-  matching; the App stays paused (`_paused`) until the tutorial ends or is skipped. A reading under 80% alike shows
-  what was heard and must be taken back with 復原; after 3 misses 跳過這步. Chapters: open the mic (bubble),
-  draft (yellow, re-decoded), 復原, punctuation, 換行 / 刪除, 選字 (a planted wrong word), select and re-speak,
-  「詞的字」, 送出 in the chat app (mic off), turn off. Closed midway → resumes at that chapter; 系統 gets 重看教學
-  (core paused, settings untouched); nothing said there is kept (no 辨識紀錄, 選字記憶, 詞庫).
-  Guide: design B of https://claude.ai/artifact/A8FNxjZPgBfCV3z3Tvod8G (the app icon moving to what to look at, a
-  small card beside it), the icon a sprite: a white-line face (eyes, mouth) looking left / right, blinking, with C's
-  expressions (https://claude.ai/artifact/8sHxkNoyPRWTPMkgmaxQma). Floating button 麥克風（原始） and glow 錄音紅
-  there, whatever the user's looks. The desktop starts empty so the wallpaper shows: the user opens 記事本 from the
-  taskbar; the sprite opens the chat app itself later.
+- **Tutorial** (`ui/tutorial.py`, 2026-10-24, the user's design; 標準 only so far, the other three setups after it
+  runs well): over the window after the wizard's 開始教學 (the setup applied, `setup_done` still false,
+  `Config.tutorial_at` the chapter to come back to) or 系統's 重看教學 (關於 row; `replay`: settings untouched). A
+  strip on top (icon, 教學, ten chapter segments, 略過教學 asking in a `Sheet`), a pretend Windows 11 desktop
+  (`ui/desk.py`): wallpaper Bloom A1+ of https://claude.ai/artifact/FXMWnBF7Ek4uLwQ3y3JAiM (light and dark, the two
+  rings of petals swaying over 14s, still with 節流模式), taskbar (clock in Noto Sans TC like the artifact, not the
+  number face: the user's request), 記事本 and a chat with 小美, `FakeText` boxes (caret, drag / double-click
+  selection, the draft yellow), the real `OrbButton` as bubble (28) and floating button (44) in 麥克風（原始）, a
+  錄音紅 edge glow, the real 選字 menu as a child (`DeskPicker`). The desktop starts empty so the wallpaper shows;
+  the user opens 記事本 from the taskbar; the guide opens the chat itself.
+  Guide (`ui/sprite.py`): design B of https://claude.ai/artifact/A8FNxjZPgBfCV3z3Tvod8G, the app icon's square with
+  a white-line face (eyes look toward the target, blink, bob; faces idle / happy / listen / oops / proud / think,
+  C's https://claude.ai/artifact/8sHxkNoyPRWTPMkgmaxQma), moving beside what to look at with its `Card` (繼續, or
+  what it waits for; ‹ 上一句 shows past lines; 跳過這步), placed clear of the target and the text being read.
+  Chapters are generators yielding what they wait for: 打開記事本, 開麥克風 (click → bubble → listening), 念一句
+  (draft), 定稿 (句號), 換行與復原, 選字 (planted 請幫我定一張車票, fixed candidates), 選取重講 (一張 → 兩張),
+  詞的字 (節日的節, the tutorial's own rule, no dictionary), 送出 (chat; the mic turns off), 關麥克風 (結束 or the
+  floating button). Independent of the core: its own microphone (`Ear`: level-based, a pause re-decodes the draft,
+  the end judges it) and matching; only decoding is lent (`SettingsWindow.tutorial_decode` = `App._tutorial_decode`:
+  commands boosted first on a short piece, as `_command_first`). A reading under 80% alike (characters or toneless
+  pinyin) stays typed and must be taken back with 復原 (nothing else goes on); after 3 misses, a closed mic or no
+  model, 跳過這步. Text replacing a selection mid-line drops the recognizer's closing mark. The App rests
+  (`_paused`) while it shows; closed midway it comes back at its chapter (each chapter starts from `_scene` then);
+  nothing said there is kept (no 辨識紀錄, 選字記憶, 詞庫).
 - 辨識紀錄 (`logbook.py`, `set_log`): one row per event, grouped per listening session, newest first, 40 built at
   first and 40 more near the scroll's end or from 顯示更早的紀錄 (all 300 at once took ~1s to open, 2026-10-22), heard vs the
   screen's change as a diff, details in the tooltip; copy icon on rows that settled text; an orange book (the 詞庫 tile's) when the 詞庫
@@ -427,6 +437,9 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
 - Never let a test write the user's real data files while their Art VoiceInput runs.
 - `dev/e2e.py` types into real Notepad / Windows Terminal: only when the user is away (it once typed into their
   Notepad document).
+- The tutorial: `dev/tutorial_check.py OUT [--dark] [--miss]` walks it end to end (QTest clicks, `Tutorial.hear`)
+  saving a screenshot per step; `dev/tutorial_asr.py` speaks each asked phrase by TTS through the real recognizer
+  and the tutorial's rules; `dev/settings_preview.py tutorialN` opens it at chapter N.
 - Other probes: `dev/term_probe.py`, `dev/highlight_spike.py` / `.html`, `dev/pack_candidates.py`.
 
 ## Open questions

@@ -193,6 +193,9 @@ class SysPage(QWidget):
             about.addWidget(val, 1, col, Qt.AlignLeft | Qt.AlignVCenter)
         folder.setFont(theme.font(13.5, 600, num=True))   # the long path a little smaller (2026-10-21)
         about.setColumnStretch(3, 1)
+        # 重看教學 (2026-10-24, the user's choice: beside 關於): the tutorial again, the settings untouched
+        about.addWidget(button("重看教學", lambda: self.win.start_tutorial(0, replay=True)), 0, 4, 2, 1,
+                        Qt.AlignRight | Qt.AlignVCenter)
         row("關於", "阿特語音輸入法 Art VoiceInput", about, last=True)
         v.addWidget(frm)
         self.debug_switches = []   # (switch, its note, config field, note when on, note when off)
