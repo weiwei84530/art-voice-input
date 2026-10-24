@@ -774,6 +774,7 @@ class Tutorial(QWidget):
         yield from self.click("app:notepad", "先打開記事本：點一下工作列上的記事本。",
                               at=lambda: d.taskbar_rect("notepad"), status="等你點記事本")
         d.open_app(d.notepad, "notepad")
+        yield from self.wait(300)   # it slides up into place: the next ring is measured after (it sat 24px low)
 
     def ch_mic(self):
         d = self.desk
@@ -803,7 +804,7 @@ class Tutorial(QWidget):
                                 at=lambda: _orb_rect(d.float))
             yield from self.say("在其他程式裡也一樣：點進輸入框，再點小氣泡，就能開始說話。")
         elif mode == "simple":
-            yield from self.say("麥克風打開了！畫面邊緣亮起紅光，浮動按鈕縮小、轉得更快，表示我正在聽。", "happy",
+            yield from self.say("麥克風打開了！畫面邊緣亮起紅光，浮動按鈕也縮小了，表示我正在聽。", "happy",
                                 at=lambda: _orb_rect(d.float))
             yield from self.say("在其他程式裡也一樣：點進輸入框，再點浮動按鈕，就能開始說話。")
         elif mode == "auto":
