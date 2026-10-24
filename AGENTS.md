@@ -46,8 +46,14 @@ automatically; read it before reviving or redesigning something). Module docstri
   `docs/macos-port.md` lists what a port needs.
 - Code, `.tools/`, `.venv/` stay in the app folder; user data in `paths.DATA_DIR` (`%LOCALAPPDATA%\ArtVoiceInput`):
   `config.json`, logs, lock, `models/`, `hotword-list.json`, `smart-picks.json`, `packs/`, `cache/`.
-  `paths.migrate_legacy()` moves old in-folder data. Autostart is re-registered each launch. Planned, not started:
-  exe + installer (PyInstaller + Inno Setup).
+  `paths.migrate_legacy()` moves old in-folder data. Autostart is re-registered each launch.
+- Installer (planned, not started; decided 2026-10-24): PyInstaller onedir (onefile unpacks at every launch, more
+  antivirus false alarms) + Inno Setup, one `ArtVoiceInput-Setup-x.y.z.exe` offered on a website. Per-user install
+  to `%LOCALAPPDATA%\Programs\ArtVoiceInput` (no admin, no UAC; a 自訂路徑 button for another folder), uninstall
+  entry in HKCU so it shows in Windows 設定 → 應用程式; updates install over it with the same AppId, user data stays
+  in DATA_DIR. The models (X-ASR + VAD) ship inside the installer (works offline, no first-run download from
+  GitHub). Uninstall removes the autostart Run value and asks whether to delete settings and 詞庫 (default: keep).
+  Unsigned for now: SmartScreen's 其他資訊 → 仍要執行 is accepted; a code signing certificate later if needed.
 - Fixed models, no model choice, no LLM (`models.py`; URL
   `https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/<dir>.tar.bz2`):
   recognition X-ASR int8 `sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03` (130MB, ~0.75s per
@@ -348,6 +354,20 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   右 Alt `vk:a5`, the tray icon on the taskbar turning the microphone on/off, 5 minutes' auto-off only), fixed height,
   each one short line, no list of what it sets; 開始教學 does nothing yet (the tutorial comes later), 跳過教學，直接開始使用 finishes.
   Focus rings only after Tab. 系統's Debug card has 進入設定精靈 (dark, nothing cleared, applies like the real one).
+- **Tutorial** (planned 2026-10-24, the user's design; 標準 first, the other three setups after it runs well): in
+  the same 960x640 window, a fake simplified Windows 11 desktop (light first) with a 記事本 and a chat app (no
+  terminal: most users never open one), a guide dialog clicked on like a visual novel, waiting at steps for a click
+  or a given sentence read aloud. Independent of the core: its own microphone + X-ASR decode and its own command
+  matching; the App stays paused (`_paused`) until the tutorial ends or is skipped. A reading under 80% alike shows
+  what was heard and must be taken back with 復原; after 3 misses 跳過這步. Chapters: open the mic (bubble),
+  draft (yellow, re-decoded), 復原, punctuation, 換行 / 刪除, 選字 (a planted wrong word), select and re-speak,
+  「詞的字」, 送出 in the chat app (mic off), turn off. Closed midway → resumes at that chapter; 系統 gets 重看教學
+  (core paused, settings untouched); nothing said there is kept (no 辨識紀錄, 選字記憶, 詞庫).
+  Guide: design B of https://claude.ai/artifact/A8FNxjZPgBfCV3z3Tvod8G (the app icon moving to what to look at, a
+  small card beside it), the icon a sprite: a white-line face (eyes, mouth) looking left / right, blinking, with C's
+  expressions (https://claude.ai/artifact/8sHxkNoyPRWTPMkgmaxQma). Floating button 麥克風（原始） and glow 錄音紅
+  there, whatever the user's looks. The desktop starts empty so the wallpaper shows: the user opens 記事本 from the
+  taskbar; the sprite opens the chat app itself later.
 - 辨識紀錄 (`logbook.py`, `set_log`): one row per event, grouped per listening session, newest first, 40 built at
   first and 40 more near the scroll's end or from 顯示更早的紀錄 (all 300 at once took ~1s to open, 2026-10-22), heard vs the
   screen's change as a diff, details in the tooltip; copy icon on rows that settled text; an orange book (the 詞庫 tile's) when the 詞庫
