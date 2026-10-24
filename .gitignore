@@ -10,3 +10,7 @@ artvoiceinput.log
 # preview pages and unused takes stay local
 dev/sound-preview/*
 !dev/sound-preview/prompts.json
+
+# installer builds (installer/build.py)
+build/
+dist/
