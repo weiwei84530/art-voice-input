@@ -145,7 +145,9 @@ class SettingsWindow(Shell):
         if self.isVisible():
             from .kit import crossfade
             crossfade(self, 320)
-        if wizard_theme():   # after the crossfade's snapshot; back to the setting when it is finished (data_changed)
+        # after the crossfade's snapshot; back to the setting when it is finished (data_changed). Only the wizard the
+        # Debug card's restart opened: 重新執行設定精靈 later in that run follows the setting
+        if wizard_theme() and not self.cfg.setup_done:
             self.theme.set_mode(wizard_theme())
         self.show_home_now()
         self.wizard.begin()
@@ -179,7 +181,7 @@ class SettingsWindow(Shell):
 
     def _wizard_tutorial(self):
         self.data_changed()
-        if wizard_theme():   # the Debug card's 進入設定精靈: its tutorial in that theme too (the user's request)
+        if wizard_theme() and not self.cfg.setup_done:   # the Debug card's wizard: its tutorial in that theme too
             self.theme.set_mode(wizard_theme())
         self.start_tutorial(0, replay=self.cfg.setup_done)   # run again: closing it just ends it
 

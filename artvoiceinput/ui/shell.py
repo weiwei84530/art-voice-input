@@ -172,7 +172,7 @@ class Brand(QWidget):
             p.setPen(Qt.NoPen)
             p.setBrush(QColor("#FFFFFF"))
             p.drawRoundedRect(pill, 12, 12)
-            p.setPen(QColor("#C8323E"))   # deeper than the brand red: crisper on white
+            p.setPen(QColor(theme.ACCENT))   # the brand block's own red (the user's request)
             p.drawText(pill, Qt.AlignCenter, "開發版")
             p.setPen(white)
         p.setFont(theme.font(22, 600, num=True))
