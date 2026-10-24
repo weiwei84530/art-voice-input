@@ -865,7 +865,7 @@ class Tutorial(QWidget):
             return e.char_rect(i, i + len(MISHEARD[0]))
         yield from self.say("看！聽到後面的「看得清楚」，我把整句再聽一次，「勢力」就自己改成「視力」了。", "proud",
                             at=fixed, avoid=e.used_rect)
-        yield from self.say("所以一句話還沒說完時，錯字先別急著改：說完、停頓一下，常常就對了。")
+        yield from self.say("黃底的字還沒定稿，看到錯字先別急著改：繼續說下一句，我會連著前後文再聽一次，常常就自己改對了。")
 
     def ch_commit(self):
         e = self.desk.notepad.edit
