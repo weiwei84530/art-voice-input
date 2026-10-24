@@ -11,8 +11,8 @@ It works without the app's core: its own microphone (`Ear`, a level probe like t
 of what was said; only the decoding is handed out (`decode`: audio, the commands to try first, a callback; the app
 lends its recognizer, `App._tutorial_decode`). Nothing said here is kept: no 辨識紀錄, 選字記憶 or 詞庫.
 
-A reading less than 80% alike (characters or their sounds) is typed as heard and must be taken back with 復原
-before going on; after 3 misses 跳過這步 shows. A click that isn't what the guide waits for gives what it waits for
+A reading more than one character off by sound (any for 5 characters or fewer, `passes`) is typed as heard and must be
+taken back with 復原 before going on; one that passes is typed as the sentence asked; after 3 misses 跳過這步 shows. A click that isn't what the guide waits for gives what it waits for
 (the red words) or 繼續 a little wiggle (`_nudge`).
 
 念三句 (the user's design, 2026-10-24): a warm-up sentence; a second that settles the first (its yellow goes) and is
@@ -38,7 +38,7 @@ from .wizard import PRESETS, TextLink, mode_of
 
 _SAME = object()             # click(): the ring round what `at` gives
 TOP = 36                     # the strip over the desk: progress, 略過教學, the window's buttons
-ALIKE = 0.8                  # a reading this alike passes
+EXACT = 5                    # a target this short must be read exactly (by sound); a longer one may miss one
 MISSES = 3                   # misses before 跳過這步 shows
 OFF = {"float", "alt", "tray"}   # what turns the microphone off in the last chapter (and on, by the setup)
 _ALT_VKS = (0x12, 0xA4, 0xA5)
@@ -70,37 +70,30 @@ def _bare(s: str) -> str:
     return _PUNCT.sub("", s)
 
 
-def alike(said: str, want: str) -> float:
-    """How alike two readings are, 0..1: characters, or their sounds (toneless pinyin) when that is closer."""
-    a, b = _bare(said), _bare(want)
-    if not a or not b:
-        return 0.0
-    chars = SequenceMatcher(None, a, b).ratio()
-    sounds = SequenceMatcher(None, lazy_pinyin(a), lazy_pinyin(b)).ratio()
-    return max(chars, sounds)
+def differences(said: str, want: str) -> int:
+    """Characters said differently, left out or added (edit distance by toneless pinyin: homophones agree)."""
+    a, b = lazy_pinyin(_bare(said)), lazy_pinyin(_bare(want))
+    row = list(range(len(b) + 1))
+    for i, x in enumerate(a, 1):
+        prev, row[0] = row[0], i
+        for j, y in enumerate(b, 1):
+            prev, row[j] = row[j], min(row[j] + 1, row[j - 1] + 1, prev + (x != y))
+    return row[-1]
 
 
-def punctuated(said: str, want: str) -> str:
-    """said with want's marks inside it where their characters line up (X-ASR writes a ， only where it heard a
-    pause: read smoothly, 今天天氣很好我們去公園散步 came without it); characters said differently stay as said, and
-    so does said's closing mark."""
-    marks = {}               # want's bare character index -> the marks after it
-    bare = []
-    for ch in want:
-        if _PUNCT.match(ch):
-            if bare:
-                marks[len(bare) - 1] = marks.get(len(bare) - 1, "") + ch
-        else:
-            bare.append(ch)
-    said_bare = _bare(said)
-    out = []
-    for op, i1, i2, j1, j2 in SequenceMatcher(None, said_bare, bare).get_opcodes():
-        if op == "equal":
-            out += [bare[k] + (marks.get(k, "") if k < len(bare) - 1 else "") for k in range(j1, j2)]
-        else:
-            out.append(said_bare[i1:i2])
-    end = _END.search(said)
-    return "".join(out) + (end.group() if end else "")
+def passes(said: str, want: str) -> bool:
+    """A reading close enough to the asked sentence: exact (by sound) up to EXACT characters, else one character
+    off (80% let 今天天氣很壞我們不去公園散步 and 記得不帶傘 through; the user's rule, 2026-10-24)."""
+    return bool(_bare(said)) and differences(said, want) <= (0 if len(_bare(want)) <= EXACT else 1)
+
+
+def emphasized(text: str, commands) -> str:
+    """text as rich text, each 「command」 of commands red and bold (a command is named in the line, never in the
+    quote box: that holds sentences to read; the user's choice, 2026-10-24)."""
+    out = escape(text)
+    for c in commands:
+        out = out.replace(f"「{c}」", f'<b style="color:{T("acct").name()}">「{c}」</b>')
+    return out
 
 
 def described(said: str) -> str | None:
@@ -342,10 +335,8 @@ class Tutorial(QWidget):
             self._render()
             return
         if name in OFF and name not in want.get("what", ()):
-            if self.mic:
-                self._say_hint("關麥克風最後一章再練習，先照我說的做。")
-            elif name != "float":
-                self._nudge()
+            if self.mic or name != "float":
+                self._nudge()   # the red words say what is wanted; a line here hid it (the user's report)
             return
         if want["kind"] == "speech" and want.get("sel") and name.startswith("text:") \
                 and self._sp.box.selected_text not in want["sel"]:
@@ -529,7 +520,7 @@ class Tutorial(QWidget):
                     asked = want.get("quote") or "、".join(f"「{c}」" for c in sorted(sp.commands))
                     heard = f'<span style="color:{T("muted").name()}">要念的是：</span><br>' + \
                         (missed(sp.heard, asked) if want.get("quote") else escape(asked))
-                    text, quote = sp.miss_text, "復原"
+                    text, quote = sp.miss_text, ""
                     status, listening, alt = "說「復原」", False, ("", "")
                 if self.mic_error:
                     status, listening, alt = self.mic_error, False, ("", "")
@@ -541,6 +532,8 @@ class Tutorial(QWidget):
                 alt = want.get("alt", ("", ""))
             if self._hint:
                 text = self._hint
+            if want["kind"] == "speech":
+                text = emphasized(text, self._sp.commands | ({"復原"} if self._sp.miss else set()))
             card.show_line(text, quote=quote, heard=heard, status=status, listening=listening, skip=skip,
                            back=bool(self._lines) and len(self._lines) > 1,
                            next_text=want.get("next_text", "繼續"), alt=alt)
@@ -606,6 +599,22 @@ class Tutorial(QWidget):
                 break
             if best:
                 break
+        if best is None and at is not None:   # the clear place nearest the target (a far corner read as lost)
+            goal = at.center()
+            for sy in range(4, area.height() - SIDE + 1, 12):
+                for sx in range(0, area.width() - SIDE + 1, 12):
+                    for card_right in (True, False):
+                        cx = sx + SIDE - 6 if card_right else sx - cw + 6
+                        cyy = min(max(sy - 4, 4), area.height() - ch - 4)
+                        if cx < 4 or cx + cw > area.width() - 4:
+                            continue
+                        box = QRect(min(sx, cx), min(sy, cyy), SIDE + cw, max(SIDE, ch))
+                        if any(box.intersects(r) for r in avoid):
+                            continue
+                        far = (QPoint(sx + SIDE // 2, sy + SIDE // 2) - goal).manhattanLength()
+                        if best is None or far < best[0]:
+                            best = (far, sx, sy, cx, cyy, card_right)
+            best = best and best[1:]
         if best is None:   # nowhere clear: the bottom right
             sx, sy = area.width() - SIDE - cw - 16, area.height() - SIDE - 10
             best = (sx, sy, sx + SIDE - 6, min(sy - 4, area.height() - ch - 4), True)
@@ -733,14 +742,15 @@ class Tutorial(QWidget):
         sp.type(said)
         if sp.target:
             draft = sp.draft_text()
-            if alike(draft, sp.target) >= ALIKE:
-                draft = punctuated(draft, sp.target)
+            if passes(draft, sp.target):
+                end = _END.search(draft)
+                draft = sp.target + (end.group() if end else "")   # what was asked, quietly (the user's design)
                 sp.retype(draft)
                 self._resume(("ok", draft))
                 return
             done = _bare(draft)
             want_ = _bare(sp.target)
-            if len(done) < 0.6 * len(want_) and alike(draft, sp.target[:len(draft)]) >= ALIKE:
+            if len(done) < 0.6 * len(want_) and passes(draft, want_[:len(done)]):
                 sp.go_on()   # half way: the rest comes next
                 return
         self._miss()
@@ -1133,6 +1143,8 @@ class _Speech:
     def retype(self, text: str):
         """What this step heard reads text now (its marks put right), still the draft."""
         box = self.box
+        if self.plant:
+            text = text.replace(*self.plant)
         if text == self.draft_text():
             return
         box.replace(self.own, self.end, text, draft=True)

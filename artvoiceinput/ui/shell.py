@@ -166,13 +166,13 @@ class Brand(QWidget):
         p.drawText(QPointF(x + vw + 8, bottom - fm.tightBoundingRect("版本").bottom()), "版本")
         p.setOpacity(a)
         if not paths.FROZEN:   # a development copy says so (2026-10-24, the user's request): a white pill after 版本
-            p.setFont(theme.font(12.5, 600))
+            p.setFont(theme.font(13, 700))   # 12.5 at 600 read blurry (the user's report)
             pw = QFontMetricsF(p.font()).horizontalAdvance("開發版") + 20
             pill = QRectF(x + vw + 8 + fm.horizontalAdvance("版本") + 12, bottom - 21, pw, 24)
             p.setPen(Qt.NoPen)
             p.setBrush(QColor("#FFFFFF"))
             p.drawRoundedRect(pill, 12, 12)
-            p.setPen(QColor(theme.LIGHT["acct"]))
+            p.setPen(QColor("#C8323E"))   # deeper than the brand red: crisper on white
             p.drawText(pill, Qt.AlignCenter, "開發版")
             p.setPen(white)
         p.setFont(theme.font(22, 600, num=True))

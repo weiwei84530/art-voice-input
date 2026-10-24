@@ -385,11 +385,13 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   a white-line face (eyes look toward the target, blink, bob; faces idle / happy / listen / oops / proud / think,
   C's https://claude.ai/artifact/8sHxkNoyPRWTPMkgmaxQma), moving beside what to look at with its `Card` (繼續, or
   what it waits for; ‹ 上一句 shows past lines on a grayer card; 跳過這步; named 阿特 like the app, as it speaks for it, 2026-10-24), placed clear of the target and the text being read
-  (eyes and a slight lean toward the target from where it lands; no overshoot: it bumped the floating button). A
+  (eyes and a slight lean toward the target from where it lands; no overshoot: it bumped the floating button;
+  with no listed spot clear, the clear place nearest the target, not a far corner). The card's shadow goes round its tail. A
   click that isn't what it waits for gives the red words (what it waits for) or 繼續 a small cute wiggle, nothing
   else (`_nudge`, 2026-10-24, the user's design; clicks on the bubble or floating button are not stray).
-  A miss: the orange box reads 復原, the gray one 要念的是 with what was left out in red; 收回來了 repeats the
-  step's line. Taskbar tray as Windows 11 lays it out (︿, app icon only for 簡約 (pinned) with tray.py's ring while listening, 英, Wi-Fi, volume,
+  A miss: the gray box 要念的是 with what was left out in red; 收回來了 repeats the step's line. Commands to say
+  are red and bold in the line itself (「復原」), never in the orange box, which holds only sentences to read
+  (2026-10-24). Turning the mic off before the last chapter only wiggles the red words (a line hid what was asked). Taskbar tray as Windows 11 lays it out (︿, app icon only for 簡約 (pinned) with tray.py's ring while listening, 英, Wi-Fi, volume,
   evenly spaced); floating button 24px in from the right like `floatbtn`. The guide's listening ripple leans with it.
   Chapters are generators yielding what they wait for: 打開記事本, 開麥克風 (click → bubble → listening), 念三句
   (2026-10-24, the user's design: a warm-up 今天天氣很好…; 爺爺的視力很好 settles it and is shown with a planted
@@ -400,9 +402,9 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   the words said for it; the tutorial's own rule, no dictionary), 送出 (chat; the mic turns off), 關麥克風 (結束 or
   the floating button: 正在聽… 或 [the button]; the last lines name a few more commands). Independent of the core: its own microphone (`Ear`: level-based, a pause re-decodes the draft,
   the end judges it) and matching; only decoding is lent (`SettingsWindow.tutorial_decode` = `App._tutorial_decode`:
-  commands boosted first on a short piece, as `_command_first`). A reading that passes takes the asked sentence's marks where
-  its characters line up (`punctuated`: X-ASR writes ， only at a pause it heard). The strip drags the window. A reading under 80% alike (characters or toneless
-  pinyin) stays typed and must be taken back with 復原 (nothing else goes on); after 3 misses, a closed mic or no
+  commands boosted first on a short piece, as `_command_first`). The strip drags the window. A reading passes (`passes`) when exact by toneless
+  pinyin up to 5 characters (兩張, 記得帶雨傘), else at most one character off (80% let 很壞…不去 through); a pass is
+  typed as the asked sentence. One that fails stays typed and must be taken back with 復原 (nothing else goes on); after 3 misses, a closed mic or no
   model, 跳過這步. Text replacing a selection mid-line drops the recognizer's closing mark. The App rests
   (`_paused`) while it shows; closed midway it comes back at its chapter (each chapter starts from `_scene` then);
   nothing said there is kept (no 辨識紀錄, 選字記憶, 詞庫).

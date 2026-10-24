@@ -8,7 +8,7 @@ import time
 
 from PySide6.QtCore import (QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRectF, Qt, QTimer, QVariantAnimation,
                             Signal)
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPainterPathStroker, QPen
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from .. import appicon
@@ -402,11 +402,6 @@ class Card(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         body = QRectF(self.rect()).adjusted(self.TAIL, 2, -self.TAIL, -4)
-        for i in range(8, 0, -2):
-            a = (34 if T("bg").lightnessF() < 0.3 else 14) * (1 - i / 8) ** 2
-            p.setPen(Qt.NoPen)
-            p.setBrush(QColor(0, 0, 0, round(a)))
-            p.drawRoundedRect(body.adjusted(-i / 2, -i / 2 + 2, i / 2, i / 2 + 3), 12 + i / 2, 12 + i / 2)
         path = QPainterPath()
         path.addRoundedRect(body, 12, 12)
         ty = min(max(self.tail_y, 22), body.bottom() - 22)
@@ -420,6 +415,16 @@ class Card(QWidget):
             tail.lineTo(body.right() + self.TAIL - 1, ty)
             tail.lineTo(body.right() - 1, ty + 8)
         tail.closeSubpath()
-        p.fillPath(path.united(tail), T("tile2") if self.history else T("tile"))
+        shape = path.united(tail)
+        # the shadow round the tail too: over a white window a tail without one read as gone (the user's report)
+        p.setPen(Qt.NoPen)
+        for i in range(8, 0, -2):
+            a = (34 if T("bg").lightnessF() < 0.3 else 14) * (1 - i / 8) ** 2
+            p.setBrush(QColor(0, 0, 0, round(a)))
+            stroke = QPainterPathStroker()
+            stroke.setWidth(i)
+            stroke.setJoinStyle(Qt.RoundJoin)
+            p.drawPath(stroke.createStroke(shape).united(shape).translated(0, 2.5))
+        p.fillPath(shape, T("tile2") if self.history else T("tile"))
 
     tail_y = 28

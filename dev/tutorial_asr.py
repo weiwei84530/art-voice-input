@@ -1,6 +1,6 @@
 """The tutorial's speech through the real recognizer: each phrase the tutorial asks for is spoken by Windows TTS
 (dev/tts.ps1, zh-TW Hanhan), decoded the way App._tutorial_decode does (commands boosted first on a short piece)
-and judged by the tutorial's own rules (tutorial.alike / described), plus a few wrong readings that must fail.
+and judged by the tutorial's own rules (tutorial.passes / described), plus a few wrong readings that must fail.
 
     .venv/Scripts/python dev/tutorial_asr.py
 """
@@ -25,11 +25,13 @@ from artvoiceinput.ui import tutorial  # noqa: E402
 CASES = [
     ("今天天氣很好，我們去公園散步", ("read", tutorial.FIRST), True),
     ("今天天氣很好，我們去公司上班", ("read", tutorial.FIRST), False),
+    ("今天天氣很壞，我們不去公園散步", ("read", tutorial.FIRST), False),
     ("爺爺的視力很好", ("read", tutorial.SECOND), True),
     ("連對面的招牌都看得清楚", ("read", tutorial.THIRD), True),
     ("句號", ("cmd", "句號"), True),
     ("下一行", ("cmd", "下一行"), True),
     ("記得帶雨傘", ("read", "記得帶雨傘"), True),
+    ("記得不帶傘", ("read", "記得帶雨傘"), False),
     ("復原", ("cmd", "復原"), True),
     ("兩張", ("read", "兩張"), True),
     ("刪除", ("cmd", "刪除"), True),
@@ -65,8 +67,8 @@ def main():
         elif kind == "char":
             ok = got[0] == "text" and tutorial.described(got[1]) == want
         else:
-            ok = got[0] == "text" and tutorial.alike(got[1], want) >= tutorial.ALIKE
-        score = f"{tutorial.alike(got[1], want):.2f}" if kind == "read" and got[0] == "text" else ""
+            ok = got[0] == "text" and tutorial.passes(got[1], want)
+        score = f"{tutorial.differences(got[1], want)} off" if kind == "read" and got[0] == "text" else ""
         mark = "ok " if ok == should else "BAD"
         bad += ok != should
         print(f"{mark} {spoken} -> {got} {score} (pass={ok}, expected {should})", flush=True)
