@@ -366,7 +366,8 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   terms, no counts; 跳過 / 下一步. 3 標準 (floating button only while listening, 3 minutes' auto-off) / 簡單 / 自動 / 簡約 (`wizard.PRESETS`, 2026-10-22, rows 80px; buttons 40px high, 168 / 240 wide; 簡約: nothing on screen, no glow, 送出 not closing,
   右 Alt `vk:a5`, the tray icon on the taskbar turning the microphone on/off, 5 minutes' auto-off only), fixed height,
   each one short line, no list of what it sets; 開始教學 (標準 only; the others' button reads 這個模式的教學還在做) or 跳過教學，直接開始使用 finishes.
-  Focus rings only after Tab. 系統's Debug card has 進入設定精靈 (2026-10-24: 清空並重新設定 at once, no
+  ‹ sits in the left margin on the title's line; card 600x580 (2026-10-24, the user's report: buttons too high,
+  too little padding). Focus rings only after Tab. 系統's Debug card has 進入設定精靈 (2026-10-24: 清空並重新設定 at once, no
   question; the restarted app's wizard alone in the theme shown before, `window.WIZARD_THEME`, the setting reset).
 - **Tutorial** (`ui/tutorial.py`, 2026-10-24, the user's design; 標準 only so far, the other three setups after it
   runs well): over the window after the wizard's 開始教學 (the setup applied, `setup_done` still false,
@@ -381,11 +382,18 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   Guide (`ui/sprite.py`): design B of https://claude.ai/artifact/A8FNxjZPgBfCV3z3Tvod8G, the app icon's square with
   a white-line face (eyes look toward the target, blink, bob; faces idle / happy / listen / oops / proud / think,
   C's https://claude.ai/artifact/8sHxkNoyPRWTPMkgmaxQma), moving beside what to look at with its `Card` (繼續, or
-  what it waits for; ‹ 上一句 shows past lines; 跳過這步), placed clear of the target and the text being read.
-  Chapters are generators yielding what they wait for: 打開記事本, 開麥克風 (click → bubble → listening), 念一句
-  (draft), 定稿 (句號), 換行與復原, 選字 (planted 請幫我定一張車票, fixed candidates), 選取重講 (一張 → 兩張),
-  詞的字 (節日的節, the tutorial's own rule, no dictionary), 送出 (chat; the mic turns off), 關麥克風 (結束 or the
-  floating button). Independent of the core: its own microphone (`Ear`: level-based, a pause re-decodes the draft,
+  what it waits for; ‹ 上一句 shows past lines; 跳過這步), placed clear of the target and the text being read
+  (eyes and a slight lean toward the target from where it lands; no overshoot: it bumped the floating button). A
+  click that isn't what it waits for shakes the card and the guide and flashes the ring (`_nudge`, 2026-10-24).
+  Taskbar tray as the wallpaper artifact's (︿, app icon with tray.py's ring while listening, Wi-Fi, volume,
+  battery); floating button 24px in from the right like `floatbtn`.
+  Chapters are generators yielding what they wait for: 打開記事本, 開麥克風 (click → bubble → listening), 念三句
+  (2026-10-24, the user's design: a warm-up 今天天氣很好…; 爺爺的視力很好 settles it and is shown with a planted
+  勢力; 連對面的招牌都看得清楚 joins the same sentence, then 勢力 → 視力 with a red flash), 定稿 (句號), 換行與復原
+  (下一行: 換行 failed more often), 選字 (planted 請幫我定一張車票, fixed candidates), 選取重講 (一張 → 兩張, then
+  今天天氣很好， selected and 刪除), 節日的節 (named by its example: 詞的字 read abstract; only 節 is typed, never
+  the words said for it; the tutorial's own rule, no dictionary), 送出 (chat; the mic turns off), 關麥克風 (結束 or
+  the floating button: 正在聽… 或 [the button]; the last lines name a few more commands). Independent of the core: its own microphone (`Ear`: level-based, a pause re-decodes the draft,
   the end judges it) and matching; only decoding is lent (`SettingsWindow.tutorial_decode` = `App._tutorial_decode`:
   commands boosted first on a short piece, as `_command_first`). A reading under 80% alike (characters or toneless
   pinyin) stays typed and must be taken back with 復原 (nothing else goes on); after 3 misses, a closed mic or no

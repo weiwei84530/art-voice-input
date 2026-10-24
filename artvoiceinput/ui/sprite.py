@@ -6,7 +6,8 @@ import math
 import random
 import time
 
-from PySide6.QtCore import QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import (QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRectF, Qt, QTimer, QVariantAnimation,
+                            Signal)
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
@@ -30,12 +31,15 @@ class Sprite(QWidget):
         self.face = "idle"
         self._eye = QPointF(0, 0)        # where the eyes look, -1..1 each way
         self._eye_to = QPointF(0, 0)
+        self._tilt = 0.0                 # degrees, leaning toward what it looks at
+        self._tilt_to = 0.0
         self._blink_at = time.monotonic() + 2.5
         self._t0 = time.monotonic()
         self._jump = 0.0                 # px up
         self._shake = 0.0                # px sideways
         self._timer = QTimer(self, interval=1000 // 30, timeout=self._tick)
-        self._move = QPropertyAnimation(self, b"pos", self, duration=520, easingCurve=QEasingCurve.OutBack)
+        # no overshoot: OutBack ran it into the floating button and back (the user's report, 2026-10-24)
+        self._move = QPropertyAnimation(self, b"pos", self, duration=560, easingCurve=QEasingCurve.OutCubic)
         self._react = None
 
     # --- what it does ---
@@ -43,17 +47,21 @@ class Sprite(QWidget):
         self.face = face if face in FACES else "idle"
         self.update()
 
-    def look_at(self, pt: QPoint | None):
-        """Eyes toward pt (None: straight ahead)."""
+    def look_at(self, pt: QPoint | None, at: QPoint | None = None):
+        """Eyes toward pt (None: straight ahead) from where it is, or from `at` (its top left once it gets there:
+        while it moves, its geometry is still the old place's), leaning a little that way."""
         if pt is None:
             self._eye_to = QPointF(0, 0)
+            self._tilt_to = 0.0
         else:
-            c = self.geometry().center()
+            c = (at if at is not None else self.pos()) + QPoint(SIDE // 2, SIDE - ICON // 2 - 12)
             dx, dy = pt.x() - c.x(), pt.y() - c.y()
             d = max(1.0, math.hypot(dx, dy))
-            self._eye_to = QPointF(dx / d, dy / d * 0.7)
+            self._eye_to = QPointF(dx / d, dy / d)
+            self._tilt_to = max(-8.0, min(8.0, dx / 14))
         if calm():
             self._eye = QPointF(self._eye_to)
+            self._tilt = self._tilt_to
         self.update()
 
     def go(self, pos: QPoint):
@@ -84,20 +92,22 @@ class Sprite(QWidget):
     def _tick(self):
         now = time.monotonic()
         self._eye += (self._eye_to - self._eye) * 0.25
+        self._tilt += (self._tilt_to - self._tilt) * 0.15
         self._jump = self._shake = 0.0
         if self._react:
             kind, at = self._react
             t = now - at
             if kind == "jump" and t < 0.5:
                 self._jump = 14 * math.sin(t / 0.5 * math.pi)
-            elif kind == "shake" and t < 0.5:
-                self._shake = 4 * math.sin(t * 40) * (1 - t / 0.5)
+            elif kind == "shake" and t < 0.6:
+                self._shake = 5 * math.sin(t * 40) * (1 - t / 0.6)
             else:
                 self._react = None
         if now > self._blink_at + 0.14:
             self._blink_at = now + random.uniform(2.2, 4.8)
         if calm() and not self._react:
             self._eye = QPointF(self._eye_to)
+            self._tilt = self._tilt_to
         self.update()
 
     def paintEvent(self, _):
@@ -120,7 +130,9 @@ class Sprite(QWidget):
             grow = 4 + 10 * t
             p.drawRoundedRect(QRectF(x - grow, y - grow, ICON + 2 * grow, ICON + 2 * grow), 12 + grow, 12 + grow)
         p.save()
-        p.translate(x, y)
+        p.translate(x + ICON / 2, y + ICON)       # leaning on its bottom edge
+        p.rotate(self._tilt + self._shake * 2.5)  # a shake is a turn of the head too
+        p.translate(-ICON / 2, -ICON)
         appicon.tile(p, ICON)
         self._paint_face(p, now)
         p.restore()
@@ -136,7 +148,7 @@ class Sprite(QWidget):
 
     def _paint_face(self, p: QPainter, now: float):
         white = QColor("#ffffff")
-        ex, ey = self._eye.x() * 3.0, self._eye.y() * 2.0
+        ex, ey = self._eye.x() * 3.6, self._eye.y() * 2.6
         blink = self._blink_at <= now <= self._blink_at + 0.14
         pen = QPen(white, 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
         left, right, eye_y = 14 + ex, 26 + ex, 17 + ey
@@ -215,6 +227,22 @@ class Level(QWidget):
             p.drawRoundedRect(QRectF(i * 4.5, 14 - h, 3, h), 1.5, 1.5)
 
 
+class FloatMark(QWidget):
+    """The floating button drawn small (麥克風（原始）: a dark disc, the white microphone) for 正在聽… 或 [it]."""
+
+    def __init__(self):
+        super().__init__()
+        self.setFixedSize(20, 20)
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor("#2b2b2b"))
+        p.drawEllipse(QRectF(0.5, 0.5, 19, 19))
+        appicon.mic(p, 20, QColor("#ffffff"), 0, 0.2)
+
+
 class Card(QWidget):
     """What the guide says: its name, the line, a sentence to read (`quote`), what was heard (`heard`, rich text),
     and a row with ‹ 上一句 and either 繼續 or what it waits for (`status`), 跳過這步 when offered. A click on the card
@@ -263,27 +291,37 @@ class Card(QWidget):
         self.level = Level()
         self.status = QLabel()
         self.status.setFont(theme.font(12.5, 500))
+        self.alt = QLabel("或")                  # 正在聽… 或 [the floating button]: either does
+        self.alt.setFont(theme.font(12.5))
+        self.alt_mark = FloatMark()
         row.addWidget(self.dot)
         row.addWidget(self.level)
         row.addWidget(self.status)
+        row.addWidget(self.alt)
+        row.addWidget(self.alt_mark)
         self.next = button("繼續", self.next_clicked.emit, pri=True)
         self.next.setMinimumHeight(30)
         row.addWidget(self.next)
         v.addLayout(row)
+        self._shake = QVariantAnimation(self, duration=480, startValue=0.0, endValue=1.0)
+        self._shake.valueChanged.connect(self._shaking)
+        self._home = QPoint()
         self.restyle()
 
     def restyle(self):
         self.name.setStyleSheet(f"color: {T('acct').name()};")
         self.dot.setStyleSheet(f"color: {T('acc').name()};")
         self.status.setStyleSheet(f"color: {T('acct').name()};")
+        self.alt.setStyleSheet(f"color: {T('muted').name()};")
         self.quote.setStyleSheet(f"background: {T('acc', 0.08).name(QColor.HexArgb)}; border-radius: 8px;"
                                  f"padding: 8px 10px; color: {T('ink').name()};")
         self.heard.setStyleSheet(f"background: {T('tile2').name()}; border-radius: 8px; padding: 8px 10px;"
                                  f"color: {T('ink').name()};")
 
     def show_line(self, text: str, quote: str = "", heard: str = "", status: str = "", listening: bool = False,
-                  skip: bool = False, back: bool = True, next_text: str = "繼續"):
-        """status "" shows 繼續 (next_text); else what the guide waits for, with the level bars while listening."""
+                  skip: bool = False, back: bool = True, next_text: str = "繼續", alt: bool = False):
+        """status "" shows 繼續 (next_text); else what the guide waits for, with the level bars while listening and
+        或 [the floating button] after it with alt."""
         self.text.setText(text)
         self.quote.setText(quote)
         self.quote.setVisible(bool(quote))
@@ -294,11 +332,34 @@ class Card(QWidget):
         self.status.setVisible(waiting)
         self.dot.setVisible(waiting and not listening)
         self.level.setVisible(waiting and listening)
+        self.alt.setVisible(waiting and alt)
+        self.alt_mark.setVisible(waiting and alt)
         self.next.setVisible(not waiting)
         self.next.setText(next_text)
         self.skip.setVisible(skip)
         self.back.setVisible(back)
-        self.adjustSize()
+        # the height its lines need at this width: adjustSize kept the last line's when wrapped labels got shorter,
+        # spreading the room round 阿特 (the user's report, 2026-10-24)
+        self.layout().activate()
+        self.setFixedHeight(self.layout().heightForWidth(self.W))
+
+    def move_to(self, pos: QPoint):
+        self._shake.stop()
+        self._home = QPoint(pos)
+        self.move(pos)
+
+    def shake(self):
+        """Look here: a short shake from side to side (a click that wasn't what the guide asked for)."""
+        if calm():
+            return
+        self._shake.stop()
+        self._shake.start()
+
+    def _shaking(self, t):
+        self.move(self._home + QPoint(round(7 * math.sin(t * math.tau * 3) * (1 - t)), 0))
+
+    def mousePressEvent(self, e):
+        e.accept()   # not on to the desk, where it would be a stray click
 
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.LeftButton and self.next.isVisible():

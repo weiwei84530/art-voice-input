@@ -9,7 +9,11 @@ of what was said; only the decoding is handed out (`decode`: audio, the commands
 lends its recognizer, `App._tutorial_decode`). Nothing said here is kept: no 辨識紀錄, 選字記憶 or 詞庫.
 
 A reading less than 80% alike (characters or their sounds) is typed as heard and must be taken back with 復原
-before going on; after 3 misses 跳過這步 shows. Each chapter starts from a known scene (`_scene`), so a tutorial
+before going on; after 3 misses 跳過這步 shows. A click that isn't what the guide waits for shakes its card (`_nudge`).
+
+念三句 (the user's design, 2026-10-24): a warm-up sentence; a second that settles the first (its yellow goes) and is
+shown with a mishearing the tutorial plants (視力 as 勢力: the recognizer may well hear it right); a third that goes
+on the same sentence, after which the planted 勢力 turns into 視力 with a red flash, as a pause's re-decode does. Each chapter starts from a known scene (`_scene`), so a tutorial
 closed midway comes back at that chapter (`Config.tutorial_at`)."""
 import re
 import time
@@ -33,9 +37,15 @@ TOP = 36                     # the strip over the desk: progress, 略過教學, 
 ALIKE = 0.8                  # a reading this alike passes
 MISSES = 3                   # misses before 跳過這步 shows
 # the commands taught; all are tried first on a short utterance, as the app does
-COMMANDS = ["句號", "逗號", "問號", "換行", "復原", "送出", "結束", "刪除"]
-CHAPTERS = ["打開記事本", "開麥克風", "念一句", "定稿", "換行與復原", "選字", "選取重講", "詞的字", "送出", "關麥克風"]
+COMMANDS = ["句號", "逗號", "問號", "換行", "下一行", "復原", "送出", "結束", "刪除"]
+# 節日的節 names its chapter by its example ("詞的字" read abstract; the user's choice, 2026-10-24)
+CHAPTERS = ["打開記事本", "開麥克風", "念三句", "定稿", "換行與復原", "選字", "選取重講", "節日的節", "送出", "關麥克風"]
 FIRST = "今天天氣很好，我們去公園散步"
+SECOND = "爺爺的視力很好"
+MISHEARD = ("視力", "勢力")        # planted in SECOND until THIRD is said
+THIRD = "連對面的招牌都看得清楚"
+LINE1 = FIRST + "。" + SECOND + "，" + THIRD + "。"
+CUT = "今天天氣很好，"              # selected and deleted in 選取重講: the rest still reads well
 PLANTED = "請幫我定一張車票。"
 # the 選字 menu for 定 (同音 / 不同聲調 / 模糊音, as candidates.ranked gives them, fixed so it never depends on the
 # dictionary)
@@ -207,6 +217,7 @@ class Tutorial(QWidget):
         self.card.skip_clicked.connect(lambda: self._event("skip"))
         d = self.desk
         d.clicked_app.connect(lambda kind: self._event("app:" + kind))
+        d.stray.connect(lambda: self._event("stray"))
         d.notepad.edit.pressed.connect(lambda pt: self._pressed("notepad", pt))
         d.chat.edit.pressed.connect(lambda pt: self._pressed("chat", pt))
         d.notepad.edit.selected.connect(lambda: self._event("selected:notepad"))
@@ -274,6 +285,9 @@ class Tutorial(QWidget):
             if self.mic:
                 self._say_hint("浮動按鈕是用來關麥克風的，最後一章再練習。")
             return
+        if self._stray(name, want):
+            self._nudge()
+            return
         if want["kind"] == "next" and name == "next":
             self._resume(None)
         elif want["kind"] == "click" and name in want["what"]:
@@ -291,6 +305,27 @@ class Tutorial(QWidget):
         elif want["kind"] == "click" and name == "skip" and want.get("skip"):
             self._resume(("skip", None))
 
+    def _stray(self, name: str, want) -> bool:
+        """A click on the desk that isn't what the guide waits for (a press in a text box while a selection there is
+        awaited is the selection's start)."""
+        if want.get("keep") or self._review >= 0:
+            return False
+        if name == "stray":
+            return True
+        if not name.startswith(("text:", "app:", "bubble")):
+            return False
+        if want["kind"] != "click":
+            return True
+        what = want["what"]
+        return name not in what and "selected:" + name.partition(":")[2] not in what
+
+    def _nudge(self):
+        """Look at the card, it says what to do: the card and the guide shake, the ring flashes (the user's request,
+        2026-10-24, like the first prototype's)."""
+        self.card.shake()
+        self.sprite.shake()
+        self.desk.ring.flash()
+
     def _say_hint(self, text: str):
         self._hint = text
         self._render()
@@ -303,13 +338,14 @@ class Tutorial(QWidget):
         if i >= 1:
             d.notepad.show()
             d.running.add("notepad")
-        texts = {2: "", 3: FIRST, 4: FIRST + "。", 5: FIRST + "。\n", 6: FIRST + "。\n請幫我訂一張車票。",
-                 7: FIRST + "。\n請幫我訂兩張車票。", 8: FIRST + "。\n請幫我訂兩張車票。\n節",
-                 9: FIRST + "。\n請幫我訂兩張車票。\n節"}
+        rest = LINE1[len(CUT):]
+        texts = {2: "", 3: LINE1[:-1], 4: LINE1, 5: LINE1 + "\n", 6: LINE1 + "\n請幫我訂一張車票。",
+                 7: rest + "\n請幫我訂兩張車票。", 8: rest + "\n請幫我訂兩張車票。\n節",
+                 9: rest + "\n請幫我訂兩張車票。\n節"}
         if i in texts:
             e.set_text(texts[i])
             if i == 3:
-                e.draft = (0, len(FIRST))
+                e.draft = (len(FIRST) + 1, len(e.text))
         e.set_focus(2 <= i < 8)
         if i >= 9:
             d.chat.show()
@@ -387,21 +423,22 @@ class Tutorial(QWidget):
             card.show_line(self._lines[self._review], back=self._review > 0, next_text="回到現在")
         else:
             text = want.get("text", "")
-            status, listening, skip = want.get("status", ""), False, False
+            status, listening, skip, alt = want.get("status", ""), False, False, False
             quote, heard = want.get("quote", ""), ""
             if want["kind"] == "speech":
                 sp = self._sp
                 listening = True
                 status = "正在聽…"
+                alt = "float" in want.get("what", ())
                 if sp.miss:
                     heard = f'<span style="color:{T("muted").name()}">你剛剛說的是：</span><br>' \
                             + marked(sp.heard, want.get("quote") or "")
                     text = sp.miss_text
-                    status, listening = "說「復原」", False
+                    status, listening, alt = "說「復原」", False, False
                 if self.mic_error:
-                    status, listening = self.mic_error, False
+                    status, listening, alt = self.mic_error, False, False
                 elif sp.no_model:
-                    status, listening = "辨識模型還在準備", False
+                    status, listening, alt = "辨識模型還在準備", False, False
                 skip = sp.misses >= MISSES or bool(self.mic_error) or sp.no_model
             elif want["kind"] == "click":
                 skip = bool(want.get("skip"))
@@ -409,7 +446,7 @@ class Tutorial(QWidget):
                 text = self._hint
             card.show_line(text, quote=quote, heard=heard, status=status, listening=listening, skip=skip,
                            back=bool(self._lines) and len(self._lines) > 1,
-                           next_text=want.get("next_text", "繼續"))
+                           next_text=want.get("next_text", "繼續"), alt=alt)
             self.sprite.set_face(want.get("face") or ("listen" if want["kind"] == "speech" else "idle"))
         self._place(want.get("at"), want.get("ring"), want.get("avoid"))
 
@@ -426,6 +463,7 @@ class Tutorial(QWidget):
         at = at() if callable(at) else at
         ring = ring() if callable(ring) else ring
         avoid = avoid() if callable(avoid) else avoid
+        read = avoid
         if isinstance(ring, tuple):
             d.ring.point_at(ring[0], round_=ring[1])
         else:
@@ -453,6 +491,8 @@ class Tutorial(QWidget):
             spots = [QPoint(t.right() + 4, cy), QPoint(t.left() - SIDE - 4, cy),
                      QPoint(t.left(), t.bottom() + 4), QPoint(t.left(), t.top() - SIDE - 4),
                      QPoint(t.right() - SIDE - cw, t.bottom() + 4), QPoint(t.right() - SIDE - cw, t.top() - SIDE - 4)]
+            if read is not None:   # just under the text being read, near the target, before the far corner
+                spots += [QPoint(t.left(), read.bottom() + 8), QPoint(t.right() - SIDE - cw, read.bottom() + 8)]
         best = None
         for s in spots:
             for card_right in (True, False):
@@ -476,11 +516,11 @@ class Tutorial(QWidget):
         self.sprite.go(QPoint(sx, sy))
         self.card.side = "left" if card_right else "right"
         self.card.tail_y = sy + SIDE // 2 - 6 - cyy
-        self.card.move(cx, cyy)
+        self.card.move_to(QPoint(cx, cyy))
         self.card.show()
         self.card.update()
         self.sprite.show()
-        self.sprite.look_at(at.center() if at is not None else None)
+        self.sprite.look_at(at.center() if at is not None else None, QPoint(sx, sy))
 
     # --- what a chapter waits for ---
     def say(self, text: str, face: str = "idle", at=None, ring=None, next_text: str = "繼續", avoid=None):
@@ -498,19 +538,21 @@ class Tutorial(QWidget):
         QTimer.singleShot(ms, lambda: self._event("timer"))
         return (yield dict(kind="click", what={"timer"}, keep=True))
 
-    def listen(self, box, text: str, target: str = "", commands=(), char: str = "", what=(), ring=None):
-        """Speech into box: a reading of target, a command of commands, or a described character (char). Returns
-        ("ok", text), ("cmd", name), ("float", None) or ("skip", None)."""
+    def listen(self, box, text: str, target: str = "", commands=(), char: str = "", what=(), ring=None,
+               quote: str | None = None, join: bool = False, plant=None):
+        """Speech into box: a reading of target, a command of commands, or a described character (char). join: it
+        goes on the draft before it (one sentence, the draft's closing mark becomes ，); plant: (heard right, shown)
+        swapped in what is typed. Returns ("ok", text), ("cmd", name), ("float", None) or ("skip", None)."""
         self._lines.append(text)
-        self._sp = _Speech(box, target, set(commands), char)
-        return (yield dict(kind="speech", text=text, quote=target, at=lambda: _box_rect(self.desk, box),
-                           ring=ring, what=set(what)))
+        self._sp = _Speech(box, target, set(commands), char, join=join, plant=plant)
+        return (yield dict(kind="speech", text=text, quote=target if quote is None else quote,
+                           at=lambda: _box_rect(self.desk, box), ring=ring, what=set(what)))
 
     # --- what was said ---
     def _heard_pause(self, audio_):
         sp, want = self._sp, self._want
-        if not want or want["kind"] != "speech" or sp.miss or not (sp.target or sp.char) or self.decode is None:
-            return
+        if not want or want["kind"] != "speech" or sp.miss or not sp.target or self.decode is None:
+            return   # a described character shows only itself, never the words said for it (as the app does)
         token = self._token
         self.decode(audio_, [], lambda result: self._partial(token, result))
 
@@ -574,15 +616,16 @@ class Tutorial(QWidget):
         if sp.miss:
             self._say_hint("先說「復原」，把剛剛那句收回來。")
             return
-        sp.type(said)
         if sp.char:
             ch = described(said)
             if ch == sp.char:
                 sp.settle(ch)
                 self._resume(("ok", ch))
                 return
+            sp.type(said)
             self._miss()
             return
+        sp.type(said)
         if sp.target:
             draft = sp.draft_text()
             if alike(draft, sp.target) >= ALIKE:
@@ -633,13 +676,47 @@ class Tutorial(QWidget):
 
     def ch_read(self):
         e = self.desk.notepad.edit
-        result = yield from self.listen(e, "照著念這句話，念完停一下：", target=FIRST)
+        result = yield from self.listen(e, "先暖暖身：照著念這句話，念完停一下。", target=FIRST)
         if result[0] == "skip":
             self._sp.settle(FIRST, draft=True)
+        a, b = e.draft or (0, len(e.text))
+        e.replace(a, b, _END.sub("", e.text[a:b]) + "。", draft=True)   # the recognizer's 。 ends the draft
         self.sprite.bounce()
         yield from self.say("念好了！黃底的字叫「未定稿」，代表我還在聽，隨時可能修正。", "proud",
                             at=lambda: e.char_rect(*(e.draft or (0, 1))), avoid=e.used_rect)
-        yield from self.say("你每停頓一下，我會把整句再聽一次，聽錯的字常常會自己改好。")
+        result = yield from self.listen(e, "接著念第二句。念的時候看看上一句：黃底會消失，它定稿了。", target=SECOND,
+                                        plant=MISHEARD)
+        sp = self._sp
+        shown = SECOND.replace(*MISHEARD)
+        if result[0] == "skip":
+            sp.settle(shown + "。", draft=True)
+        else:   # as said, with the planted mishearing
+            e.replace(sp.own, sp.end, shown + "。", draft=True)
+
+        def wrong():
+            at = e.text.rfind(MISHEARD[1])
+            return e.char_rect(at, at + len(MISHEARD[1]))
+        yield from self.say("上一句定稿了。咦，「視力」被聽成了「勢力」？先別急著改，繼續念下一句。", "think", at=wrong,
+                            avoid=e.used_rect)
+        result = yield from self.listen(e, "念第三句：", target=THIRD, join=True)
+        if result[0] == "skip":
+            self._sp.settle(THIRD, draft=True)
+        yield from self.wait(450)
+        at = e.text.rfind(MISHEARD[1])
+        if at >= 0:
+            draft = e.draft
+            e.replace(at, at + len(MISHEARD[1]), MISHEARD[0])
+            e.caret = e.anchor = len(e.text)
+            e.draft = draft
+            e.flash_span(at, at + len(MISHEARD[0]))
+        self.sprite.bounce()
+
+        def fixed():
+            i = e.text.rfind(MISHEARD[0])
+            return e.char_rect(i, i + len(MISHEARD[0]))
+        yield from self.say("看！聽到後面的「看得清楚」，我把整句再聽一次，「勢力」就自己改成「視力」了。", "proud",
+                            at=fixed, avoid=e.used_rect)
+        yield from self.say("所以一句話還沒說完時，錯字先別急著改：說完、停頓一下，常常就對了。")
 
     def ch_commit(self):
         e = self.desk.notepad.edit
@@ -654,7 +731,7 @@ class Tutorial(QWidget):
 
     def ch_undo(self):
         e = self.desk.notepad.edit
-        result = yield from self.listen(e, "說「換行」，換到下一行。", commands=["換行"])
+        result = yield from self.listen(e, "說「下一行」，換到下一行。", commands=["下一行", "換行"])
         e.insert("\n")
         before = (e.text, e.caret)
         result = yield from self.listen(e, "再念一句：", target="記得帶雨傘")
@@ -711,18 +788,29 @@ class Tutorial(QWidget):
             self._sp.settle("兩張")
         e.commit()
         self.sprite.bounce()
-        yield from self.say("換好了！選取一段字再說話，就會整段取代；選起來說「刪除」，就能刪掉。", "happy")
+        yield from self.say("換好了！選取一段字再說話，就會整段取代。", "happy")
+
+        def cut_chosen(_name, _data):
+            return True if e.selected_text in (CUT, CUT[:-1]) else "選第一行開頭的「今天天氣很好，」就好。"
+        yield from self.click("selected:notepad", "不要的字也能用說的刪掉：選取第一行開頭的「今天天氣很好，」。",
+                              at=lambda: e.char_rect(0, len(CUT)), check=cut_chosen, status="等你選取",
+                              avoid=e.used_rect)
+        yield from self.listen(e, "選好了，說「刪除」。", commands=["刪除"])
+        a = e.text.find(CUT)    # with its comma (selected or not), so the line reads on; a click since then
+        e.replace(a, a + len(CUT), "")   # may have dropped the selection
+        self.sprite.bounce()
+        yield from self.say("刪掉了！剩下的句子一樣通順。", "happy", at=lambda: e.char_rect(0, 1), avoid=e.used_rect)
 
     def ch_described(self):
         e = self.desk.notepad.edit
         e.set_focus(True)
         e.replace(len(e.text), len(e.text), "\n")
         yield from self.say("有些字單獨念，很難聽出是哪一個，像是名字裡的字。", "think")
-        result = yield from self.listen(e, "這時候用「詞的字」說：念「節日的節」，就只會打出「節」。", char="節")
+        result = yield from self.listen(e, "這時候這樣說：先說一個詞，再說要的是哪個字。念：", char="節", quote="節日的節")
         if result[0] == "skip":
             self._sp.settle("節")
         self.sprite.bounce()
-        yield from self.say("只打出了「節」！說「詞的字」，就能指定是哪一個字。", "proud")
+        yield from self.say("只打出了「節」這一個字！說「節日的節」「顯示的示」，就能指定是哪個字。", "proud")
 
     def ch_send(self):
         d = self.desk
@@ -758,12 +846,13 @@ class Tutorial(QWidget):
                                   avoid=c.used_rect)
             self.set_mic(True)
             yield from self.wait(260)
-        result = yield from self.listen(c, "關麥克風有兩種方法：說「結束」，或點右邊的浮動按鈕。選一種試試：",
+        result = yield from self.listen(c, "關麥克風有兩種方法：說「結束」，或點右邊的浮動按鈕。選一種試試。",
                                         commands=["結束"], what=("float",), ring=lambda: (_orb_rect(d.float), True))
         self.set_mic(False)
         self.sprite.bounce()
         yield from self.say("關好了！另外，三分鐘沒說話，麥克風也會自己關掉。", "happy")
-        yield from self.say("能說的指令都在設定的「語音指令」頁，也可以自己新增。")
+        yield from self.say("能說的指令還有很多，像「全選」「複製」「貼上」「空白」「括號」；全部都在設定的"
+                            "「語音指令」頁，也可以自己新增。")
         yield from self.say("都學會了！之後在任何程式裡，點進輸入框、點小氣泡，就能開始說。", "proud",
                             next_text="開始使用")
 
@@ -802,23 +891,48 @@ class _Speech:
     """A step taking speech into a text box: where what is said goes (the draft, from `start`), what came before
     (for 復原), the misses."""
 
-    def __init__(self, box, target: str, commands: set, char: str):
+    def __init__(self, box, target: str, commands: set, char: str, join: bool = False, plant=None):
         self.box, self.target, self.commands, self.char = box, target, commands, char
+        self.plant = plant               # (heard right, shown): swapped in what is typed
         self.before = (box.text, box.anchor, box.caret, box.draft)   # 復原 puts this back
-        a, b = box.selection
-        self.start, self.end = a, b      # the draft so far: box.text[start:end] (a selection is replaced)
-        self.utt = a                     # where the utterance being said begins
-        self.typed = False
-        self.miss = False
+        # join: the draft before goes on with this speech, one sentence (its closing mark becomes ， when this is
+        # typed, as at a pause in the app)
+        self.join = box.draft[0] if join and box.draft else None
         self.misses = 0
         self.heard = ""
         self.miss_text = ""
         self.no_model = False
+        self._reset()
+
+    def _reset(self):
+        a, b = self.box.selection
+        self.start = self.join if self.join is not None else a   # the draft: box.text[start:end]
+        self.own = self.utt = a          # this step's speech: box.text[own:end]; the utterance said from utt
+        self.end = b                     # (a selection is replaced)
+        self.joined = False
+        self.typed = False
+        self.miss = False
+
+    def _join(self):
+        if self.join is None or self.joined:
+            return
+        box = self.box
+        head = box.text[self.start:self.own]
+        new = _END.sub("", head) + "，"
+        box.replace(self.start, self.own, new)
+        moved = len(new) - len(head)
+        self.own += moved
+        self.utt += moved
+        self.end += moved
+        self.joined = True
 
     def type(self, text: str):
         """The utterance being said reads text now (replacing its last decode); with text after it on the line
         (a selection replaced mid-sentence) without the recognizer's closing mark, as the app does."""
         box = self.box
+        if self.plant:
+            text = text.replace(*self.plant)
+        self._join()
         after = box.text[self.end:self.end + 1]
         if after and after != "\n":
             text = re.sub(r"[。，、！？；：.,!?;:]+$", "", text)
@@ -833,7 +947,8 @@ class _Speech:
         self.utt = self.end
 
     def draft_text(self) -> str:
-        return self.box.text[self.start:self.end]
+        """What this step heard (not the draft it joined)."""
+        return self.box.text[self.own:self.end]
 
     def undo(self):
         text, anchor, caret, draft = self.before
@@ -841,17 +956,19 @@ class _Speech:
         self.box.anchor, self.box.caret = anchor, caret
         self.box.draft = draft
         self.box.update()
-        a, b = self.box.selection
-        self.start = self.utt = a
-        self.end = b
-        self.typed = self.miss = False
+        misses = self.misses
+        self._reset()
+        self.misses = misses
 
     def settle(self, text: str, draft: bool = False):
         """Skipped or a described character: text in place of what was typed."""
         if self.typed or self.miss:
             self.undo()
-        self.box.replace(self.start, self.end, text, draft=draft)
-        self.end = self.start + len(text)
+        self._join()
+        self.box.replace(self.own, self.end, text, draft=draft)
+        self.end = self.own + len(text)
+        if draft:
+            self.box.draft = (self.start, self.end)
 
 
 def _box_rect(desk, box) -> QRect:

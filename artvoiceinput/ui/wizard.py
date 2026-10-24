@@ -14,7 +14,8 @@ from . import theme
 from .kit import Slides, T, button, crossfade, draw_icon, logo_renderer, prop
 from .page_mic import TEST_HEARD, LevelMeter
 
-CARD_W, CARD_H = 600, 560
+CARD_W, CARD_H = 600, 580
+BACK_X, BACK_Y = 6, 41         # ‹ in the left margin, on the title's line
 BUTTON_W, START_W = 168, 240   # 略過 / 跳過 / 下一步 and 開始教學, 40 high (2026-10-22, the user's request)
 SPEECH = 0.3           # a level this high is speech for 你剛剛說's cut
 QUIET_AFTER = 0.7      # seconds under SPEECH that end what was said
@@ -100,15 +101,15 @@ class OkDot(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setFixedSize(16, 16)
+        self.setFixedSize(18, 18)
 
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setPen(Qt.NoPen)
         p.setBrush(T("ins"))
-        p.drawEllipse(QRectF(0.5, 0.5, 15, 15))
-        _tick(p, QRectF(0, 0, 16, 16), QColor("#FFFFFF"), 1.8)
+        p.drawEllipse(QRectF(0.5, 0.5, 17, 17))
+        _tick(p, QRectF(0, 0.5, 18, 18), QColor("#FFFFFF"), 2.2)
 
 
 class TextLink(KeyFocus, QAbstractButton):
@@ -167,7 +168,7 @@ class BackButton(KeyFocus, QAbstractButton):
 class PackTile(KeyFocus, QAbstractButton):
     """A term pack to tick: its name and as many of its first terms as two lines hold (no count: the user's
     request, 2026-10-21)."""
-    W, H = 168, 78
+    W, H = 165, 78
 
     def __init__(self, pack):
         super().__init__()
@@ -362,7 +363,7 @@ class MicStep(QWidget):
         super().__init__()
         self.win = win
         v = QVBoxLayout(self)
-        v.setContentsMargins(60, 52, 60, 30)
+        v.setContentsMargins(60, 56, 60, 40)
         v.setSpacing(0)
         v.addWidget(Badge(), 0, Qt.AlignHCenter)   # 8px of its shadow's room under the icon
         v.addSpacing(6)
@@ -397,6 +398,9 @@ class MicStep(QWidget):
         v.addSpacing(8)
         self.said = _label("", 14, center=True)
         self.said.setWordWrap(True)
+        keep = self.said.sizePolicy()
+        keep.setRetainSizeWhenHidden(True)   # nothing above the button moves when 你剛剛說 shows
+        self.said.setSizePolicy(keep)
         v.addWidget(self.said)
         v.addStretch(1)
         self.next = button("略過", self.done.emit, wiz=True)   # 40 high by the style sheet (setFixedHeight lost to it)
@@ -515,7 +519,7 @@ class PackStep(QWidget):
         super().__init__()
         self.win = win
         v = QVBoxLayout(self)
-        v.setContentsMargins(40, 44, 40, 30)
+        v.setContentsMargins(44, 40, 44, 40)
         v.setSpacing(0)
         v.addWidget(_label("你平常會講到哪些領域的詞？", 24, 700))
         v.addSpacing(6)
@@ -536,7 +540,7 @@ class PackStep(QWidget):
         self.next = button("跳過", self.done.emit, wiz=True)
         self.next.setFixedWidth(BUTTON_W)
         v.addWidget(self.next, 0, Qt.AlignHCenter)
-        BackButton(self).move(16, 18)
+        BackButton(self).move(BACK_X, BACK_Y)
 
     def reset(self):
         for t in self.tiles:
@@ -562,7 +566,7 @@ class StyleStep(QWidget):
         super().__init__()
         self.win = win
         v = QVBoxLayout(self)
-        v.setContentsMargins(40, 40, 40, 16)
+        v.setContentsMargins(44, 36, 44, 28)
         v.setSpacing(0)
         v.addWidget(_label("你想怎麼開關麥克風？", 24, 700))
         v.addSpacing(6)
@@ -575,15 +579,16 @@ class StyleStep(QWidget):
             v.addWidget(o)
             v.addSpacing(6)
             self.options[key] = o
+        v.addSpacing(14)   # with the last option's 6: the button apart from the list
         v.addStretch(1)
         self.tutorial_button = button("開始教學", self.tutorial.emit, pri=True, wiz=True)
         self.tutorial_button.setFixedWidth(START_W)
         v.addWidget(self.tutorial_button, 0, Qt.AlignHCenter)
-        v.addSpacing(6)
+        v.addSpacing(8)
         skip = TextLink("跳過教學，直接開始使用")
         skip.clicked.connect(self.done.emit)
         v.addWidget(skip, 0, Qt.AlignHCenter)
-        BackButton(self).move(16, 18)
+        BackButton(self).move(BACK_X, BACK_Y - 4)
 
     def reset(self):
         self.pick("std")

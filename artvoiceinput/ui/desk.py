@@ -41,6 +41,7 @@ APP = {
                sel=QColor(76, 160, 255, 90), chat="#1e2227", them="#2c3138", me="#5A2A26"),
 }
 RED = ("#ff453a", "#ff6b5e", "#ff2d20")   # 錄音紅 (glow.STYLES "red")
+FLASH_S = 1.1               # a corrected span's red fading out
 
 
 def _dark() -> bool:
@@ -176,10 +177,12 @@ class FakeText(QWidget):
         self.text = ""
         self.caret = self.anchor = 0
         self.draft = None           # (start, end) marked yellow
+        self.flash = None           # (start, end, since): a corrected span, red fading out
         self.focused = False
         self._blink = True
         self._drag = False
         self._timer = QTimer(self, interval=530, timeout=self._tick)
+        self._flash_timer = QTimer(self, interval=33, timeout=self._flash_tick)
         self.setCursor(Qt.IBeamCursor)
         self.setFont(theme.font(15))
 
@@ -213,6 +216,20 @@ class FakeText(QWidget):
 
     def commit(self):
         self.draft = None
+        self.update()
+
+    def flash_span(self, a: int, b: int):
+        """text[a:b] was just corrected: red behind it, fading out in FLASH_S (none with 節流模式)."""
+        if calm():
+            return
+        self.flash = (a, b, time.monotonic())
+        self._flash_timer.start()
+        self.update()
+
+    def _flash_tick(self):
+        if self.flash is None or time.monotonic() - self.flash[2] > FLASH_S:
+            self.flash = None
+            self._flash_timer.stop()
         self.update()
 
     def set_focus(self, on: bool):
@@ -344,9 +361,15 @@ class FakeText(QWidget):
         p.setFont(self.font())
         boxes = self._layout()
         a, b = self.selection
+        flash = None
+        if self.flash:
+            k = 1 - (time.monotonic() - self.flash[2]) / FLASH_S
+            flash = QColor(255, 69, 58, round(115 * max(0.0, k)))
         for i, r in boxes:
             if self.draft and self.draft[0] <= i < self.draft[1] and self.text[i] != "\n":
                 p.fillRect(r.adjusted(0, 3, 0, -3), MARK)
+            if flash and self.flash[0] <= i < self.flash[1] and self.text[i] != "\n":
+                p.fillRect(r.adjusted(0, 3, 0, -3), flash)
             if a <= i < b and self.text[i] != "\n":
                 p.fillRect(r.adjusted(0, 3, 0, -3), c["sel"])
         p.setPen(QColor(c["ink"]))
@@ -370,6 +393,9 @@ class AppWindow(QWidget):
     def __init__(self, parent, title: str, kind: str):
         super().__init__(parent)
         self.title, self.kind = title, kind
+
+    def mousePressEvent(self, e):
+        self.parentWidget().stray.emit()
 
     def inner(self) -> QRect:
         s = self.SHADOW
@@ -598,6 +624,7 @@ class Ring(QWidget):
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.target = QRect()
         self._t0 = time.monotonic()
+        self._flash = 0.0           # when flash() was called
         self._timer = QTimer(self, interval=33, timeout=self.update)
         self.hide()
 
@@ -615,6 +642,12 @@ class Ring(QWidget):
             self._timer.start()
         self.update()
 
+    def flash(self):
+        """Here: filled for a moment (a click elsewhere)."""
+        if self.isVisible() and not calm():
+            self._flash = time.monotonic()
+            self.update()
+
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
@@ -627,6 +660,13 @@ class Ring(QWidget):
         pen.setDashPattern([4, 3])
         p.setPen(pen)
         p.setBrush(Qt.NoBrush)
+        k = 1 - (time.monotonic() - self._flash) / 0.8
+        if k > 0:   # three blinks fading out
+            fill = QColor(theme.ACCENT)
+            fill.setAlphaF(0.22 * k * (0.5 + 0.5 * math.cos(k * math.tau * 3)))
+            p.setBrush(fill)
+            pen.setStyle(Qt.SolidLine)
+            p.setPen(pen)
         if self.round:
             p.drawEllipse(r)
         else:
@@ -665,8 +705,10 @@ class DeskPicker(Picker):
 
 class Desk(QWidget):
     """The desktop: wallpaper, taskbar, the two apps (shown when opened), the bubble, the floating button, the glow.
-    `clicked_app` names a taskbar app clicked; the tutorial does the rest."""
+    `clicked_app` names a taskbar app clicked, `stray` a click on nothing to click (the wallpaper, a window's frame,
+    the rest of the taskbar); the tutorial does the rest."""
     clicked_app = Signal(str)
+    stray = Signal()
 
     def __init__(self, parent, theme_):
         super().__init__(parent)
@@ -697,7 +739,7 @@ class Desk(QWidget):
         self.chat.setGeometry(w - 420, 20, 350, 470)
         self.glow.setGeometry(0, 0, w, h)
         f = self.float
-        f.move(w - EDGE - 22 - f.margin, (h - BAR) // 2 - f.height() // 2)
+        f.move(w - EDGE - f.bsize - f.margin, (h - BAR) // 2 - f.height() // 2)   # where floatbtn puts it
 
     def taskbar_rect(self, kind: str) -> QRect:
         """The taskbar button of an app (notepad, chat)."""
@@ -795,35 +837,61 @@ class Desk(QWidget):
                 dash = 16 if kind == self.front() else 6
                 p.drawRoundedRect(QRectF(r.center().x() - dash / 2, r.bottom() - 4, dash, 3), 1.5, 1.5)
             paint_app_icon(p, kind, QRectF(r.center().x() - 11, r.center().y() - 12, 22, 22))
-        # the tray: Art VoiceInput's icon (a ring turning while listening), Wi-Fi, volume, the clock
+        # the tray as the wallpaper artifact draws it: ︿, Art VoiceInput's icon (while listening its microphone gives
+        # way to a ring turning, as in tray.py), Wi-Fi, volume, battery, the clock
+        y = top + BAR / 2
+        p.setPen(QPen(ink, 1.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.setBrush(Qt.NoBrush)
+        x = w - 208
+        p.drawPolyline([QPointF(x - 4, y + 2), QPointF(x, y - 2), QPointF(x + 4, y + 2)])
         r = QRectF(self.tray_rect())
         p.save()
         p.translate(r.topLeft())
-        appicon.paint(p, 18)
         if self.listening:
-            p.setPen(QPen(QColor("#ffffff"), 1.6, Qt.SolidLine, Qt.RoundCap))
-            turn = ((time.monotonic() - self._t0) % 1.2) / 1.2 * 360
-            p.drawArc(QRectF(3, 3, 12, 12), int(-turn * 16), 90 * 16)
+            appicon.tile(p, 18)
+            ring = QRectF(4, 4, 10, 10)
+            pen = QPen(QColor(255, 255, 255, 90), 2.0)
+            p.setPen(pen)
+            p.drawEllipse(ring)
+            pen.setColor(QColor("#ffffff"))
+            pen.setCapStyle(Qt.RoundCap)
+            p.setPen(pen)
+            turn = ((time.monotonic() - self._t0) % 1.2) / 1.2
+            p.drawArc(ring, round((90 - 360 * turn) * 16), -110 * 16)
+        else:
+            appicon.paint(p, 18)
         p.restore()
-        x = w - 160
+        x = w - 154   # Wi-Fi: two arcs over a dot
         p.setPen(QPen(ink, 1.5, Qt.SolidLine, Qt.RoundCap))
         p.setBrush(Qt.NoBrush)
-        y = top + BAR / 2
-        p.drawArc(QRectF(x - 6, y - 5, 12, 12), 45 * 16, 90 * 16)
-        p.drawArc(QRectF(x - 3, y - 1, 6, 6), 45 * 16, 90 * 16)
+        p.drawArc(QRectF(x - 7.5, y - 4.5, 15, 15), 47 * 16, 86 * 16)
+        p.drawArc(QRectF(x - 4.2, y - 1.2, 8.4, 8.4), 47 * 16, 86 * 16)
         p.setPen(Qt.NoPen)
         p.setBrush(ink)
-        poly = QPainterPath(QPointF(x + 18, y - 2))
-        for dx, dy in ((21, -2), (25, -6), (25, 6), (21, 2), (18, 2)):
-            poly.lineTo(x + dx, y + dy)
-        p.drawPath(poly)
+        p.drawEllipse(QPointF(x, y + 4), 1.4, 1.4)
+        x = w - 138   # volume: the speaker and one wave
+        speaker = QPainterPath(QPointF(x, y - 2.5))
+        for dx, dy in ((3, -2.5), (7, -6), (7, 7), (3, 3.5), (0, 3.5)):
+            speaker.lineTo(x + dx, y + dy)
+        speaker.closeSubpath()
+        p.drawPath(speaker)
+        p.setPen(QPen(ink, 1.4, Qt.SolidLine, Qt.RoundCap))
+        p.setBrush(Qt.NoBrush)
+        p.drawArc(QRectF(x + 5, y - 3, 7, 7), -60 * 16, 120 * 16)
+        x = w - 118   # battery
+        p.setPen(QPen(ink, 1.3))
+        p.drawRoundedRect(QRectF(x, y - 4.5, 16, 9), 2, 2)
+        p.setPen(Qt.NoPen)
+        p.setBrush(ink)
+        p.drawRoundedRect(QRectF(x + 2, y - 2.5, 10, 5), 1, 1)
+        p.drawRoundedRect(QRectF(x + 16.6, y - 1.5, 1.6, 3), 0.6, 0.6)
         p.setPen(QColor(c["text"]))
         p.setFont(theme.font(10.5))
         now = time.localtime()
         hour = now.tm_hour % 12 or 12
         clock = f"{'上午' if now.tm_hour < 12 else '下午'} {hour}:{now.tm_min:02d}"
-        p.drawText(QRectF(w - 110, top + 4, 100, 18), Qt.AlignCenter, clock)
-        p.drawText(QRectF(w - 110, top + 21, 100, 18), Qt.AlignCenter,
+        p.drawText(QRectF(w - 88, top + 5, 100, 18), Qt.AlignCenter, clock)
+        p.drawText(QRectF(w - 88, top + 21, 100, 18), Qt.AlignCenter,
                    f"{now.tm_year}/{now.tm_mon}/{now.tm_mday}")
 
     def front(self) -> str:
@@ -840,3 +908,4 @@ class Desk(QWidget):
             if self.taskbar_rect(kind).contains(pos):
                 self.clicked_app.emit(kind)
                 return
+        self.stray.emit()

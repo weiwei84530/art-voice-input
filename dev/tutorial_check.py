@@ -70,6 +70,7 @@ def main():
     miss = "--miss" in sys.argv
     steps = [
         (shot, "intro"), (nxt,), (shot, "intro2"), (nxt,), (shot, "ask-notepad"),
+        (lambda: click(d, QPoint(300, 200)),), ("wait", 250), (shot, "stray-click"),
         (lambda: click(d, d.taskbar_rect("notepad").center()),), (shot, "notepad-open"),
         (lambda: click(e, QPoint(200, 60)),), (shot, "bubble"),
         (lambda: orb(d.bubble),), (shot, "listening"), (nxt,), (shot, "listening2"), (nxt,), (shot, "read"),
@@ -81,9 +82,13 @@ def main():
                   (lambda: t.hear(("cmd", "復原")),), (shot, "undone")]
     steps += [
         (lambda: t._partial(t._token, ("text", "今天天氣很好")),), (shot, "partial"),
-        (lambda: t.hear(("text", "今天天氣很好，我們去公圓散步。")),), (shot, "read-ok"), (nxt,), (shot, "redecode-line"),
+        (lambda: t.hear(("text", "今天天氣很好，我們去公圓散步。")),), (shot, "read-ok"), (nxt,), (shot, "ask-second"),
+        (lambda: t._partial(t._token, ("text", "爺爺的視力")),), (shot, "second-partial"),
+        (lambda: t.hear(("text", "爺爺的視力很好。")),), (shot, "second"), (nxt,), (shot, "ask-third"),
+        (lambda: t.hear(("text", "連對面的招牌都看得清楚。")),), ("wait", 250), (shot, "third-flash"), ("wait", 900),
+        (shot, "fixed"), (nxt,), (shot, "fixed-why"),
         (nxt,), (shot, "ask-period"), (lambda: t.hear(("cmd", "句號")),), (shot, "committed"), (nxt,), (nxt,),
-        (shot, "ask-newline"), (lambda: t.hear(("cmd", "換行")),), (shot, "ask-umbrella"),
+        (shot, "ask-newline"), (lambda: t.hear(("cmd", "下一行")),), (shot, "ask-umbrella"),
         (lambda: t.hear(("text", "記得帶雨傘。")),), (shot, "umbrella"), (lambda: t.hear(("cmd", "復原")),),
         (shot, "undo-done"), (nxt,), (shot, "pick-intro"), (nxt,), ("wait", 1200), (shot, "planted"),
         (lambda: QTest.mouseDClick(e, Qt.LeftButton, Qt.NoModifier, char_pos(e, e.text.rfind("定"))),),
@@ -91,6 +96,8 @@ def main():
         (lambda: click(d.picker, d.picker._cells[1].center().toPoint()),), (shot, "picked"), (nxt,), (shot, "pick-memory"), (nxt,),
         (shot, "ask-select"), (lambda: select(e, e.text.rfind("一張"), e.text.rfind("一張") + 2),),
         (shot, "selected"), (lambda: t.hear(("text", "兩張。")),), (shot, "replaced"), (nxt,),
+        (shot, "ask-cut"), (lambda: select(e, 0, 7),), (shot, "cut-selected"), (lambda: t.hear(("cmd", "刪除")),),
+        (shot, "cut"), (nxt,),
         (shot, "described-intro"), (nxt,), (shot, "ask-described"), (lambda: t.hear(("text", "節日的節。")),),
         (shot, "described"), (nxt,), (shot, "send-intro"), (nxt,), ("wait", 700), (shot, "chat"),
         (lambda: t.hear(("text", "我等一下就到。")),), (shot, "chat-draft"), (lambda: t.hear(("cmd", "送出")),),
@@ -106,7 +113,7 @@ def main():
             app.quit()
             return
         step = steps[i]
-        delay = 450
+        delay = 800
         if step[0] == "wait":
             delay = step[1]
         elif len(step) == 2:
