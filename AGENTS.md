@@ -51,7 +51,8 @@ automatically; read it before reviving or redesigning something). Module docstri
   side by side. The home's brand block shows a white 開發版 pill after 版本 when not frozen.
 - Code, `.tools/`, `.venv/` stay in the app folder; user data in `paths.DATA_DIR` (`%LOCALAPPDATA%\<paths.ID>`):
   `config.json`, logs, lock, `models/`, `hotword-list.json`, `smart-picks.json`, `packs/`, `cache/`.
-  `paths.migrate_legacy()` moves old in-folder data. Autostart is re-registered each launch.
+  `paths.migrate_legacy()` moves old in-folder data. Autostart is re-registered each launch; it is on by default
+  for the installed build, off for a development copy (new or reset; the user's rule, 2026-10-24).
 - Installer (2026-10-24, layout B of https://claude.ai/artifact/8jvXUtkd9V8MU8ozxwRijy; our own Qt setup, not Inno
   Setup, so it looks like the app): `installer/build.py` builds the app with PyInstaller onedir (`installer/app.spec`;
   onefile unpacks at every launch, more antivirus false alarms), copies the X-ASR files and the VAD into its `models/`,
@@ -383,16 +384,17 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   Guide (`ui/sprite.py`): design B of https://claude.ai/artifact/A8FNxjZPgBfCV3z3Tvod8G, the app icon's square with
   a white-line face (eyes look toward the target, blink, bob; faces idle / happy / listen / oops / proud / think,
   C's https://claude.ai/artifact/8sHxkNoyPRWTPMkgmaxQma), moving beside what to look at with its `Card` (繼續, or
-  what it waits for; ‹ 上一句 shows past lines; 跳過這步), placed clear of the target and the text being read
+  what it waits for; ‹ 上一句 shows past lines on a grayer card; 跳過這步; named 小阿特, 2026-10-24), placed clear of the target and the text being read
   (eyes and a slight lean toward the target from where it lands; no overshoot: it bumped the floating button). A
   click that isn't what it waits for gives the red words (what it waits for) or 繼續 a small cute wiggle, nothing
   else (`_nudge`, 2026-10-24, the user's design; clicks on the bubble or floating button are not stray).
-  Taskbar tray as Windows 11 lays it out (︿, app icon with tray.py's ring while listening, 英, Wi-Fi, volume,
+  A miss: the orange box reads 復原, the gray one 要念的是 with what was left out in red; 收回來了 repeats the
+  step's line. Taskbar tray as Windows 11 lays it out (︿, app icon only for 簡約 (pinned) with tray.py's ring while listening, 英, Wi-Fi, volume,
   evenly spaced); floating button 24px in from the right like `floatbtn`. The guide's listening ripple leans with it.
   Chapters are generators yielding what they wait for: 打開記事本, 開麥克風 (click → bubble → listening), 念三句
   (2026-10-24, the user's design: a warm-up 今天天氣很好…; 爺爺的視力很好 settles it and is shown with a planted
   勢力; 連對面的招牌都看得清楚 joins the same sentence, then 勢力 → 視力 with a red flash), 定稿 (句號), 換行與復原
-  (下一行: 換行 failed more often), 選字 (planted 請幫我定一張車票, fixed candidates), 選取重講 (一張 → 兩張, the 選字 menu
+  (下一行: 換行 failed more often), 選字 (planted 請幫我定一張車票, fixed candidates; a wrong pick is put back to 定), 選取重講 (一張 → 兩張, the 選字 menu
   opening by itself over 一張 as in the app, the user told to let it be; then 今天天氣很好， selected and 刪除; a
   click dropping the selection before it is spoken over goes back to selecting it), 節日的節 (named by its example: 詞的字 read abstract; only 節 is typed, never
   the words said for it; the tutorial's own rule, no dictionary), 送出 (chat; the mic turns off), 關麥克風 (結束 or

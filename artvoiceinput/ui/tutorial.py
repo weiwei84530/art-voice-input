@@ -116,12 +116,13 @@ def described(said: str) -> str | None:
     return next((c for c in reversed(word) if lazy_pinyin(c)[0] == sound), None)
 
 
-def marked(said: str, want: str) -> str:
-    """said as rich text, what differs from want in red and underlined."""
+def missed(said: str, want: str) -> str:
+    """want as rich text, what said left out or said differently in red and underlined (what was said is in the
+    text box already; the card shows what it lacks, the user's design, 2026-10-24)."""
     out = []
-    for op, i1, i2, _j1, _j2 in SequenceMatcher(None, said, want).get_opcodes():
-        part = escape(said[i1:i2])
-        if op in ("replace", "insert") and _bare(said[i1:i2]):
+    for op, _i1, _i2, j1, j2 in SequenceMatcher(None, _bare(said), want).get_opcodes():
+        part = escape(want[j1:j2])
+        if op in ("replace", "insert") and _bare(want[j1:j2]):
             out.append(f'<span style="color:{T("acct").name()}; text-decoration: underline;">{part}</span>')
         else:
             out.append(part)
@@ -284,6 +285,7 @@ class Tutorial(QWidget):
         self.mic_error = ""
         self.replay = False
         self.mode = mode_of(win.cfg)      # std / simple / auto / minimal (wizard.PRESETS)
+        self.desk.tray_icon = self.mode == "minimal"   # pinned to the taskbar by that setup alone
         spec = win.cfg.hotkey if self.mode == "minimal" and win.cfg.hotkey else PRESETS["minimal"]["hotkey"]
         self.key_name = keys.hotkey_label(spec)
         self._key_vk = keys.parse_hotkey(spec)[2]
@@ -513,25 +515,26 @@ class Tutorial(QWidget):
             return
         card = self.card
         if self._review >= 0:
-            card.show_line(self._lines[self._review], back=self._review > 0, next_text="回到現在")
+            card.show_line(self._lines[self._review], back=self._review > 0, next_text="回到現在", history=True)
         else:
             text = want.get("text", "")
-            status, listening, skip, alt = want.get("status", ""), False, False, ""
+            status, listening, skip, alt = want.get("status", ""), False, False, ("", "")
             quote, heard = want.get("quote", ""), ""
             if want["kind"] == "speech":
                 sp = self._sp
                 listening = True
                 status = "正在聽…"
-                alt = want.get("alt", "")
-                if sp.miss:
-                    heard = f'<span style="color:{T("muted").name()}">你剛剛說的是：</span><br>' \
-                            + marked(sp.heard, want.get("quote") or "")
-                    text = sp.miss_text
-                    status, listening, alt = "說「復原」", False, ""
+                alt = want.get("alt", ("", ""))
+                if sp.miss:   # the orange box: what to say now; the gray one: what to read, what was missed in red
+                    asked = want.get("quote") or "、".join(f"「{c}」" for c in sorted(sp.commands))
+                    heard = f'<span style="color:{T("muted").name()}">要念的是：</span><br>' + \
+                        (missed(sp.heard, asked) if want.get("quote") else escape(asked))
+                    text, quote = sp.miss_text, "復原"
+                    status, listening, alt = "說「復原」", False, ("", "")
                 if self.mic_error:
-                    status, listening, alt = self.mic_error, False, ""
+                    status, listening, alt = self.mic_error, False, ("", "")
                 elif sp.no_model:
-                    status, listening, alt = "辨識模型還在準備", False, ""
+                    status, listening, alt = "辨識模型還在準備", False, ("", "")
                 skip = sp.misses >= MISSES or bool(self.mic_error) or sp.no_model
             elif want["kind"] == "click":
                 skip = bool(want.get("skip"))
@@ -632,11 +635,11 @@ class Tutorial(QWidget):
         return (yield dict(kind="click", what={"timer"}, keep=True))
 
     def listen(self, box, text: str, target: str = "", commands=(), char: str = "", what=(), ring=None,
-               quote: str | None = None, join: bool = False, plant=None, alt: str = "", sel=()):
+               quote: str | None = None, join: bool = False, plant=None, alt=("", ""), sel=()):
         """Speech into box: a reading of target, a command of commands, or a described character (char). join: it
         goes on the draft before it (one sentence, the draft's closing mark becomes ，); plant: (heard right, shown)
-        swapped in what is typed; what: clicks or keys that also do (shown after 正在聽… as alt: "float" the
-        button drawn, else words); sel: the selections it needs (a click losing it returns ("lost", None), what
+        swapped in what is typed; what: clicks or keys that also do (shown after 正在聽… as alt, Card.show_line's);
+        sel: the selections it needs (a click losing it returns ("lost", None), what
         was typed taken back). Returns ("ok", text), ("cmd", name), (one of what, None) or ("skip", None)."""
         self._lines.append(text)
         self._sp = _Speech(box, target, set(commands), char, join=join, plant=plant)
@@ -698,7 +701,7 @@ class Tutorial(QWidget):
                     self._resume(("cmd", said))
                     return
                 sp.undo()
-                self._hint = "收回來了，再試一次。"
+                self._hint = "收回來了。" + want["text"]   # what to say again with it
                 self._render()
                 self.sprite.bounce()
                 return
@@ -753,7 +756,7 @@ class Tutorial(QWidget):
     # --- chapters ---
     def ch_open(self):
         d = self.desk
-        yield from self.say("嗨，我是阿特！接下來大約三分鐘，我陪你練習用說的打字。", "happy")
+        yield from self.say("嗨，我是小阿特！接下來大約三分鐘，我陪你練習用說的打字。", "happy")
         yield from self.say("這是練習用的桌面，怎麼點、怎麼說，都不會動到你的電腦。")
         yield from self.click("app:notepad", "先打開記事本：點一下工作列上的記事本。",
                               at=lambda: d.taskbar_rect("notepad"), status="等你點記事本")
@@ -843,7 +846,12 @@ class Tutorial(QWidget):
 
     def ch_commit(self):
         e = self.desk.notepad.edit
-        result = yield from self.listen(e, "說「句號」，這句就定稿了：黃底消失，句尾加上「。」", commands=["句號"])
+        a, b = e.draft or (len(e.text), len(e.text))
+        if _END.search(e.text[a:b]):   # the recognizer's 。 shows already: why 句號 still
+            ask = "句尾的「。」是我先猜的，黃底代表還沒定稿。說「句號」，這句就定稿了：黃底消失。"
+        else:
+            ask = "說「句號」，這句就定稿了：黃底消失，句尾加上「。」"
+        result = yield from self.listen(e, ask, commands=["句號"])
         a, b = e.draft or (len(e.text), len(e.text))
         body = _END.sub("", e.text[a:b])
         e.replace(a, b, body + "。")
@@ -890,8 +898,9 @@ class Tutorial(QWidget):
                 e.replace(at, at + 1, word)
                 if word == "訂":
                     break
-                yield from self.say(f"換成「{word}」了，但不是這個喔。再選一次，挑「訂」。", "oops",
+                yield from self.say(f"換成「{word}」了，但不是這個喔。我先改回「定」，你再選一次，挑「訂」。", "oops",
                                     at=lambda: e.char_rect(at, at + 1), avoid=e.used_rect)
+                e.replace(at, at + 1, "定")   # selecting it again needs 定 back (the user's report, 2026-10-24)
         self.sprite.bounce()
         yield from self.say("對了！選字選單會照讀音分頁：同音、不同聲調、模糊音。", "proud",
                             at=lambda: e.char_rect(at, at + 1), avoid=e.used_rect)
@@ -923,8 +932,8 @@ class Tutorial(QWidget):
         yield from self.say("換好了！選取一段字再說話，就會整段取代。", "happy")
 
         def cut_chosen(_name, _data):
-            return True if e.selected_text in (CUT, CUT[:-1]) else "選第一行開頭的「今天天氣很好」就好。"
-        ask = "不要的字也能用說的刪掉：選取第一行開頭的「今天天氣很好」。"
+            return True if e.selected_text in (CUT, CUT[:-1]) else f"選第一行開頭的「{CUT}」就好。"
+        ask = f"不要的字也能用說的刪掉：選取第一行開頭的「{CUT}」。"
         while True:
             yield from self.click("selected:notepad", ask, at=lambda: e.char_rect(0, len(CUT)), check=cut_chosen,
                                   status="等你選取", avoid=e.used_rect)
@@ -932,7 +941,7 @@ class Tutorial(QWidget):
             if result[0] != "lost":
                 break
             self._lost()
-            ask = "選取不見了，再選一次「今天天氣很好」。"
+            ask = f"選取不見了，再選一次「{CUT}」。"
         a = e.text.find(CUT[:-1])
         b = a + len(CUT) - 1
         if e.text[b:b + 1] in ("，", ","):   # its comma too, selected or not, so the line reads on
@@ -1004,18 +1013,18 @@ class Tutorial(QWidget):
         if mode == "std":
             yield from self.listen(c, "關麥克風有兩種方法：說「結束」，或點右邊的浮動按鈕。選一種試試。",
                                    commands=["結束"], what=("float",), ring=lambda: (_orb_rect(d.float), True),
-                                   alt="float")
+                                   alt=("", "float"))
         elif mode == "simple":
             yield from self.listen(c, "關麥克風有兩種方法：說「結束」，或再點一次浮動按鈕。選一種試試。",
                                    commands=["結束"], what=("float",), ring=lambda: (_orb_rect(d.float), True),
-                                   alt="float")
+                                   alt=("", "float"))
         elif mode == "auto":
             yield from self.listen(c, "關麥克風有兩種方法：說「結束」，或點一下輸入框外面，像是桌面。選一種試試。",
-                                   commands=["結束"], what=("stray",), alt="點外面")
+                                   commands=["結束"], what=("stray",), alt=("點外面", ""))
         else:
             yield from self.listen(c, f"關麥克風有兩種方法：說「結束」，或再按一次{key}（點工作列的阿特圖示也行）。"
                                    "選一種試試。", commands=["結束"], what=("alt", "tray"),
-                                   ring=lambda: d.tray_rect().adjusted(-3, -3, 3, 3), alt=f"按{key}、點圖示")
+                                   ring=lambda: d.tray_rect().adjusted(-3, -3, 3, 3), alt=(f"按{key}、", "app"))
         self.set_mic(False)
         if mode == "auto":
             c.set_focus(False)

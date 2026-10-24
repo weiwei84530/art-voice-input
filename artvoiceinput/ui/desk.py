@@ -703,6 +703,7 @@ class Desk(QWidget):
         self._t0 = time.monotonic()
         self._timer = QTimer(self, interval=1000 // 24, timeout=self._frame)
         self.listening = False
+        self.tray_icon = True      # Art VoiceInput's icon on the taskbar (pinned: 簡約), else under ︿
         self.running = set()       # the apps open, marked on the taskbar
         self.notepad = Notepad(self)
         self.chat = Chat(self)
@@ -749,7 +750,7 @@ class Desk(QWidget):
         if calm():
             self._timer.stop()
         self.update(QRect(0, 0, self.width(), self.height() - BAR))
-        if self.listening:   # the tray icon's ring turns (the taskbar is not repainted otherwise)
+        if self.listening and self.tray_icon:   # the tray icon's ring turns (the taskbar isn't repainted otherwise)
             self.update(self.tray_rect())
 
     def open_app(self, w: AppWindow, kind: str):
@@ -833,10 +834,12 @@ class Desk(QWidget):
         cx = lambda i: w - TRAY_RIGHT - TRAY_STEP * (4 - i)   # noqa: E731  the centre of item i
         p.setPen(QPen(ink, 1.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
         p.setBrush(Qt.NoBrush)
-        x = cx(0)
+        x = cx(0) if self.tray_icon else cx(1)
         p.drawPolyline([QPointF(x - 4, y + 2), QPointF(x, y - 2), QPointF(x + 4, y + 2)])
         r = QRectF(self.tray_rect())
         p.save()
+        if not self.tray_icon:
+            p.setClipRect(QRectF())   # hidden under ︿, as Windows keeps an icon not pinned
         p.translate(r.topLeft() + QPointF(1, 1))
         if self.listening:
             appicon.tile(p, 18)
@@ -897,7 +900,7 @@ class Desk(QWidget):
             if self.taskbar_rect(kind).contains(pos):
                 self.clicked_app.emit(kind)
                 return
-        if self.tray_rect().adjusted(-4, -8, 4, 8).contains(pos):
+        if self.tray_icon and self.tray_rect().adjusted(-4, -8, 4, 8).contains(pos):
             self.clicked_app.emit("tray")
             return
         self.stray.emit()

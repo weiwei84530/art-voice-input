@@ -243,6 +243,20 @@ class FloatMark(QWidget):
         appicon.mic(p, 20, QColor("#ffffff"), 0, 0.2)
 
 
+class AppMark(QWidget):
+    """The app icon drawn small, for 正在聽… 或按右 Alt、[it] (簡約: the tray icon)."""
+
+    def __init__(self):
+        super().__init__()
+        self.setFixedSize(20, 20)
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.translate(1, 1)
+        appicon.paint(p, 18)
+
+
 class Card(QWidget):
     """What the guide says: its name, the line, a sentence to read (`quote`), what was heard (`heard`, rich text),
     and a row with ‹ 上一句 and either 繼續 or what it waits for (`status`), 跳過這步 when offered. A click on the card
@@ -260,7 +274,7 @@ class Card(QWidget):
         v = QVBoxLayout(self)
         v.setContentsMargins(16 + self.TAIL, 12, 16 + self.TAIL, 12)
         v.setSpacing(6)
-        self.name = QLabel("阿特")
+        self.name = QLabel("小阿特")   # the guide's name (阿特 is the app's; the user's choice, 2026-10-24)
         self.name.setFont(theme.font(12, 700))
         v.addWidget(self.name)
         self.text = QLabel()
@@ -298,7 +312,9 @@ class Card(QWidget):
         self.alt = QLabel("或")                  # 正在聽… 或 [the floating button] / 或 <another way>: either does
         self.alt.setFont(theme.font(12.5))
         self.alt_mark = FloatMark()
-        for widget in (self.dot, self.level, self.status, self.alt, self.alt_mark):
+        self.app_mark = AppMark()
+        self.history = False                     # a past line shown (‹ 上一句): grayer
+        for widget in (self.dot, self.level, self.status, self.alt, self.alt_mark, self.app_mark):
             w.addWidget(widget)
         row.addWidget(self.waiting)
         self.next = button("繼續", self.next_clicked.emit, pri=True)
@@ -322,9 +338,11 @@ class Card(QWidget):
                                  f"color: {T('ink').name()};")
 
     def show_line(self, text: str, quote: str = "", heard: str = "", status: str = "", listening: bool = False,
-                  skip: bool = False, back: bool = True, next_text: str = "繼續", alt: str = ""):
+                  skip: bool = False, back: bool = True, next_text: str = "繼續", alt=("", ""),
+                  history: bool = False):
         """status "" shows 繼續 (next_text); else what the guide waits for, with the level bars while listening and
-        the other way after it: alt "float" 或 [the floating button], other text 或 <alt>."""
+        the other way after it: alt (words, mark), mark "float" (the floating button), "app" (the app icon) or "",
+        shown in gray as 或<words>[mark]. history: a past line, the card grayer."""
         self.text.setText(text)
         self.quote.setText(quote)
         self.quote.setVisible(bool(quote))
@@ -337,9 +355,14 @@ class Card(QWidget):
         self.waiting.setVisible(waiting)
         self.dot.setVisible(not listening)
         self.level.setVisible(listening)
-        self.alt.setText("或" if alt == "float" else f"或{alt}")
-        self.alt.setVisible(bool(alt))
-        self.alt_mark.setVisible(alt == "float")
+        words, mark = alt
+        self.alt.setText("或" + words)
+        self.alt.setVisible(bool(words or mark))
+        self.alt_mark.setVisible(mark == "float")
+        self.app_mark.setVisible(mark == "app")
+        self.history = history
+        self.text.setStyleSheet(f"color: {T('muted' if history else 'ink').name()};")
+        self.update()
         self.next.setVisible(not waiting)
         self.next.setText(next_text)
         self.skip.setVisible(skip)
@@ -397,6 +420,6 @@ class Card(QWidget):
             tail.lineTo(body.right() + self.TAIL - 1, ty)
             tail.lineTo(body.right() - 1, ty + 8)
         tail.closeSubpath()
-        p.fillPath(path.united(tail), T("tile"))
+        p.fillPath(path.united(tail), T("tile2") if self.history else T("tile"))
 
     tail_y = 28

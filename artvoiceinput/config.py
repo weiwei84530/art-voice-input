@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass, field
 
 from . import rules
 from .rules import VERSION as RULES_VERSION
-from .paths import CONFIG_PATH
+from .paths import CONFIG_PATH, FROZEN
 
 
 # launched with --debug (2026-10-17, the user's request): the 開發測試 settings are shown and work; a release is
@@ -23,7 +23,8 @@ class Config:
     # the settings window's and the 選字 menu's colors (2026-10-18, the redesign): light, dark or system (Windows'
     # app mode)
     theme: str = "system"
-    autostart: bool = True
+    # on for the installed build; off for a development copy, new or reset (the user's rule, 2026-10-24)
+    autostart: bool = bool(FROZEN)
     # the tray icon on the taskbar itself, not in the ^ overflow (2026-10-21, the user's request; off by default)
     tray_pinned: bool = False
     # what a left click on the tray icon does (2026-10-21, the user's request): "settings" opens the settings window,
