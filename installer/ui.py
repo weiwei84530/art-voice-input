@@ -19,7 +19,7 @@ from artvoiceinput.ui import theme
 from . import ops
 
 T = theme.LIGHT
-W, H = 520, 400   # 360 left the button no room once the status had its own line
+W, H = 576, 400   # the design's 520x360 proportions (13:9), taller so the status has its own line
 
 
 def _qss() -> str:
@@ -171,7 +171,7 @@ class Window(QWidget):
         self.close_button.clicked.connect(self.close)
 
         v = QVBoxLayout(self)
-        v.setContentsMargins(40, 34, 40, 28)
+        v.setContentsMargins(40, 50, 40, 28)   # the logo nearer the middle (34 read high)
         v.setSpacing(0)
         v.addWidget(Icon(), 0, Qt.AlignHCenter)
         v.addSpacing(18)
