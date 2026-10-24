@@ -179,6 +179,8 @@ class SettingsWindow(Shell):
 
     def _wizard_tutorial(self):
         self.data_changed()
+        if wizard_theme():   # the Debug card's 進入設定精靈: its tutorial in that theme too (the user's request)
+            self.theme.set_mode(wizard_theme())
         self.start_tutorial(0, replay=self.cfg.setup_done)   # run again: closing it just ends it
 
     # --- the tutorial ---

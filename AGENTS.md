@@ -373,7 +373,7 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   (`mode_of`) preselected, nothing cleared, the app resting while it shows (`setting_up`); finishing applies the
   setup whole (a value another setup set goes back to its default, one the user chose stays); closed midway nothing
   changes but the microphone picked. 系統's Debug card has 進入設定精靈 (2026-10-24: 清空並重新設定 at once, no
-  question; the restarted app's wizard alone in the theme shown before, `window.WIZARD_THEME`, the setting reset).
+  question; the restarted app's wizard and the tutorial it starts in the theme shown before, `window.WIZARD_THEME`, the setting reset).
 - **Tutorial** (`ui/tutorial.py`, 2026-10-24, the user's design; it teaches the setup in use, `wizard.mode_of`:
   標準 bubble, 簡單 the floating button always there, 自動 a click in turns it on and a click outside off, 簡約 no
   glow, only 右 Alt (the hotkey; hotkey.py's 0xE8 ignored) or the tray icon, both named in the red words; only 標準's 送出 turns the mic off): over the window after the wizard's 開始教學 (the setup applied, `setup_done` still false,
