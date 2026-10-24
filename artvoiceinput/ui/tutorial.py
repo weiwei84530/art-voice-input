@@ -359,6 +359,8 @@ class Tutorial(QWidget):
                 self._say_hint(ok)
         elif want["kind"] == "speech":
             if name == "skip":
+                if self._sp.miss:
+                    self._sp.undo()   # what was misheard goes first (a command step leaves it otherwise)
                 self._resume(("skip", None))
             elif name in want.get("what", ()):
                 self._resume((name, None))
@@ -526,7 +528,7 @@ class Tutorial(QWidget):
                     status, listening, alt = self.mic_error, False, ("", "")
                 elif sp.no_model:
                     status, listening, alt = "辨識模型還在準備", False, ("", "")
-                skip = sp.misses >= MISSES or bool(self.mic_error) or sp.no_model
+                skip = sp.misses >= MISSES or sp.stuck >= MISSES or bool(self.mic_error) or sp.no_model
             elif want["kind"] == "click":
                 skip = bool(want.get("skip"))
                 alt = want.get("alt", ("", ""))
@@ -718,7 +720,7 @@ class Tutorial(QWidget):
                 self.sprite.bounce()
                 return
             if sp.miss:
-                self._say_hint("先說「復原」，把剛剛那句收回來。")
+                self._stuck()
             elif said in sp.commands:
                 self._resume(("cmd", said))
             else:
@@ -728,7 +730,7 @@ class Tutorial(QWidget):
             return
         self.desk.picker.dismiss()
         if sp.miss:
-            self._say_hint("先說「復原」，把剛剛那句收回來。")
+            self._stuck()
             return
         if sp.char:
             ch = described(said)
@@ -754,6 +756,12 @@ class Tutorial(QWidget):
                 sp.go_on()   # half way: the rest comes next
                 return
         self._miss()
+
+    def _stuck(self):
+        """Something other than 復原 said after a miss: after MISSES of them 跳過這步 shows too (the user's request)."""
+        sp = self._sp
+        sp.stuck += 1
+        self._say_hint("先說「復原」，把剛剛那句收回來。" if sp.stuck < MISSES else "先說「復原」把剛剛那句收回來，或先跳過這步。")
 
     def _miss(self):
         sp = self._sp
@@ -1099,6 +1107,7 @@ class _Speech:
         # typed, as at a pause in the app)
         self.join = box.draft[0] if join and box.draft else None
         self.misses = 0
+        self.stuck = 0                   # said other than 復原 while a miss waits for it
         self.heard = ""
         self.miss_text = ""
         self.no_model = False

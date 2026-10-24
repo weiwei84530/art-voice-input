@@ -90,6 +90,8 @@ def main():
         steps += [(lambda: t.hear(("cmd", "結束")),), (shot, "stray-command"),
                   (lambda: t.hear(("text", "今天天氣很好，我們去公司上班。")),), (shot, "miss"),
                   (lambda: t.hear(("text", "隨便說說")),), (shot, "miss-text-again"),
+                  (lambda: t.hear(("cmd", "句號")),), (lambda: t.hear(("text", "還是不對")),),
+                  (shot, "miss-stuck-skip"),
                   (lambda: t.hear(("cmd", "復原")),), (shot, "undone")]
     steps += [
         (lambda: t._partial(t._token, ("text", "今天天氣很好")),), (shot, "partial"),
