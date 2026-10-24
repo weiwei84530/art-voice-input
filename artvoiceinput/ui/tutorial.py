@@ -521,7 +521,7 @@ class Tutorial(QWidget):
                     heard = f'<span style="color:{T("muted").name()}">要念的是：</span><br>' + \
                         (missed(sp.heard, asked) if want.get("quote") else escape(asked))
                     text, quote = sp.miss_text, ""
-                    status, listening, alt = "說「復原」", False, ("", "")
+                    status, listening, alt = "正在聽…", True, ("", "")   # as every command step (the user's request)
                 if self.mic_error:
                     status, listening, alt = self.mic_error, False, ("", "")
                 elif sp.no_model:
