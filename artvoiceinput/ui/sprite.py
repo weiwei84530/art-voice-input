@@ -99,8 +99,8 @@ class Sprite(QWidget):
             t = now - at
             if kind == "jump" and t < 0.5:
                 self._jump = 14 * math.sin(t / 0.5 * math.pi)
-            elif kind == "shake" and t < 0.6:
-                self._shake = 5 * math.sin(t * 40) * (1 - t / 0.6)
+            elif kind == "shake" and t < 0.5:
+                self._shake = 2.5 * math.sin(t * 34) * (1 - t / 0.5)
             else:
                 self._react = None
         if now > self._blink_at + 0.14:
@@ -131,7 +131,7 @@ class Sprite(QWidget):
             p.drawRoundedRect(QRectF(x - grow, y - grow, ICON + 2 * grow, ICON + 2 * grow), 12 + grow, 12 + grow)
         p.save()
         p.translate(x + ICON / 2, y + ICON)       # leaning on its bottom edge
-        p.rotate(self._tilt + self._shake * 2.5)  # a shake is a turn of the head too
+        p.rotate(self._tilt + self._shake * 1.6)  # a shake is a turn of the head too
         p.translate(-ICON / 2, -ICON)
         appicon.tile(p, ICON)
         self._paint_face(p, now)
@@ -286,26 +286,29 @@ class Card(QWidget):
         self.skip = TextLink("跳過這步")
         self.skip.clicked.connect(self.skip_clicked.emit)
         row.addWidget(self.skip)
+        self.waiting = QWidget()                 # what the guide waits for: the dot or the level, the red words
+        w = QHBoxLayout(self.waiting)
+        w.setContentsMargins(0, 0, 0, 0)
+        w.setSpacing(6)
         self.dot = QLabel("●")
         self.dot.setFont(theme.font(10))
         self.level = Level()
         self.status = QLabel()
         self.status.setFont(theme.font(12.5, 500))
-        self.alt = QLabel("或")                  # 正在聽… 或 [the floating button]: either does
+        self.alt = QLabel("或")                  # 正在聽… 或 [the floating button] / 或 <another way>: either does
         self.alt.setFont(theme.font(12.5))
         self.alt_mark = FloatMark()
-        row.addWidget(self.dot)
-        row.addWidget(self.level)
-        row.addWidget(self.status)
-        row.addWidget(self.alt)
-        row.addWidget(self.alt_mark)
+        for widget in (self.dot, self.level, self.status, self.alt, self.alt_mark):
+            w.addWidget(widget)
+        row.addWidget(self.waiting)
         self.next = button("繼續", self.next_clicked.emit, pri=True)
         self.next.setMinimumHeight(30)
         row.addWidget(self.next)
         v.addLayout(row)
-        self._shake = QVariantAnimation(self, duration=480, startValue=0.0, endValue=1.0)
-        self._shake.valueChanged.connect(self._shaking)
-        self._home = QPoint()
+        self._wiggle = QVariantAnimation(self, duration=520, startValue=0.0, endValue=1.0)
+        self._wiggle.valueChanged.connect(self._wiggling)
+        self._wiggle.finished.connect(lambda: self._wiggled and self._wiggled[0].move(self._wiggled[1]))
+        self._wiggled = None    # (the widget, where the layout put it)
         self.restyle()
 
     def restyle(self):
@@ -319,9 +322,9 @@ class Card(QWidget):
                                  f"color: {T('ink').name()};")
 
     def show_line(self, text: str, quote: str = "", heard: str = "", status: str = "", listening: bool = False,
-                  skip: bool = False, back: bool = True, next_text: str = "繼續", alt: bool = False):
+                  skip: bool = False, back: bool = True, next_text: str = "繼續", alt: str = ""):
         """status "" shows 繼續 (next_text); else what the guide waits for, with the level bars while listening and
-        或 [the floating button] after it with alt."""
+        the other way after it: alt "float" 或 [the floating button], other text 或 <alt>."""
         self.text.setText(text)
         self.quote.setText(quote)
         self.quote.setVisible(bool(quote))
@@ -329,11 +332,14 @@ class Card(QWidget):
         self.heard.setVisible(bool(heard))
         self.status.setText(status)
         waiting = bool(status)
-        self.status.setVisible(waiting)
-        self.dot.setVisible(waiting and not listening)
-        self.level.setVisible(waiting and listening)
-        self.alt.setVisible(waiting and alt)
-        self.alt_mark.setVisible(waiting and alt)
+        self._wiggle.stop()
+        self._wiggled = None
+        self.waiting.setVisible(waiting)
+        self.dot.setVisible(not listening)
+        self.level.setVisible(listening)
+        self.alt.setText("或" if alt == "float" else f"或{alt}")
+        self.alt.setVisible(bool(alt))
+        self.alt_mark.setVisible(alt == "float")
         self.next.setVisible(not waiting)
         self.next.setText(next_text)
         self.skip.setVisible(skip)
@@ -343,20 +349,24 @@ class Card(QWidget):
         self.layout().activate()
         self.setFixedHeight(self.layout().heightForWidth(self.W))
 
-    def move_to(self, pos: QPoint):
-        self._shake.stop()
-        self._home = QPoint(pos)
-        self.move(pos)
-
-    def shake(self):
-        """Look here: a short shake from side to side (a click that wasn't what the guide asked for)."""
+    def nudge(self):
+        """A click that wasn't what the guide asked for: what it waits for (the red words) or 繼續 gives a little
+        wiggle and hop (the user's request, 2026-10-24: only that, cute, not the card)."""
         if calm():
             return
-        self._shake.stop()
-        self._shake.start()
+        target = self.waiting if self.waiting.isVisible() else self.next
+        if not target.isVisible():
+            return
+        if self._wiggled is None or self._wiggled[0] is not target:
+            self._wiggled = (target, target.pos())
+        self._wiggle.stop()
+        self._wiggle.start()
 
-    def _shaking(self, t):
-        self.move(self._home + QPoint(round(7 * math.sin(t * math.tau * 3) * (1 - t)), 0))
+    def _wiggling(self, t):
+        if self._wiggled:
+            target, home = self._wiggled
+            target.move(home + QPoint(round(3 * math.sin(t * math.tau * 2.5) * (1 - t)),
+                                      round(-2.5 * math.sin(t * math.pi))))
 
     def mousePressEvent(self, e):
         e.accept()   # not on to the desk, where it would be a stray click

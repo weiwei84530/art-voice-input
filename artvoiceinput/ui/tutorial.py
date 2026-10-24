@@ -1,15 +1,19 @@
 """The tutorial (2026-10-24, the user's design; AGENTS.md "Tutorial"): over the settings window after the setup
 wizard's 開始教學, or from 系統's 重看教學. A pretend Windows 11 desktop (`desk.Desk`) and a guide (`sprite`) that talks
 in a card the user clicks on, like a visual novel, and waits where the user has to click something or read a
-sentence aloud. The 標準 setup's way of working: a click into a text box, the bubble, the floating button kept on
-screen while listening, the draft marked yellow, commands said alone, the 選字 menu, 送出 turning the microphone off.
+sentence aloud. It teaches the way of working of the setup in use (`wizard.mode_of`, 2026-10-24): 標準 a click into a
+text box and the bubble, the floating button while listening, 送出 turning the microphone off; 簡單 the floating
+button always there, on and off; 自動 a click into a text box turns it on, a click outside off; 簡約 nothing on screen,
+the hotkey (右 Alt) or the tray icon. The rest is the same for all: the draft marked yellow, commands said alone, the
+選字 menu.
 
 It works without the app's core: its own microphone (`Ear`, a level probe like the wizard's) and its own matching
 of what was said; only the decoding is handed out (`decode`: audio, the commands to try first, a callback; the app
 lends its recognizer, `App._tutorial_decode`). Nothing said here is kept: no 辨識紀錄, 選字記憶 or 詞庫.
 
 A reading less than 80% alike (characters or their sounds) is typed as heard and must be taken back with 復原
-before going on; after 3 misses 跳過這步 shows. A click that isn't what the guide waits for shakes its card (`_nudge`).
+before going on; after 3 misses 跳過這步 shows. A click that isn't what the guide waits for gives what it waits for
+(the red words) or 繼續 a little wiggle (`_nudge`).
 
 念三句 (the user's design, 2026-10-24): a warm-up sentence; a second that settles the first (its yellow goes) and is
 shown with a mishearing the tutorial plants (視力 as 勢力: the recognizer may well hear it right); a third that goes
@@ -25,17 +29,21 @@ from PySide6.QtCore import QObject, QPoint, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QWidget
 
-from .. import appicon, audio
+from .. import appicon, audio, keys
 from . import theme
 from .desk import BAR, AppWindow, Desk
 from .kit import T, crossfade
 from .sprite import SIDE, Card, Sprite
-from .wizard import TextLink
+from .wizard import PRESETS, TextLink, mode_of
 
 _SAME = object()             # click(): the ring round what `at` gives
 TOP = 36                     # the strip over the desk: progress, 略過教學, the window's buttons
 ALIKE = 0.8                  # a reading this alike passes
 MISSES = 3                   # misses before 跳過這步 shows
+OFF = {"float", "alt", "tray"}   # what turns the microphone off in the last chapter (and on, by the setup)
+_ALT_VKS = (0x12, 0xA4, 0xA5)
+_MASK = 0xE8                     # hotkey.py sends it before an Alt alone is let go (no menu): not another key
+_COUNT = {1: "一", 2: "兩", 3: "三", 4: "四", 5: "五", 10: "十"}
 # the commands taught; all are tried first on a short utterance, as the app does
 COMMANDS = ["句號", "逗號", "問號", "換行", "下一行", "復原", "送出", "結束", "刪除"]
 # 節日的節 names its chapter by its example ("詞的字" read abstract; the user's choice, 2026-10-24)
@@ -216,7 +224,7 @@ class Tutorial(QWidget):
         self.card.back_clicked.connect(self._back)
         self.card.skip_clicked.connect(lambda: self._event("skip"))
         d = self.desk
-        d.clicked_app.connect(lambda kind: self._event("app:" + kind))
+        d.clicked_app.connect(lambda kind: self._event(kind if kind == "tray" else "app:" + kind))
         d.stray.connect(lambda: self._event("stray"))
         d.notepad.edit.pressed.connect(lambda pt: self._pressed("notepad", pt))
         d.chat.edit.pressed.connect(lambda pt: self._pressed("chat", pt))
@@ -232,6 +240,12 @@ class Tutorial(QWidget):
         self.mic = False
         self.mic_error = ""
         self.replay = False
+        self.mode = mode_of(win.cfg)      # std / simple / auto / minimal (wizard.PRESETS)
+        spec = win.cfg.hotkey if self.mode == "minimal" and win.cfg.hotkey else PRESETS["minimal"]["hotkey"]
+        self.key_name = keys.hotkey_label(spec)
+        self._key_vk = keys.parse_hotkey(spec)[2]
+        self._key_alone = False           # the hotkey went down with nothing else pressed since
+        self.setFocusPolicy(Qt.StrongFocus)
         self._gen = None
         self._want = None
         self._chapter = 0
@@ -245,6 +259,7 @@ class Tutorial(QWidget):
     # --- running ---
     def start(self, chapter: int = 0, replay: bool = False):
         self.replay = replay
+        self.setFocus()
         self._chapter = max(0, min(chapter, len(CHAPTERS) - 1))
         self._scene(self._chapter)
         self._lines, self._review = [], -1
@@ -281,9 +296,11 @@ class Tutorial(QWidget):
             self._review = -1
             self._render()
             return
-        if name == "float" and "float" not in want.get("what", ()):
+        if name in OFF and name not in want.get("what", ()):
             if self.mic:
-                self._say_hint("浮動按鈕是用來關麥克風的，最後一章再練習。")
+                self._say_hint("關麥克風最後一章再練習，先照我說的做。")
+            elif name != "float":
+                self._nudge()
             return
         if self._stray(name, want):
             self._nudge()
@@ -300,15 +317,15 @@ class Tutorial(QWidget):
         elif want["kind"] == "speech":
             if name == "skip":
                 self._resume(("skip", None))
-            elif name == "float" and "float" in want.get("what", ()):
-                self._resume(("float", None))
+            elif name in want.get("what", ()):
+                self._resume((name, None))
         elif want["kind"] == "click" and name == "skip" and want.get("skip"):
             self._resume(("skip", None))
 
     def _stray(self, name: str, want) -> bool:
         """A click on the desk that isn't what the guide waits for (a press in a text box while a selection there is
         awaited is the selection's start)."""
-        if want.get("keep") or self._review >= 0:
+        if want.get("keep") or self._review >= 0 or name in want.get("what", ()):
             return False
         if name == "stray":
             return True
@@ -320,11 +337,27 @@ class Tutorial(QWidget):
         return name not in what and "selected:" + name.partition(":")[2] not in what
 
     def _nudge(self):
-        """Look at the card, it says what to do: the card and the guide shake, the ring flashes (the user's request,
-        2026-10-24, like the first prototype's)."""
-        self.card.shake()
-        self.sprite.shake()
-        self.desk.ring.flash()
+        """The card says what to do: what it waits for (the red words) or 繼續 wiggles (the user's design,
+        2026-10-24; the whole card and the guide shaking was too much)."""
+        self.card.nudge()
+
+    def keyPressEvent(self, e):
+        if e.nativeVirtualKey() == _MASK:
+            return
+        self._key_alone = not e.isAutoRepeat() and self._is_hotkey(e)
+
+    def keyReleaseEvent(self, e):
+        if e.nativeVirtualKey() == _MASK:
+            return
+        if self._key_alone and not e.isAutoRepeat() and self._is_hotkey(e):
+            self._event("alt")
+        self._key_alone = False
+
+    def _is_hotkey(self, e) -> bool:
+        """The 簡約 setup's key (a modifier alone, as the app takes it; 右 Alt by default)."""
+        if self._key_vk in _ALT_VKS:
+            return e.key() in (Qt.Key_Alt, Qt.Key_AltGr)
+        return self._key_vk is not None and e.nativeVirtualKey() == self._key_vk
 
     def _say_hint(self, text: str):
         self._hint = text
@@ -353,7 +386,9 @@ class Tutorial(QWidget):
             d.running.add("chat")
             d.chat.say(True, "我等一下就到。")
             d.chat.say(False, "好，等你喔！")
-        self.set_mic(2 <= i < 9)
+        if self.mode == "simple" and not d.float.isVisible():
+            d.float.fade_in(220)
+        self.set_mic(2 <= i < 9 or (i == 9 and self.mode != "std"))
         self._place(None)
 
     # --- the microphone, the glow, the floating button ---
@@ -363,13 +398,16 @@ class Tutorial(QWidget):
             return
         self.mic = on
         d.listening = on
-        d.glow.turn(on)
+        if self.mode != "minimal":   # 簡約: no glow, the tray icon alone
+            d.glow.turn(on)
         if on:
             if d.bubble.isVisible():
                 d.bubble.burst()
-            d.float.set_active(True)
-            d.float.fade_in(220)
-            d.float.raise_()
+            if self.mode in ("std", "simple"):
+                d.float.set_active(True)
+                if not d.float.isVisible():
+                    d.float.fade_in(220)
+                d.float.raise_()
             self.mic_error = ""
             try:
                 self.ear.start(self.win.cfg.mic)
@@ -378,7 +416,8 @@ class Tutorial(QWidget):
                 self.mic_error = "麥克風打不開"
         else:
             self.ear.stop()
-            d.float.fade_out(220)
+            if self.mode == "std":
+                d.float.fade_out(220)
             d.float.set_active(False)
         self._token += 1
         d.update()
@@ -407,11 +446,15 @@ class Tutorial(QWidget):
         self.card.raise_()
         d.picker.dismiss()
         if not self.mic and self._chapter >= 1:
-            QTimer.singleShot(120, lambda: self.show_bubble(pt))
+            if self.mode == "std":
+                QTimer.singleShot(120, lambda: self.show_bubble(pt))
+            elif self.mode == "auto":   # 自動: a click into a text box turns listening on
+                self.set_mic(True)
         self._event("text:" + which, pt)
 
     def mousePressEvent(self, e):
         self.desk.picker.dismiss()
+        self.setFocus()
 
     # --- the guide ---
     def _render(self):
@@ -423,22 +466,22 @@ class Tutorial(QWidget):
             card.show_line(self._lines[self._review], back=self._review > 0, next_text="回到現在")
         else:
             text = want.get("text", "")
-            status, listening, skip, alt = want.get("status", ""), False, False, False
+            status, listening, skip, alt = want.get("status", ""), False, False, ""
             quote, heard = want.get("quote", ""), ""
             if want["kind"] == "speech":
                 sp = self._sp
                 listening = True
                 status = "正在聽…"
-                alt = "float" in want.get("what", ())
+                alt = want.get("alt", "")
                 if sp.miss:
                     heard = f'<span style="color:{T("muted").name()}">你剛剛說的是：</span><br>' \
                             + marked(sp.heard, want.get("quote") or "")
                     text = sp.miss_text
-                    status, listening, alt = "說「復原」", False, False
+                    status, listening, alt = "說「復原」", False, ""
                 if self.mic_error:
-                    status, listening, alt = self.mic_error, False, False
+                    status, listening, alt = self.mic_error, False, ""
                 elif sp.no_model:
-                    status, listening, alt = "辨識模型還在準備", False, False
+                    status, listening, alt = "辨識模型還在準備", False, ""
                 skip = sp.misses >= MISSES or bool(self.mic_error) or sp.no_model
             elif want["kind"] == "click":
                 skip = bool(want.get("skip"))
@@ -516,7 +559,7 @@ class Tutorial(QWidget):
         self.sprite.go(QPoint(sx, sy))
         self.card.side = "left" if card_right else "right"
         self.card.tail_y = sy + SIDE // 2 - 6 - cyy
-        self.card.move_to(QPoint(cx, cyy))
+        self.card.move(cx, cyy)
         self.card.show()
         self.card.update()
         self.sprite.show()
@@ -539,14 +582,15 @@ class Tutorial(QWidget):
         return (yield dict(kind="click", what={"timer"}, keep=True))
 
     def listen(self, box, text: str, target: str = "", commands=(), char: str = "", what=(), ring=None,
-               quote: str | None = None, join: bool = False, plant=None):
+               quote: str | None = None, join: bool = False, plant=None, alt: str = ""):
         """Speech into box: a reading of target, a command of commands, or a described character (char). join: it
         goes on the draft before it (one sentence, the draft's closing mark becomes ，); plant: (heard right, shown)
-        swapped in what is typed. Returns ("ok", text), ("cmd", name), ("float", None) or ("skip", None)."""
+        swapped in what is typed; what: clicks or keys that also do (shown after 正在聽… as alt: "float" the
+        button drawn, else words). Returns ("ok", text), ("cmd", name), (one of what, None) or ("skip", None)."""
         self._lines.append(text)
         self._sp = _Speech(box, target, set(commands), char, join=join, plant=plant)
         return (yield dict(kind="speech", text=text, quote=target if quote is None else quote,
-                           at=lambda: _box_rect(self.desk, box), ring=ring, what=set(what)))
+                           at=lambda: _box_rect(self.desk, box), ring=ring, what=set(what), alt=alt))
 
     # --- what was said ---
     def _heard_pause(self, audio_):
@@ -661,18 +705,40 @@ class Tutorial(QWidget):
     def ch_mic(self):
         d = self.desk
         e = d.notepad.edit
+        mode, key = self.mode, self.key_name
         yield from self.click("text:notepad", "點一下記事本的空白處，就像平常要打字那樣。",
                               at=lambda: d.notepad.geometry(), ring=lambda: _box_rect(d, e), status="等你點記事本")
-        yield from self.wait(200)
-        yield from self.click("bubble", "旁邊冒出一顆小氣泡。點它，麥克風就會打開。",
-                              at=lambda: _orb_rect(d.bubble), ring=lambda: (_orb_rect(d.bubble), True),
-                              status="等你點氣泡", avoid=e.used_rect)
-        self.set_mic(True)
+        if mode == "std":
+            yield from self.wait(200)
+            yield from self.click("bubble", "旁邊冒出一顆小氣泡。點它，麥克風就會打開。",
+                                  at=lambda: _orb_rect(d.bubble), ring=lambda: (_orb_rect(d.bubble), True),
+                                  status="等你點氣泡", avoid=e.used_rect)
+        elif mode == "simple":
+            yield from self.click("float", "右邊這顆是浮動按鈕，一直都在。點它，麥克風就會打開。",
+                                  at=lambda: _orb_rect(d.float), ring=lambda: (_orb_rect(d.float), True),
+                                  status="等你點浮動按鈕")
+        elif mode == "minimal":
+            yield from self.click(("alt", "tray"), f"按一下鍵盤上的{key}，或點工作列上的阿特圖示，麥克風就會打開。",
+                                  at=lambda: d.tray_rect(), ring=lambda: d.tray_rect().adjusted(-3, -3, 3, 3),
+                                  status=f"等你按{key}")
+        self.set_mic(True)   # 自動: on already, by the click
         yield from self.wait(260)
         self.sprite.bounce()
-        yield from self.say("麥克風打開了！畫面邊緣亮起紅光，右邊這顆是浮動按鈕。", "happy",
-                            at=lambda: _orb_rect(d.float))
-        yield from self.say("在其他程式裡也一樣：點進輸入框，再點小氣泡，就能開始說話。")
+        if mode == "std":
+            yield from self.say("麥克風打開了！畫面邊緣亮起紅光，右邊這顆是浮動按鈕。", "happy",
+                                at=lambda: _orb_rect(d.float))
+            yield from self.say("在其他程式裡也一樣：點進輸入框，再點小氣泡，就能開始說話。")
+        elif mode == "simple":
+            yield from self.say("麥克風打開了！畫面邊緣亮起紅光，浮動按鈕縮小、轉得更快，表示我正在聽。", "happy",
+                                at=lambda: _orb_rect(d.float))
+            yield from self.say("在其他程式裡也一樣：點進輸入框，再點浮動按鈕，就能開始說話。")
+        elif mode == "auto":
+            yield from self.say("麥克風自己打開了！點進輸入框就會開始聽，畫面邊緣的紅光表示我正在聽。", "happy")
+            yield from self.say("在其他程式裡也一樣：點進輸入框，就能直接說話。")
+        else:
+            yield from self.say("麥克風打開了！簡約模式畫面上什麼都不會多，只有工作列的阿特圖示會轉圈。", "happy",
+                                at=lambda: d.tray_rect())
+            yield from self.say(f"在其他程式裡也一樣：點進輸入框，按{key}，就能開始說話。")
 
     def ch_read(self):
         e = self.desk.notepad.edit
@@ -828,16 +894,19 @@ class Tutorial(QWidget):
         text = _END.sub("", c.text) + "。"
         c.set_text("")
         d.chat.say(True, text)
-        self.set_mic(False)
+        if self.mode == "std":   # 送出 turns it off in 標準 alone (stop_on_enter)
+            self.set_mic(False)
         yield from self.wait(900)
         d.chat.say(False, "好，等你喔！")
         self.sprite.bounce()
-        yield from self.say("傳出去了！送出之後，麥克風也自動關掉了。", "proud", at=lambda: d.chat.geometry())
+        yield from self.say("傳出去了！送出之後，麥克風也自動關掉了。" if self.mode == "std" else
+                            "傳出去了！送出之後麥克風還開著，可以接著說。", "proud", at=lambda: d.chat.geometry())
 
     def ch_off(self):
         d = self.desk
         c = d.chat.edit
-        if not self.mic:
+        mode, key = self.mode, self.key_name
+        if not self.mic:   # 標準: 送出 turned it off
             yield from self.click("text:chat", "要再說話：點一下輸入框，再點小氣泡。", at=lambda: _box_rect(d, c),
                                   status="等你點輸入框")
             yield from self.wait(200)
@@ -846,15 +915,36 @@ class Tutorial(QWidget):
                                   avoid=c.used_rect)
             self.set_mic(True)
             yield from self.wait(260)
-        result = yield from self.listen(c, "關麥克風有兩種方法：說「結束」，或點右邊的浮動按鈕。選一種試試。",
-                                        commands=["結束"], what=("float",), ring=lambda: (_orb_rect(d.float), True))
+        if mode == "std":
+            yield from self.listen(c, "關麥克風有兩種方法：說「結束」，或點右邊的浮動按鈕。選一種試試。",
+                                   commands=["結束"], what=("float",), ring=lambda: (_orb_rect(d.float), True),
+                                   alt="float")
+        elif mode == "simple":
+            yield from self.listen(c, "關麥克風有兩種方法：說「結束」，或再點一次浮動按鈕。選一種試試。",
+                                   commands=["結束"], what=("float",), ring=lambda: (_orb_rect(d.float), True),
+                                   alt="float")
+        elif mode == "auto":
+            yield from self.listen(c, "關麥克風有兩種方法：說「結束」，或點一下輸入框外面，像是桌面。選一種試試。",
+                                   commands=["結束"], what=("stray",), alt="點外面")
+        else:
+            yield from self.listen(c, f"關麥克風有兩種方法：說「結束」，或再按一次{key}（點工作列的阿特圖示也行）。"
+                                   "選一種試試。", commands=["結束"], what=("alt", "tray"),
+                                   ring=lambda: d.tray_rect().adjusted(-3, -3, 3, 3), alt=f"按{key}")
         self.set_mic(False)
+        if mode == "auto":
+            c.set_focus(False)
         self.sprite.bounce()
-        yield from self.say("關好了！另外，三分鐘沒說話，麥克風也會自己關掉。", "happy")
+        minutes = PRESETS[mode]["auto_off_minutes"]
+        if mode == "auto":
+            yield from self.say("關好了！離開輸入框，麥克風就會自己關掉；點回輸入框，又會打開。", "happy")
+        else:
+            yield from self.say(f"關好了！另外，{_COUNT.get(minutes, minutes)}分鐘沒說話，麥克風也會自己關掉。",
+                                "happy")
         yield from self.say("能說的指令還有很多，像「全選」「複製」「貼上」「空白」「括號」；全部都在設定的"
                             "「語音指令」頁，也可以自己新增。")
-        yield from self.say("都學會了！之後在任何程式裡，點進輸入框、點小氣泡，就能開始說。", "proud",
-                            next_text="開始使用")
+        how = {"std": "點進輸入框、點小氣泡，就能開始說", "simple": "點進輸入框、點浮動按鈕，就能開始說",
+               "auto": "點進輸入框，就能直接說", "minimal": f"點進輸入框、按{key}，就能開始說"}[mode]
+        yield from self.say(f"都學會了！之後在任何程式裡，{how}。", "proud", next_text="開始使用")
 
     # --- ending ---
     def _ask_skip(self):

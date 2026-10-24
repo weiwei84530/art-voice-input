@@ -2,9 +2,10 @@
 the user would (QTest on the pretend desk) and speaking with Tutorial.hear (no microphone, no recognizer), and saves
 a screenshot after each step.
 
-    .venv/Scripts/python dev/tutorial_check.py OUT_DIR [--dark] [--miss]
+    .venv/Scripts/python dev/tutorial_check.py OUT_DIR [--dark] [--miss] [--mode std|simple|auto|minimal]
 
---miss reads the first sentence wrong first (復原 needed), and says one stray command.
+--miss reads the first sentence wrong first (復原 needed), and says one stray command. --mode applies that starting
+setup (wizard.PRESETS) first, so the tutorial teaches it (標準 by default).
 """
 import sys
 from pathlib import Path
@@ -20,6 +21,7 @@ from artvoiceinput import config  # noqa: E402
 from artvoiceinput.hotwords import Hotwords  # noqa: E402
 from artvoiceinput.memory import Memory  # noqa: E402
 from artvoiceinput.ui.window import SettingsWindow  # noqa: E402
+from artvoiceinput.ui.wizard import PRESETS  # noqa: E402
 
 
 def main():
@@ -33,6 +35,9 @@ def main():
     sys.excepthook = fail
     cfg = config.Config.load()
     cfg.theme = "dark" if "--dark" in sys.argv else "light"
+    mode = sys.argv[sys.argv.index("--mode") + 1] if "--mode" in sys.argv else "std"
+    for k, v in PRESETS[mode].items():
+        setattr(cfg, k, v)
     win = SettingsWindow(cfg, Hotwords(sp.TMP / "hotword-list.json"), Memory(sp.TMP / "smart-picks.json"))
     win.load_values()
     win.show()
@@ -54,6 +59,10 @@ def main():
     def click(widget, pos):
         QTest.mouseClick(widget, Qt.LeftButton, Qt.NoModifier, pos)
 
+    def key():
+        QTest.keyPress(t, Qt.Key_Alt)
+        QTest.keyRelease(t, Qt.Key_Alt)
+
     def orb(o):
         click(o, QPoint(o.width() // 2, o.height() // 2))
 
@@ -72,9 +81,11 @@ def main():
         (shot, "intro"), (nxt,), (shot, "intro2"), (nxt,), (shot, "ask-notepad"),
         (lambda: click(d, QPoint(300, 200)),), ("wait", 250), (shot, "stray-click"),
         (lambda: click(d, d.taskbar_rect("notepad").center()),), (shot, "notepad-open"),
-        (lambda: click(e, QPoint(200, 60)),), (shot, "bubble"),
-        (lambda: orb(d.bubble),), (shot, "listening"), (nxt,), (shot, "listening2"), (nxt,), (shot, "read"),
+        (lambda: click(e, QPoint(200, 60)),), (shot, "clicked-notepad"),
     ]
+    steps += {"std": [(lambda: orb(d.bubble),)], "simple": [(lambda: orb(d.float),)], "auto": [],
+              "minimal": [(lambda: click(d, QPoint(500, 300)),), ("wait", 250), (shot, "stray-key-wait"), (key,)]}[mode]
+    steps += [(shot, "listening"), (nxt,), (shot, "listening2"), (nxt,), (shot, "read")]
     if miss:
         steps += [(lambda: t.hear(("cmd", "結束")),), (shot, "stray-command"),
                   (lambda: t.hear(("text", "今天天氣很好，我們去公司上班。")),), (shot, "miss"),
@@ -101,10 +112,16 @@ def main():
         (shot, "described-intro"), (nxt,), (shot, "ask-described"), (lambda: t.hear(("text", "節日的節。")),),
         (shot, "described"), (nxt,), (shot, "send-intro"), (nxt,), ("wait", 700), (shot, "chat"),
         (lambda: t.hear(("text", "我等一下就到。")),), (shot, "chat-draft"), (lambda: t.hear(("cmd", "送出")),),
-        ("wait", 1300), (shot, "sent"), (lambda: print("glow", d.glow.level, d.glow.isVisible()),), (nxt,), (shot, "ask-reopen"),
-        (lambda: click(d.chat.edit, QPoint(60, 20)),), ("wait", 400), (shot, "chat-bubble"),
-        (lambda: orb(d.bubble),), ("wait", 500), (shot, "ask-off"), (lambda: orb(d.float),), (shot, "off"),
-        (nxt,), (nxt,), (shot, "last"), (nxt,), ("wait", 500), (shot, "finished"),
+        ("wait", 1300), (shot, "sent"), (lambda: print("glow", d.glow.level, d.glow.isVisible()),), (nxt,),
+    ]
+    if mode == "std":
+        steps += [(shot, "ask-reopen"), (lambda: click(d.chat.edit, QPoint(60, 20)),), ("wait", 400),
+                  (shot, "chat-bubble"), (lambda: orb(d.bubble),), ("wait", 500)]
+    steps += [(shot, "ask-off")]
+    steps += {"std": [(lambda: orb(d.float),)], "simple": [(lambda: orb(d.float),)],
+              "auto": [(lambda: click(d, QPoint(10, 300)),)], "minimal": [(key,)]}[mode]
+    steps += [
+        (shot, "off"), (nxt,), (nxt,), (shot, "last"), (nxt,), ("wait", 500), (shot, "finished"),
     ]
 
     def run(i=0):

@@ -624,7 +624,6 @@ class Ring(QWidget):
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.target = QRect()
         self._t0 = time.monotonic()
-        self._flash = 0.0           # when flash() was called
         self._timer = QTimer(self, interval=33, timeout=self.update)
         self.hide()
 
@@ -642,12 +641,6 @@ class Ring(QWidget):
             self._timer.start()
         self.update()
 
-    def flash(self):
-        """Here: filled for a moment (a click elsewhere)."""
-        if self.isVisible() and not calm():
-            self._flash = time.monotonic()
-            self.update()
-
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
@@ -660,13 +653,6 @@ class Ring(QWidget):
         pen.setDashPattern([4, 3])
         p.setPen(pen)
         p.setBrush(Qt.NoBrush)
-        k = 1 - (time.monotonic() - self._flash) / 0.8
-        if k > 0:   # three blinks fading out
-            fill = QColor(theme.ACCENT)
-            fill.setAlphaF(0.22 * k * (0.5 + 0.5 * math.cos(k * math.tau * 3)))
-            p.setBrush(fill)
-            pen.setStyle(Qt.SolidLine)
-            p.setPen(pen)
         if self.round:
             p.drawEllipse(r)
         else:
@@ -705,7 +691,7 @@ class DeskPicker(Picker):
 
 class Desk(QWidget):
     """The desktop: wallpaper, taskbar, the two apps (shown when opened), the bubble, the floating button, the glow.
-    `clicked_app` names a taskbar app clicked, `stray` a click on nothing to click (the wallpaper, a window's frame,
+    `clicked_app` names a taskbar app clicked (or "tray", Art VoiceInput's icon), `stray` a click on nothing to click (the wallpaper, a window's frame,
     the rest of the taskbar); the tutorial does the rest."""
     clicked_app = Signal(str)
     stray = Signal()
@@ -904,8 +890,13 @@ class Desk(QWidget):
     def mousePressEvent(self, e):
         self.picker.dismiss()
         pos = e.position().toPoint()
+        if self.childAt(pos) is not None:
+            return   # passed on by one of ours that took no press (the bubble, the floating button)
         for kind in ("notepad", "chat"):
             if self.taskbar_rect(kind).contains(pos):
                 self.clicked_app.emit(kind)
                 return
+        if self.tray_rect().adjusted(-4, -8, 4, 8).contains(pos):
+            self.clicked_app.emit("tray")
+            return
         self.stray.emit()

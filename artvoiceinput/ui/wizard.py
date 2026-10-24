@@ -37,6 +37,21 @@ PRESETS = {
                     auto_off_minutes=5, stop_on_enter=False, auto_off=False, hotkey="vk:a5", tray_pinned=True,
                     tray_click="mic", glow=""),
 }
+
+
+def mode_of(cfg) -> str:
+    """Which starting setup cfg is, or is closest to: the tutorial teaches its way of working."""
+    if cfg.auto_listen:
+        return "auto"
+    if cfg.show_bubble:
+        return "std"
+    if cfg.float_away or cfg.float_box:
+        return "simple"
+    if cfg.hotkey or cfg.tray_click == "mic":
+        return "minimal"
+    return "simple" if cfg.float_rec else "std"
+
+
 OPTIONS = [
     ("std", "標準", "點進輸入框，點一下小氣泡就講", "想方便，又想保留一點掌控"),
     ("simple", "簡單", "麥克風由你親手開關", "剛開始用語音輸入，或想每一步都自己決定"),
@@ -557,8 +572,8 @@ class PackStep(QWidget):
 
 
 class StyleStep(QWidget):
-    """3: the starting setup; 開始教學 (the tutorial, ui/tutorial.py; only 標準's so far: for the others the button
-    says so and is disabled) or 跳過教學 to the home page."""
+    """3: the starting setup; 開始教學 (the tutorial, ui/tutorial.py, teaching the setup picked) or 跳過教學 to the
+    home page."""
     done = Signal()
     tutorial = Signal()
 
@@ -597,9 +612,6 @@ class StyleStep(QWidget):
         self.choice = key
         for k, o in self.options.items():
             o.setChecked(k == key)
-        # the other setups' tutorials come after 標準's runs well (the user's decision, 2026-10-24)
-        self.tutorial_button.setEnabled(key == "std")
-        self.tutorial_button.setText("開始教學" if key == "std" else "這個模式的教學還在做")
 
 
 class Card(QWidget):

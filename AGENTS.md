@@ -365,12 +365,13 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   user decides whether it stays); the icon over 阿特語音輸入法 at 26px (34 stood apart from it), no 已經裝好了; 略過 (plain) becomes 下一步 then. 2 packs, 3 columns, two lines of whole sample
   terms, no counts; 跳過 / 下一步. 3 標準 (floating button only while listening, 3 minutes' auto-off) / 簡單 / 自動 / 簡約 (`wizard.PRESETS`, 2026-10-22, rows 80px; buttons 40px high, 168 / 240 wide; 簡約: nothing on screen, no glow, 送出 not closing,
   右 Alt `vk:a5`, the tray icon on the taskbar turning the microphone on/off, 5 minutes' auto-off only), fixed height,
-  each one short line, no list of what it sets; 開始教學 (標準 only; the others' button reads 這個模式的教學還在做) or 跳過教學，直接開始使用 finishes.
+  each one short line, no list of what it sets; 開始教學 (each setup has its tutorial) or 跳過教學，直接開始使用 finishes.
   ‹ sits in the left margin on the title's line; card 600x580 (2026-10-24, the user's report: buttons too high,
   too little padding). Focus rings only after Tab. 系統's Debug card has 進入設定精靈 (2026-10-24: 清空並重新設定 at once, no
   question; the restarted app's wizard alone in the theme shown before, `window.WIZARD_THEME`, the setting reset).
-- **Tutorial** (`ui/tutorial.py`, 2026-10-24, the user's design; 標準 only so far, the other three setups after it
-  runs well): over the window after the wizard's 開始教學 (the setup applied, `setup_done` still false,
+- **Tutorial** (`ui/tutorial.py`, 2026-10-24, the user's design; it teaches the setup in use, `wizard.mode_of`:
+  標準 bubble, 簡單 the floating button always there, 自動 a click in turns it on and a click outside off, 簡約 no
+  glow, 右 Alt (the hotkey; hotkey.py's 0xE8 ignored) or the tray icon; only 標準's 送出 turns the mic off): over the window after the wizard's 開始教學 (the setup applied, `setup_done` still false,
   `Config.tutorial_at` the chapter to come back to) or 系統's 重看教學 (關於 row; `replay`: settings untouched). A
   strip on top (icon, 教學, ten chapter segments, 略過教學 asking in a `Sheet`), a pretend Windows 11 desktop
   (`ui/desk.py`): wallpaper Bloom A1+ of https://claude.ai/artifact/FXMWnBF7Ek4uLwQ3y3JAiM (light and dark, the two
@@ -384,7 +385,8 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   C's https://claude.ai/artifact/8sHxkNoyPRWTPMkgmaxQma), moving beside what to look at with its `Card` (繼續, or
   what it waits for; ‹ 上一句 shows past lines; 跳過這步), placed clear of the target and the text being read
   (eyes and a slight lean toward the target from where it lands; no overshoot: it bumped the floating button). A
-  click that isn't what it waits for shakes the card and the guide and flashes the ring (`_nudge`, 2026-10-24).
+  click that isn't what it waits for gives the red words (what it waits for) or 繼續 a small cute wiggle, nothing
+  else (`_nudge`, 2026-10-24, the user's design; clicks on the bubble or floating button are not stray).
   Taskbar tray as the wallpaper artifact's (︿, app icon with tray.py's ring while listening, Wi-Fi, volume,
   battery); floating button 24px in from the right like `floatbtn`.
   Chapters are generators yielding what they wait for: 打開記事本, 開麥克風 (click → bubble → listening), 念三句
