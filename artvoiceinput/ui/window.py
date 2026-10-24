@@ -135,7 +135,7 @@ class SettingsWindow(Shell):
 
     # --- the setup wizard ---
     def start_wizard(self):
-        """The wizard over the window from its first step (first launch, 清空並重新設定)."""
+        """The wizard over the window from its first step (first launch, 清空並重新設定, 系統's 重新執行設定精靈)."""
         from .wizard import Wizard
         if self.wizard is None:
             self.wizard = Wizard(self)
@@ -153,6 +153,12 @@ class SettingsWindow(Shell):
         self.wizard.raise_()
         self.min_button.raise_()
         self.close_button.raise_()
+        self.applied.emit()   # the app rests while it shows (App._paused)
+
+    @property
+    def setting_up(self) -> bool:
+        """The setup wizard shows (run again from 系統: the app rests meanwhile)."""
+        return self.wizard is not None and self.wizard.isVisible() and self.isVisible()
 
     def show_packs(self):
         """詞庫's 詞包 section (a pack hint clicked: the tray notice or its 辨識紀錄 row)."""
@@ -168,12 +174,12 @@ class SettingsWindow(Shell):
             self.wizard.mic_step.show_said(text)
 
     def _wizard_done(self):
-        self.data_changed()   # the preset and packs saved and applied
+        self.data_changed()   # the preset and packs saved and applied (the app goes on)
         self.refresh_tiles()
 
     def _wizard_tutorial(self):
         self.data_changed()
-        self.start_tutorial(0)
+        self.start_tutorial(0, replay=self.cfg.setup_done)   # run again: closing it just ends it
 
     # --- the tutorial ---
     @property
@@ -182,8 +188,8 @@ class SettingsWindow(Shell):
         return self.tutorial is not None and self.tutorial.isVisible() and self.isVisible()
 
     def start_tutorial(self, chapter: int = 0, replay: bool = False):
-        """The tutorial over the window: after the wizard (from chapter, resuming), or 系統's 重看教學 (replay: the
-        settings untouched, nothing remembered)."""
+        """The tutorial over the window: after the wizard (from chapter, resuming); replay: after the wizard run
+        again from 系統 (nothing remembered, setup_done stays)."""
         from .kit import crossfade
         from .tutorial import Tutorial
         if self.tutorial is not None:
@@ -221,6 +227,9 @@ class SettingsWindow(Shell):
             # closed midway: the first run comes back at its chapter next time (cfg.tutorial_at); a replay just ends
             self.tutorial.stop()
             self.tutorial.hide()
+            self.applied.emit()
+        if self.wizard is not None and self.wizard.isVisibleTo(self) and self.cfg.setup_done:
+            self.wizard.hide()   # run again and closed midway: the settings stay as they were
             self.applied.emit()
         super().hideEvent(e)
 

@@ -2,7 +2,8 @@
 settings window at the first launch and after 清空並重新設定, before the home page. Three steps: the microphone heard
 (the level meter; 略過 turns into 下一步 once what was said is decoded and shown as 你剛剛說), term
 packs ticked (跳過 / 下一步), and a starting setup picked (標準 / 簡單 / 自動 / 簡約, `PRESETS`). Light or dark with the
-window. Closed before the end, it comes back at the next launch (`Config.setup_done`)."""
+window. Closed before the end, it comes back at the next launch (`Config.setup_done`). 系統's 重新執行設定精靈 runs it
+again over the settings as they are: closed midway nothing changes but the microphone picked."""
 import time
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, Signal
@@ -606,7 +607,7 @@ class StyleStep(QWidget):
         BackButton(self).move(BACK_X, BACK_Y - 4)
 
     def reset(self):
-        self.pick("std")
+        self.pick(mode_of(self.win.cfg))   # run again: the setup in use
 
     def pick(self, key: str):
         self.choice = key
@@ -698,9 +699,16 @@ class Wizard(QWidget):
         super().hideEvent(e)
 
     def _apply(self):
+        """The setup picked, whole: what another setup set and this one doesn't goes back to its default (run
+        again, 簡約's 右 Alt and no glow stayed under 標準); a value the user chose (another hotkey, glow) stays."""
         cfg = self.win.cfg
-        for k, v in PRESETS[self.style_step.choice].items():
-            setattr(cfg, k, v)
+        fresh = type(cfg)()
+        preset = PRESETS[self.style_step.choice]
+        for k in {k for p in PRESETS.values() for k in p}:
+            if k in preset:
+                setattr(cfg, k, preset[k])
+            elif any(p.get(k, fresh) == getattr(cfg, k) for p in PRESETS.values()):
+                setattr(cfg, k, getattr(fresh, k))
         cfg.packs = self.pack_step.picked()
 
     def _finish(self):
@@ -714,7 +722,8 @@ class Wizard(QWidget):
     def _tutorial(self):
         """開始教學: the setup applied; the app rests until the tutorial ends (setup_done)."""
         self._apply()
-        self.win.cfg.tutorial_at = 0
+        if not self.win.cfg.setup_done:
+            self.win.cfg.tutorial_at = 0   # resumed at the next launch if closed (a run again just ends)
         self.hide()
         self.tutorial.emit()
 

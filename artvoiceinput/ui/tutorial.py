@@ -1,5 +1,5 @@
 """The tutorial (2026-10-24, the user's design; AGENTS.md "Tutorial"): over the settings window after the setup
-wizard's 開始教學, or from 系統's 重看教學. A pretend Windows 11 desktop (`desk.Desk`) and a guide (`sprite`) that talks
+wizard's 開始教學 (also when 系統's 重新執行設定精靈 runs it again). A pretend Windows 11 desktop (`desk.Desk`) and a guide (`sprite`) that talks
 in a card the user clicks on, like a visual novel, and waits where the user has to click something or read a
 sentence aloud. It teaches the way of working of the setup in use (`wizard.mode_of`, 2026-10-24): 標準 a click into a
 text box and the bubble, the floating button while listening, 送出 turning the microphone off; 簡單 the floating
@@ -1067,7 +1067,7 @@ class Tutorial(QWidget):
     # --- ending ---
     def _ask_skip(self):
         from .sheet import Sheet
-        sheet = Sheet(self.win, "略過教學？", "之後可以在「系統」頁的「重看教學」再看一次。", "略過教學")
+        sheet = Sheet(self.win, "略過教學？", "之後可以在「系統」頁的「重新執行設定精靈」再看一次。", "略過教學")
         sheet.accepted.connect(lambda: self._finish(False))
         sheet.open()
 

@@ -445,9 +445,9 @@ class App(QObject):
     def _paused(self) -> bool:
         """Until the setup wizard is finished nothing listens or shows (the user's request, 2026-10-21): no hotkey,
         floating button, bubble or listening on a click, also with the wizard closed half way; nor while the
-        tutorial runs (重看教學 too)."""
+        tutorial runs, or the wizard run again from 系統."""
         settings = getattr(self, "settings", None)
-        return not self.cfg.setup_done or (settings is not None and settings.tutoring)
+        return not self.cfg.setup_done or (settings is not None and (settings.tutoring or settings.setting_up))
 
     @property
     def _listening(self) -> bool:

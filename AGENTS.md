@@ -368,12 +368,16 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   右 Alt `vk:a5`, the tray icon on the taskbar turning the microphone on/off, 5 minutes' auto-off only), fixed height,
   each one short line, no list of what it sets; 開始教學 (each setup has its tutorial) or 跳過教學，直接開始使用 finishes.
   ‹ sits in the left margin on the title's line; card 600x580 (2026-10-24, the user's report: buttons too high,
-  too little padding). Focus rings only after Tab. 系統's Debug card has 進入設定精靈 (2026-10-24: 清空並重新設定 at once, no
+  too little padding). Focus rings only after Tab. 系統's 重新執行設定精靈 (設定檔 row, left of 清空並重新設定; 2026-10-24, the user's
+  design, replacing 重看教學) runs it again over the settings as they are: microphone, packs and the setup in use
+  (`mode_of`) preselected, nothing cleared, the app resting while it shows (`setting_up`); finishing applies the
+  setup whole (a value another setup set goes back to its default, one the user chose stays); closed midway nothing
+  changes but the microphone picked. 系統's Debug card has 進入設定精靈 (2026-10-24: 清空並重新設定 at once, no
   question; the restarted app's wizard alone in the theme shown before, `window.WIZARD_THEME`, the setting reset).
 - **Tutorial** (`ui/tutorial.py`, 2026-10-24, the user's design; it teaches the setup in use, `wizard.mode_of`:
   標準 bubble, 簡單 the floating button always there, 自動 a click in turns it on and a click outside off, 簡約 no
   glow, only 右 Alt (the hotkey; hotkey.py's 0xE8 ignored) or the tray icon, both named in the red words; only 標準's 送出 turns the mic off): over the window after the wizard's 開始教學 (the setup applied, `setup_done` still false,
-  `Config.tutorial_at` the chapter to come back to) or 系統's 重看教學 (關於 row; `replay`: settings untouched). A
+  `Config.tutorial_at` the chapter to come back to) or after the wizard run again (`replay`: closing just ends it, setup_done stays). A
   strip on top (icon, 教學, ten chapter segments, 略過教學 asking in a `Sheet`), a pretend Windows 11 desktop
   (`ui/desk.py`): wallpaper Bloom A1+ of https://claude.ai/artifact/FXMWnBF7Ek4uLwQ3y3JAiM (light and dark, the two
   rings of petals swaying over 14s, still with 節流模式), taskbar (clock in Noto Sans TC like the artifact, not the

@@ -169,8 +169,11 @@ class SysPage(QWidget):
         # 清空並重新設定 (2026-10-21, the user's design: like a phone's factory reset): everything cleared, then the
         # setup wizard from its first step
         reset = button("清空並重新設定…", self._reset, danger=True)
+        # 重新執行設定精靈 (2026-10-24, the user's design; it replaced 重看教學): the wizard from its first step with
+        # the settings as they are (microphone, packs, the setup closest), nothing cleared; its 開始教學 is the tutorial
+        rerun = button("重新執行設定精靈", self.win.start_wizard)
         row("設定檔", "所有設定與詞庫存成一個檔案，換電腦時帶走",
-            vbox(drop, 10, hbox(export, None, reset, spacing=8), spacing=0))
+            vbox(drop, 10, hbox(export, None, rerun, reset, spacing=8), spacing=0))
         # names on one line, values on the next, all values alike (the folder link was a button: the buttons'
         # style-sheet size made it smaller, 2026-10-21)
         about = QGridLayout()
@@ -193,9 +196,6 @@ class SysPage(QWidget):
             about.addWidget(val, 1, col, Qt.AlignLeft | Qt.AlignVCenter)
         folder.setFont(theme.font(13.5, 600, num=True))   # the long path a little smaller (2026-10-21)
         about.setColumnStretch(3, 1)
-        # 重看教學 (2026-10-24, the user's choice: beside 關於): the tutorial again, the settings untouched
-        about.addWidget(button("重看教學", lambda: self.win.start_tutorial(0, replay=True)), 0, 4, 2, 1,
-                        Qt.AlignRight | Qt.AlignVCenter)
         row("關於", "阿特語音輸入法 Art VoiceInput", about, last=True)
         v.addWidget(frm)
         if config.DEBUG:
