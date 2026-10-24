@@ -174,6 +174,7 @@ class Brand(QWidget):
             p.drawRoundedRect(pill, 12, 12)
             p.setPen(QColor(theme.LIGHT["acct"]))
             p.drawText(pill, Qt.AlignCenter, "開發版")
+            p.setPen(white)
         p.setFont(theme.font(22, 600, num=True))
         self._text(p, QRectF(x, 438, 330, 30), Qt.AlignLeft | Qt.AlignVCenter, "Art VoiceInput", 3, 1.5)
         p.setFont(theme.font(34, 700))
