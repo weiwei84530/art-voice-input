@@ -798,7 +798,8 @@ class Tutorial(QWidget):
         yield from self.wait(260)
         self.sprite.bounce()
         if mode == "std":
-            yield from self.say("麥克風打開了！畫面邊緣亮起紅光，右邊這顆是浮動按鈕。", "happy",
+            yield from self.say("麥克風打開了！畫面邊緣亮起紅光，右邊這顆是浮動按鈕：只在錄音時出現，點它就能關掉麥克風。",
+                                "happy",
                                 at=lambda: _orb_rect(d.float))
             yield from self.say("在其他程式裡也一樣：點進輸入框，再點小氣泡，就能開始說話。")
         elif mode == "simple":
