@@ -6,6 +6,7 @@ import shutil
 import sys
 import tempfile
 import threading
+from html import escape
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QPointF, QRectF, Qt, Signal
@@ -19,7 +20,7 @@ from artvoiceinput.ui import theme
 from . import ops
 
 T = theme.LIGHT
-W, H = 576, 400   # the design's 520x360 proportions (13:9), taller so the status has its own line
+W, H = 520, 360
 
 
 def _qss() -> str:
@@ -60,21 +61,21 @@ class Icon(QWidget):
 
 
 class OkDot(QWidget):
-    """A green circle with a white tick, before 安裝完成 / 已解除安裝 (status marks lead their words, as Windows'
-    own do; the setup wizard's OkDot)."""
+    """A green circle with a white tick, before 安裝完成 / 已解除安裝 (the user's request, 2026-10-24; status marks
+    lead their words, as Windows' own do)."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(18, 18)
+        self.setFixedSize(15, 15)
 
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setPen(Qt.NoPen)
         p.setBrush(QColor(T["ins"]))
-        p.drawEllipse(QRectF(0.5, 0.5, 17, 17))
-        p.setPen(QPen(QColor("#FFFFFF"), 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-        p.drawPolyline([QPointF(5.0, 9.5), QPointF(7.9, 12.4), QPointF(13.1, 6.6)])
+        p.drawEllipse(QRectF(0.5, 0.5, 14, 14))
+        p.setPen(QPen(QColor("#FFFFFF"), 1.9, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.drawPolyline([QPointF(4.2, 7.9), QPointF(6.6, 10.3), QPointF(10.9, 5.5)])
 
 
 class Progress(QWidget):
@@ -171,34 +172,31 @@ class Window(QWidget):
         self.close_button.clicked.connect(self.close)
 
         v = QVBoxLayout(self)
-        v.setContentsMargins(40, 50, 40, 28)   # the logo nearer the middle (34 read high)
+        # the design's boxes (layout B): the icon 38 from the top, the name's and the line under it as tall as the
+        # browser's lines (CSS line-height normal), 30 to the button (34 and 22 put it all higher than designed)
+        v.setContentsMargins(40, 38, 40, 28)
         v.setSpacing(0)
         v.addWidget(Icon(), 0, Qt.AlignHCenter)
         v.addSpacing(18)
         self.name = self._label(ops.NAME, 26, 700)
+        self.name.setFixedHeight(38)
+        self.name.setAlignment(Qt.AlignCenter)
         v.addWidget(self.name)
         v.addSpacing(4)
-        # the name and the version always, as part of the logo (the user's design, 2026-10-24); what is going on has
-        # its own line under them, darker or colored, so the two never read as one
-        num = f"font-family: '{theme.NUM_FONT}'; font-size: 14px; font-weight: 500;"
-        self.sub = self._label(f"Art VoiceInput <span style=\"{num}\">&nbsp;{__version__}</span>", 13)
-        self.sub.setTextFormat(Qt.RichText)
-        v.addWidget(self.sub)
-        v.addStretch(3)   # the button low in the window, about two thirds down (it read as too high, centered)
-        row = QHBoxLayout()
-        row.setSpacing(6)
+        # the version, or what is going on in its place
+        line = QHBoxLayout()
+        line.setSpacing(6)
         self.ok = OkDot()
-        self.status = QLabel()
-        self.status.setFont(theme.font(14, 500))
-        self.status.setWordWrap(True)
-        self.status.setAlignment(Qt.AlignHCenter)
-        self.status.setMinimumHeight(22)   # empty at the start: the button stays where it is in every state
-        row.addStretch(1)
-        row.addWidget(self.ok, 0, Qt.AlignVCenter)
-        row.addWidget(self.status, 0, Qt.AlignVCenter)
-        row.addStretch(1)
-        v.addLayout(row)
-        v.addSpacing(14)
+        self.sub = self._label("", 13)
+        self.sub.setTextFormat(Qt.RichText)
+        self.sub.setFixedHeight(19)
+        self.sub.setAlignment(Qt.AlignCenter)
+        line.addStretch(1)
+        line.addWidget(self.ok, 0, Qt.AlignVCenter)
+        line.addWidget(self.sub, 0, Qt.AlignVCenter)
+        line.addStretch(1)
+        v.addLayout(line)
+        v.addSpacing(30)
 
         # the action: a button, the progress bar in its place, or (uninstall) a tick over the button
         self.stack = QStackedWidget()
@@ -223,7 +221,7 @@ class Window(QWidget):
         self.delete_data.hide()
         v.addWidget(self.delete_data, 0, Qt.AlignHCenter)
         v.addWidget(self.stack)
-        v.addStretch(2)
+        v.addStretch(1)
         self.note = self._label("", 12)
         v.addWidget(self.note)
         v.addSpacing(2)
@@ -258,22 +256,28 @@ class Window(QWidget):
         self.stack.setCurrentIndex(1 if self.busy else 0)
         self.delete_data.setVisible(state == "u-ask")
         self.link.setEnabled(True)
-        message = message.replace("\\", "\\\u200b")   # a long path wraps after a \ (it was cut off)
-        status, tone, button, kind, note, link = {
-            "start": ("", "ink", "安裝", "pri", self._path_text(), "換個位置"),
-            "busy": ("正在準備", "ink", "", "pri", self._path_text(), ""),
-            "done": ("安裝完成", "ins", "開始使用", "pri", "之後可以在 Windows 設定的「應用程式」解除安裝",
+        num = f"font-family: '{theme.NUM_FONT}'; font-size: 15px; font-weight: 500;"
+        ok = f"<span style='color: {T['ins']}; font-weight: 500;'>{{}}</span>"   # OkDot before it
+        err = f"<span style='color: {T['acct']}; font-weight: 500;'>{{}}</span>"
+        # one line: a long error (with a path) shortened in the middle, whole in the tooltip
+        fm = QFontMetrics(theme.font(13, 500))
+        whole, message = message, escape(fm.elidedText(message, Qt.ElideMiddle, W - 80))
+        self.sub.setToolTip(whole if escape(whole) != message else "")
+        sub, button, kind, note, link = {
+            "start": (f"Art VoiceInput <span style=\"{num}\">&nbsp;{__version__}</span>", "安裝", "pri",
+                      self._path_text(), "換個位置"),
+            "busy": ("正在準備", "", "pri", self._path_text(), ""),
+            "done": (ok.format("安裝完成"), "開始使用", "pri", "之後可以在 Windows 設定的「應用程式」解除安裝",
                      "先不開啟，關閉"),
-            "error": (message, "acct", "再試一次", "pri", self._path_text(), "換個位置"),
-            "u-ask": ("會移除程式、辨識模型和開機自動啟動", "ink", "解除安裝", "danger",
+            "error": (err.format(message), "再試一次", "pri", self._path_text(), "換個位置"),
+            "u-ask": ("會移除程式、辨識模型和開機自動啟動", "解除安裝", "danger",
                       "不勾的話會留著，之後重新安裝會接著用", "取消"),
-            "u-busy": ("正在準備", "ink", "", "danger", "", ""),
-            "u-done": ("已解除安裝", "ins", "關閉", "pri", "", ""),
-            "u-error": (message, "acct", "再試一次", "danger", "", "關閉"),
+            "u-busy": ("正在準備", "", "danger", "", ""),
+            "u-done": (ok.format("已解除安裝"), "關閉", "pri", "", ""),
+            "u-error": (err.format(message), "再試一次", "danger", "", "關閉"),
         }[state]
-        self._set_status(status)
-        self.status.setStyleSheet(f"color: {T[tone]};")
-        self.ok.setVisible(tone == "ins")
+        self.sub.setText(sub)
+        self.ok.setVisible(state in ("done", "u-done"))
         self.button.setText(button)
         self.button.setObjectName(kind)
         self.button.style().unpolish(self.button)
@@ -283,13 +287,6 @@ class Window(QWidget):
         self.link.setVisible(bool(link))
         if self.busy:
             self.progress.set(0)
-
-    def _set_status(self, text: str):
-        """One line as wide as it needs; two only when it doesn't fit (a word-wrapped label in a row took its
-        narrowest width and broke a short line in two)."""
-        fm = QFontMetrics(self.status.font())
-        self.status.setText(text)
-        self.status.setFixedWidth(min(fm.horizontalAdvance(text) + 4, W - 80 - 24))
 
     def _act(self):
         s = self.state
@@ -316,7 +313,7 @@ class Window(QWidget):
 
     def _progressed(self, v: float, what: str):
         self.progress.set(v)
-        self._set_status(what)
+        self.sub.setText(escape(what))
 
     def _finished(self, error: str):
         un = self.state == "u-busy"
