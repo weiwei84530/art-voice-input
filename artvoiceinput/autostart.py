@@ -3,9 +3,9 @@ import sys
 import winreg
 from pathlib import Path
 
-from .paths import APP_DIR, FROZEN
+from .paths import APP_DIR, FROZEN, ID
 
-APP_ID = "ArtVoiceInput"
+APP_ID = ID   # the Run value's name: ArtVoiceInput installed, ArtVoiceInput-dev here
 LAUNCHER = APP_DIR / "run.pyw"
 FLAG = "--autostart"   # launched at login: no settings window (app.main)
 

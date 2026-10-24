@@ -2331,7 +2331,7 @@ def _paste_over(sel, text: str) -> bool:
 
 RESTARTED = "--restarted"   # started by App.restart
 # where a second launch asks the running Art VoiceInput to show its settings (a named pipe, one per user)
-PIPE = f"ArtVoiceInput-{os.environ.get('USERNAME', '')}"
+PIPE = f"{paths.ID}-{os.environ.get('USERNAME', '')}"
 
 
 def _show_running():

@@ -27,12 +27,13 @@ automatically; read it before reviving or redesigning something). Module docstri
   Start-Process "$root\.venv\Scripts\pythonw.exe" -ArgumentList "`"$root\run.pyw`" --debug" -WorkingDirectory $root
   ```
 
-  Then check the tail of `%LOCALAPPDATA%\ArtVoiceInput\artvoiceinput.log` for "就緒" / errors.
+  Then check the tail of `%LOCALAPPDATA%\ArtVoiceInput-dev\artvoiceinput.log` for "就緒" / errors.
 - `--debug` (`config.DEBUG`, set by `app.main`) keeps every utterance's recording (`save_recordings`, no setting);
   a release keeps none. Developer options live only in 系統's Debug card (`SysPage._debug_card`, 2026-10-22, the
   user's design: plain, shown only with --debug and while it has an option; options are removed when their test
   ends, the card's code stays for the next). Autostart registers the launch as this run
-  was made.
+  was made. The installed build is a release too: debug only when its exe is started with `--debug` (the user's
+  rule, 2026-10-24; never on by default).
 - When the user decides something, record it here briefly as the current design (one line of why when it is not
   obvious); don't append dated narrative. Replace what it supersedes; move nothing back from history unless needed.
 
@@ -44,7 +45,11 @@ automatically; read it before reviving or redesigning something). Module docstri
 
 - Windows only (2026-10-03, macOS failed: no hotkey worked). Don't add `sys.platform` branches;
   `docs/macos-port.md` lists what a port needs.
-- Code, `.tools/`, `.venv/` stay in the app folder; user data in `paths.DATA_DIR` (`%LOCALAPPDATA%\ArtVoiceInput`):
+- Development copy and installed build kept apart (2026-10-24, the user's request: no mixing them up): `paths.ID` is
+  `ArtVoiceInput-dev` for a copy run from the repo (`run.pyw`) and `ArtVoiceInput` for the installed exe
+  (`paths.FROZEN`); it names the data folder, the autostart Run value and the single-instance pipe, so both can run
+  side by side. The home's brand block shows a white 開發版 pill after 版本 when not frozen.
+- Code, `.tools/`, `.venv/` stay in the app folder; user data in `paths.DATA_DIR` (`%LOCALAPPDATA%\<paths.ID>`):
   `config.json`, logs, lock, `models/`, `hotword-list.json`, `smart-picks.json`, `packs/`, `cache/`.
   `paths.migrate_legacy()` moves old in-folder data. Autostart is re-registered each launch.
 - Installer (2026-10-24, layout B of https://claude.ai/artifact/8jvXUtkd9V8MU8ozxwRijy; our own Qt setup, not Inno
@@ -59,7 +64,8 @@ automatically; read it before reviving or redesigning something). Module docstri
   keep; `/quiet` keeps). The installed build (`paths.FROZEN`) reads its bundled models (`paths.BUNDLED_MODELS_DIR`),
   registers the exe for autostart, skips `migrate_legacy`. Unsigned for now: SmartScreen's 其他資訊 → 仍要執行 is
   accepted. Testing an install: `--dir <folder>` on the setup exe; launch the installed exe with LOCALAPPDATA pointed
-  elsewhere so it doesn't touch the real data.
+  elsewhere so it doesn't touch the user's installed data. `build.py` copies the models from the development data
+  folder.
 - Fixed models, no model choice, no LLM (`models.py`; URL
   `https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/<dir>.tar.bz2`):
   recognition X-ASR int8 `sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03` (130MB, ~0.75s per

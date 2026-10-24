@@ -176,7 +176,7 @@ class SysPage(QWidget):
         about = QGridLayout()
         about.setHorizontalSpacing(24)
         about.setVerticalSpacing(1)
-        folder = label("%LOCALAPPDATA%\\ArtVoiceInput")
+        folder = label(f"%LOCALAPPDATA%\\{paths.ID}")
         folder.setCursor(Qt.PointingHandCursor)
         folder.mouseReleaseEvent = lambda e: os.startfile(paths.DATA_DIR) if e.button() == Qt.LeftButton else None
         self.folder = folder

@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-DATA = Path(os.environ["LOCALAPPDATA"]) / "ArtVoiceInput"
+DATA = Path(os.environ["LOCALAPPDATA"]) / "ArtVoiceInput-dev"   # artvoiceinput.paths.DATA_DIR of a development copy
 REC = DATA / "recordings"
 MODELS = DATA / "models"
 XASR = MODELS / "sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03"
