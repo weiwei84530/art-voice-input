@@ -168,7 +168,7 @@ class SysPage(QWidget):
         export = button("匯出設定檔…", self._export, pri=True)
         # 清空並重新設定 (2026-10-21, the user's design: like a phone's factory reset): everything cleared, then the
         # setup wizard from its first step
-        reset = button("清空並重新設定…", self._reset, danger=True)
+        reset = button("清空資料並重新設定", self._reset, danger=True)   # no …: it only asks (the user's call)
         # 重新執行設定精靈 (2026-10-24, the user's design; it replaced 重看教學): the wizard from its first step with
         # the settings as they are (microphone, packs, the setup closest), nothing cleared; its 開始教學 is the tutorial
         rerun = button("重新執行設定精靈", self.win.start_wizard)
@@ -347,7 +347,7 @@ class SysPage(QWidget):
         from .sheet import Sheet
         sheet = Sheet(self.window(), "清空所有資料並重新設定？",
                       "設定、詞庫列表、選字記憶、英文強制替換和詞包的修改都會清掉，無法復原。\n"
-                      "辨識模型會保留，清空後回到設定精靈。", "清空並重新設定", "先匯出設定檔…")
+                      "辨識模型會保留，清空後回到設定精靈。", "清空資料並重新設定", "先匯出設定檔…")
         sheet.linked.connect(self._export)
         sheet.accepted.connect(self._reset_now)
         sheet.open()

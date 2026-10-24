@@ -353,8 +353,8 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   辨識紀錄's row tips show as soon as the pointer comes (`quick_tip`, 2026-10-21: a page read by sweeping). All are `kit.Tip` (120ms fade), never Qt's tooltip.
 - 設定檔 (`userdata.py`): 匯出 writes all settings and the 詞庫 (list, aliases, 選字記憶, pack files) to one JSON; 匯入
   replaces settings except `userdata.LOCAL` (mic, autostart, float place, setup_done) and merges the 詞庫 (file
-  wins). 清空並重新設定 (a button, like a phone's factory reset, 2026-10-21) asks in a `ui/sheet.py` card (window
-  dimmed; 先匯出設定檔… link), then resets everything including the 詞庫 and 辨識紀錄 (models, cache and dev
+  wins). 清空並重新設定 (the button reads 清空資料並重新設定, no …; like a phone's factory reset, 2026-10-21) asks in a
+  `ui/sheet.py` card (window dimmed; 先匯出設定檔… link), then resets everything including the 詞庫 and 辨識紀錄 (models, cache and dev
   recordings stay), then the app closes and starts again (`App.restart`, `--restarted` waits for the lock), new,
   on the setup wizard.
 - **Setup wizard** (`ui/wizard.py`, 2026-10-21, design C of https://claude.ai/artifact/LFjmoPLHVf1bz7irmzKy6i): over
