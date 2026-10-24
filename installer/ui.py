@@ -19,7 +19,7 @@ from artvoiceinput.ui import theme
 from . import ops
 
 T = theme.LIGHT
-W, H = 520, 360
+W, H = 520, 400   # 360 left the button no room once the status had its own line
 
 
 def _qss() -> str:
@@ -57,6 +57,24 @@ class Icon(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         appicon.paint(p, self.width())
+
+
+class OkDot(QWidget):
+    """A green circle with a white tick, before 安裝完成 / 已解除安裝 (status marks lead their words, as Windows'
+    own do; the setup wizard's OkDot)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(18, 18)
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(T["ins"]))
+        p.drawEllipse(QRectF(0.5, 0.5, 17, 17))
+        p.setPen(QPen(QColor("#FFFFFF"), 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.drawPolyline([QPointF(5.0, 9.5), QPointF(7.9, 12.4), QPointF(13.1, 6.6)])
 
 
 class Progress(QWidget):
@@ -160,10 +178,27 @@ class Window(QWidget):
         self.name = self._label(ops.NAME, 26, 700)
         v.addWidget(self.name)
         v.addSpacing(4)
-        self.sub = self._label("", 13)
+        # the name and the version always, as part of the logo (the user's design, 2026-10-24); what is going on has
+        # its own line under them, darker or colored, so the two never read as one
+        num = f"font-family: '{theme.NUM_FONT}'; font-size: 14px; font-weight: 500;"
+        self.sub = self._label(f"Art VoiceInput <span style=\"{num}\">&nbsp;{__version__}</span>", 13)
         self.sub.setTextFormat(Qt.RichText)
         v.addWidget(self.sub)
-        v.addSpacing(22)
+        v.addStretch(3)   # the button low in the window, about two thirds down (it read as too high, centered)
+        row = QHBoxLayout()
+        row.setSpacing(6)
+        self.ok = OkDot()
+        self.status = QLabel()
+        self.status.setFont(theme.font(14, 500))
+        self.status.setWordWrap(True)
+        self.status.setAlignment(Qt.AlignHCenter)
+        self.status.setMinimumHeight(22)   # empty at the start: the button stays where it is in every state
+        row.addStretch(1)
+        row.addWidget(self.ok, 0, Qt.AlignVCenter)
+        row.addWidget(self.status, 0, Qt.AlignVCenter)
+        row.addStretch(1)
+        v.addLayout(row)
+        v.addSpacing(14)
 
         # the action: a button, the progress bar in its place, or (uninstall) a tick over the button
         self.stack = QStackedWidget()
@@ -188,7 +223,7 @@ class Window(QWidget):
         self.delete_data.hide()
         v.addWidget(self.delete_data, 0, Qt.AlignHCenter)
         v.addWidget(self.stack)
-        v.addStretch(1)
+        v.addStretch(2)
         self.note = self._label("", 12)
         v.addWidget(self.note)
         v.addSpacing(2)
@@ -223,23 +258,22 @@ class Window(QWidget):
         self.stack.setCurrentIndex(1 if self.busy else 0)
         self.delete_data.setVisible(state == "u-ask")
         self.link.setEnabled(True)
-        num = f"font-family: '{theme.NUM_FONT}'; font-size: 15px; font-weight: 500;"
-        ok = f"<span style='color: {T['ins']}; font-weight: 500;'>●&nbsp;{{}}</span>"
-        err = f"<span style='color: {T['acct']}; font-weight: 500;'>{{}}</span>"
-        sub, button, kind, note, link = {
-            "start": (f"Art VoiceInput <span style=\"{num}\">&nbsp;{__version__}</span>", "安裝", "pri",
-                      self._path_text(), "換個位置"),
-            "busy": ("正在準備", "", "pri", self._path_text(), ""),
-            "done": (ok.format("安裝完成"), "開始使用", "pri", "之後可以在 Windows 設定的「應用程式」解除安裝",
+        message = message.replace("\\", "\\\u200b")   # a long path wraps after a \ (it was cut off)
+        status, tone, button, kind, note, link = {
+            "start": ("", "ink", "安裝", "pri", self._path_text(), "換個位置"),
+            "busy": ("正在準備", "ink", "", "pri", self._path_text(), ""),
+            "done": ("安裝完成", "ins", "開始使用", "pri", "之後可以在 Windows 設定的「應用程式」解除安裝",
                      "先不開啟，關閉"),
-            "error": (err.format(message), "再試一次", "pri", self._path_text(), "換個位置"),
-            "u-ask": ("會移除程式、辨識模型和開機自動啟動", "解除安裝", "danger",
+            "error": (message, "acct", "再試一次", "pri", self._path_text(), "換個位置"),
+            "u-ask": ("會移除程式、辨識模型和開機自動啟動", "ink", "解除安裝", "danger",
                       "不勾的話會留著，之後重新安裝會接著用", "取消"),
-            "u-busy": ("正在準備", "", "danger", "", ""),
-            "u-done": (ok.format("已解除安裝"), "關閉", "pri", "", ""),
-            "u-error": (err.format(message), "再試一次", "danger", "", "關閉"),
+            "u-busy": ("正在準備", "ink", "", "danger", "", ""),
+            "u-done": ("已解除安裝", "ins", "關閉", "pri", "", ""),
+            "u-error": (message, "acct", "再試一次", "danger", "", "關閉"),
         }[state]
-        self.sub.setText(sub)
+        self._set_status(status)
+        self.status.setStyleSheet(f"color: {T[tone]};")
+        self.ok.setVisible(tone == "ins")
         self.button.setText(button)
         self.button.setObjectName(kind)
         self.button.style().unpolish(self.button)
@@ -249,6 +283,13 @@ class Window(QWidget):
         self.link.setVisible(bool(link))
         if self.busy:
             self.progress.set(0)
+
+    def _set_status(self, text: str):
+        """One line as wide as it needs; two only when it doesn't fit (a word-wrapped label in a row took its
+        narrowest width and broke a short line in two)."""
+        fm = QFontMetrics(self.status.font())
+        self.status.setText(text)
+        self.status.setFixedWidth(min(fm.horizontalAdvance(text) + 4, W - 80 - 24))
 
     def _act(self):
         s = self.state
@@ -275,7 +316,7 @@ class Window(QWidget):
 
     def _progressed(self, v: float, what: str):
         self.progress.set(v)
-        self.sub.setText(what)
+        self._set_status(what)
 
     def _finished(self, error: str):
         un = self.state == "u-busy"

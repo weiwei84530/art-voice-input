@@ -54,7 +54,9 @@ automatically; read it before reviving or redesigning something). Module docstri
   `paths.migrate_legacy()` moves old in-folder data. Autostart is re-registered each launch; it is on by default
   for the installed build, off for a development copy (new or reset; the user's rule, 2026-10-24).
 - Installer (2026-10-24, layout B of https://claude.ai/artifact/8jvXUtkd9V8MU8ozxwRijy; our own Qt setup, not Inno
-  Setup, so it looks like the app): `installer/build.py` builds the app with PyInstaller onedir (`installer/app.spec`;
+  Setup, so it looks like the app; window 520x400: icon, 阿特語音輸入法 and `Art VoiceInput 0.9.0` always under it as part
+  of the logo, what is going on on its own darker / green (with a white tick before it) / red line, the button about
+  two thirds down; 2026-10-24, the user's design): `installer/build.py` builds the app with PyInstaller onedir (`installer/app.spec`;
   onefile unpacks at every launch, more antivirus false alarms), copies the X-ASR files and the VAD into its `models/`,
   builds the setup program onefile (`installer/setup.spec`) and appends the app folder to it as a zip
   (`installer/payload.py`) -> `dist/ArtVoiceInput-Setup-<version>.exe` (~230MB). Per-user install to
