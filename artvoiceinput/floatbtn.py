@@ -92,11 +92,13 @@ class OrbButton(QWidget):
     def set_look(self, look: str, colors: list, lite: bool = False, scale: int = 100):
         size = round(self.base * scale / 100)
         if size != self.bsize:
-            center = self.geometry().center()
+            # the exact center (QRect.center() is 1px up-left of it for an even size: each step of the size
+            # slider moved the 外觀與聲音 sample that way, the user's report 2026-10-25)
+            center = QRectF(self.geometry()).center()
             self.bsize = size
             self._fit()
             self.orb.resize(size)
-            self.move(center.x() - self.width() // 2, center.y() - self.height() // 2)
+            self.move(round(center.x() - self.width() / 2), round(center.y() - self.height() / 2))
             self._resized()
         if (self.orb.look, self.orb.colors, self.orb.lite) != (look, list(colors), lite):
             self.orb.set_look(look, colors, lite)

@@ -367,8 +367,6 @@ class FakeText(QWidget):
             k = 1 - (time.monotonic() - self.flash[2]) / FLASH_S
             flash = QColor(255, 69, 58, round(115 * max(0.0, k)))
         for i, r in boxes:
-            if self.draft and self.draft[0] <= i < self.draft[1] and self.text[i] != "\n":
-                p.fillRect(r.adjusted(0, 3, 0, -3), MARK)
             if flash and self.flash[0] <= i < self.flash[1] and self.text[i] != "\n":
                 p.fillRect(r.adjusted(0, 3, 0, -3), flash)
             if a <= i < b and self.text[i] != "\n":
@@ -377,6 +375,11 @@ class FakeText(QWidget):
         for i, r in boxes:
             if self.text[i] != "\n":
                 p.drawText(r, Qt.AlignCenter, self.text[i])
+        # the draft's yellow over the text, as the app's mark windows lie over the document (the ink shows a little
+        # lighter through it; the user's report, 2026-10-25)
+        for i, r in boxes:
+            if self.draft and self.draft[0] <= i < self.draft[1] and self.text[i] != "\n":
+                p.fillRect(r.adjusted(0, 3, 0, -3), MARK)
         if not self.text and self.placeholder:
             px, py = self._pad()
             p.setPen(QColor(c["muted"]))

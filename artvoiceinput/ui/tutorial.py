@@ -865,7 +865,7 @@ class Tutorial(QWidget):
             return e.char_rect(i, i + len(MISHEARD[0]))
         yield from self.say("看！聽到後面的「看得清楚」，我把整句再聽一次，「勢力」就自己改成「視力」了。", "proud",
                             at=fixed, avoid=e.used_rect)
-        yield from self.say("黃底的字還沒定稿，看到錯字先別急著改：繼續說下一句，我會連著前後文再聽一次，常常就自己改對了。")
+        yield from self.say("所以看到黃底裡有錯字，先別急著改，繼續說下去，我會幫你修正。")
 
     def ch_commit(self):
         e = self.desk.notepad.edit
@@ -955,12 +955,16 @@ class Tutorial(QWidget):
         yield from self.say("換好了！選取一段字再說話，就會整段取代。", "happy")
 
         def cut_chosen(_name, _data):
-            return True if e.selected_text in (CUT, CUT[:-1]) else f"選第一行開頭的「{CUT}」就好。"
+            if e.selected_text == CUT:
+                return True
+            if e.selected_text == CUT[:-1]:   # the comma too, or it stays behind (the user's report, 2026-10-25)
+                return "後面的「，」也要一起選，不然刪掉後會留下一個逗號。"
+            return f"選第一行開頭的「{CUT}」就好。"
         ask = f"不要的字也能用說的刪掉：選取第一行開頭的「{CUT}」。"
         while True:
             yield from self.click("selected:notepad", ask, at=lambda: e.char_rect(0, len(CUT)), check=cut_chosen,
                                   status="等你選取", avoid=e.used_rect)
-            result = yield from self.listen(e, "選好了，說「刪除」。", commands=["刪除"], sel=(CUT, CUT[:-1]))
+            result = yield from self.listen(e, "選好了，說「刪除」。", commands=["刪除"], sel=(CUT,))
             if result[0] != "lost":
                 break
             self._lost()
