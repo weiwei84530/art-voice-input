@@ -384,7 +384,7 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   Guide (`ui/sprite.py`): design B of https://claude.ai/artifact/A8FNxjZPgBfCV3z3Tvod8G, the app icon's square with
   a white-line face (eyes look toward the target, blink, bob; faces idle / happy / listen / oops / proud / think,
   C's https://claude.ai/artifact/8sHxkNoyPRWTPMkgmaxQma), moving beside what to look at with its `Card` (繼續, or
-  what it waits for; ‹ 上一句 shows past lines on a grayer card; 跳過這步; named 小阿特, 2026-10-24), placed clear of the target and the text being read
+  what it waits for; ‹ 上一句 shows past lines on a grayer card; 跳過這步; named 阿特 like the app, as it speaks for it, 2026-10-24), placed clear of the target and the text being read
   (eyes and a slight lean toward the target from where it lands; no overshoot: it bumped the floating button). A
   click that isn't what it waits for gives the red words (what it waits for) or 繼續 a small cute wiggle, nothing
   else (`_nudge`, 2026-10-24, the user's design; clicks on the bubble or floating button are not stray).

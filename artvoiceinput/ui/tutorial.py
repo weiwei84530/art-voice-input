@@ -759,7 +759,7 @@ class Tutorial(QWidget):
     # --- chapters ---
     def ch_open(self):
         d = self.desk
-        yield from self.say("嗨，我是小阿特！接下來大約三分鐘，我陪你練習用說的打字。", "happy")
+        yield from self.say("嗨，我是阿特！接下來大約三分鐘，我陪你練習用說的打字。", "happy")
         yield from self.say("這是練習用的桌面，怎麼點、怎麼說，都不會動到你的電腦。")
         yield from self.click("app:notepad", "先打開記事本：點一下工作列上的記事本。",
                               at=lambda: d.taskbar_rect("notepad"), status="等你點記事本")

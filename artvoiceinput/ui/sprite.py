@@ -274,7 +274,7 @@ class Card(QWidget):
         v = QVBoxLayout(self)
         v.setContentsMargins(16 + self.TAIL, 12, 16 + self.TAIL, 12)
         v.setSpacing(6)
-        self.name = QLabel("小阿特")   # the guide's name (阿特 is the app's; the user's choice, 2026-10-24)
+        self.name = QLabel("阿特")   # the app's name: the guide speaks for it (the user's choice, 2026-10-24)
         self.name.setFont(theme.font(12, 700))
         v.addWidget(self.name)
         self.text = QLabel()
