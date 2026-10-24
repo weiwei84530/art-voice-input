@@ -398,7 +398,8 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   the words said for it; the tutorial's own rule, no dictionary), 送出 (chat; the mic turns off), 關麥克風 (結束 or
   the floating button: 正在聽… 或 [the button]; the last lines name a few more commands). Independent of the core: its own microphone (`Ear`: level-based, a pause re-decodes the draft,
   the end judges it) and matching; only decoding is lent (`SettingsWindow.tutorial_decode` = `App._tutorial_decode`:
-  commands boosted first on a short piece, as `_command_first`). A reading under 80% alike (characters or toneless
+  commands boosted first on a short piece, as `_command_first`). A reading that passes takes the asked sentence's marks where
+  its characters line up (`punctuated`: X-ASR writes ， only at a pause it heard). The strip drags the window. A reading under 80% alike (characters or toneless
   pinyin) stays typed and must be taken back with 復原 (nothing else goes on); after 3 misses, a closed mic or no
   model, 跳過這步. Text replacing a selection mid-line drops the recognizer's closing mark. The App rests
   (`_paused`) while it shows; closed midway it comes back at its chapter (each chapter starts from `_scene` then);

@@ -27,7 +27,7 @@ from html import escape
 from pypinyin import lazy_pinyin
 from PySide6.QtCore import QObject, QPoint, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QPainter
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 
 from .. import appicon, audio, keys
 from . import theme
@@ -53,7 +53,7 @@ SECOND = "爺爺的視力很好"
 MISHEARD = ("視力", "勢力")        # planted in SECOND until THIRD is said
 THIRD = "連對面的招牌都看得清楚"
 LINE1 = FIRST + "。" + SECOND + "，" + THIRD + "。"
-CUT = "今天天氣很好，"              # selected and deleted in 選取重講: the rest still reads well
+CUT = "今天天氣很好，"              # selected and deleted in 選取重講 (with its comma, when there): the rest reads well
 PLANTED = "請幫我定一張車票。"
 # the 選字 menu for 定 (同音 / 不同聲調 / 模糊音, as candidates.ranked gives them, fixed so it never depends on the
 # dictionary)
@@ -78,6 +78,29 @@ def alike(said: str, want: str) -> float:
     chars = SequenceMatcher(None, a, b).ratio()
     sounds = SequenceMatcher(None, lazy_pinyin(a), lazy_pinyin(b)).ratio()
     return max(chars, sounds)
+
+
+def punctuated(said: str, want: str) -> str:
+    """said with want's marks inside it where their characters line up (X-ASR writes a ， only where it heard a
+    pause: read smoothly, 今天天氣很好我們去公園散步 came without it); characters said differently stay as said, and
+    so does said's closing mark."""
+    marks = {}               # want's bare character index -> the marks after it
+    bare = []
+    for ch in want:
+        if _PUNCT.match(ch):
+            if bare:
+                marks[len(bare) - 1] = marks.get(len(bare) - 1, "") + ch
+        else:
+            bare.append(ch)
+    said_bare = _bare(said)
+    out = []
+    for op, i1, i2, j1, j2 in SequenceMatcher(None, said_bare, bare).get_opcodes():
+        if op == "equal":
+            out += [bare[k] + (marks.get(k, "") if k < len(bare) - 1 else "") for k in range(j1, j2)]
+        else:
+            out.append(said_bare[i1:i2])
+    end = _END.search(said)
+    return "".join(out) + (end.group() if end else "")
 
 
 def described(said: str) -> str | None:
@@ -163,7 +186,7 @@ class Ear(QObject):
             self._start = None
             if self._loud - start >= 0.15:
                 self.ended.emit(self.probe.recent(now - start + self.LEAD), self._loud - start <= self.SHORT)
-        elif quiet >= self.PAUSE and not self._paused:
+        elif quiet >= self.PAUSE and not self._paused and self._loud - start >= 0.15:   # not a click's noise
             self._paused = True
             self.paused.emit(self.probe.recent(now - start + self.LEAD))
 
@@ -174,6 +197,23 @@ class Strip(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
         self.chapter = 0
+        self._press_at = None
+
+    # dragged, it moves the window like the window's own empty places (the tutorial covers them)
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            self._press_at = e.globalPosition().toPoint()
+
+    def mouseMoveEvent(self, e):
+        at = self._press_at
+        if at is not None and (e.globalPosition().toPoint() - at).manhattanLength() >= QApplication.startDragDistance():
+            self._press_at = None
+            handle = self.window().windowHandle()
+            if handle is not None:
+                handle.startSystemMove()
+
+    def mouseReleaseEvent(self, e):
+        self._press_at = None
 
     def paintEvent(self, _):
         p = QPainter(self)
@@ -616,7 +656,7 @@ class Tutorial(QWidget):
         if token != self._token or token == self._done_token or not result or result[0] != "text":
             return
         sp, want = self._sp, self._want
-        if want and want["kind"] == "speech" and not sp.miss and result[1]:
+        if want and want["kind"] == "speech" and not sp.miss and _bare(result[1]):
             self.desk.picker.dismiss()
             sp.type(result[1])
 
@@ -651,8 +691,8 @@ class Tutorial(QWidget):
             return
         sp.no_model = False
         kind, said = result
-        self.desk.picker.dismiss()
         if kind == "cmd":
+            self.desk.picker.dismiss()
             if said == "復原" and (sp.miss or sp.typed):
                 if "復原" in sp.commands and not sp.miss:
                     self._resume(("cmd", said))
@@ -671,6 +711,7 @@ class Tutorial(QWidget):
             return
         if not _bare(said):
             return
+        self.desk.picker.dismiss()
         if sp.miss:
             self._say_hint("先說「復原」，把剛剛那句收回來。")
             return
@@ -687,6 +728,8 @@ class Tutorial(QWidget):
         if sp.target:
             draft = sp.draft_text()
             if alike(draft, sp.target) >= ALIKE:
+                draft = punctuated(draft, sp.target)
+                sp.retype(draft)
                 self._resume(("ok", draft))
                 return
             done = _bare(draft)
@@ -880,8 +923,8 @@ class Tutorial(QWidget):
         yield from self.say("換好了！選取一段字再說話，就會整段取代。", "happy")
 
         def cut_chosen(_name, _data):
-            return True if e.selected_text in (CUT, CUT[:-1]) else "選第一行開頭的「今天天氣很好，」就好。"
-        ask = "不要的字也能用說的刪掉：選取第一行開頭的「今天天氣很好，」。"
+            return True if e.selected_text in (CUT, CUT[:-1]) else "選第一行開頭的「今天天氣很好」就好。"
+        ask = "不要的字也能用說的刪掉：選取第一行開頭的「今天天氣很好」。"
         while True:
             yield from self.click("selected:notepad", ask, at=lambda: e.char_rect(0, len(CUT)), check=cut_chosen,
                                   status="等你選取", avoid=e.used_rect)
@@ -889,9 +932,12 @@ class Tutorial(QWidget):
             if result[0] != "lost":
                 break
             self._lost()
-            ask = "選取不見了，再選一次「今天天氣很好，」。"
-        a = e.text.find(CUT)    # with its comma, selected or not, so the line reads on
-        e.replace(a, a + len(CUT), "")
+            ask = "選取不見了，再選一次「今天天氣很好」。"
+        a = e.text.find(CUT[:-1])
+        b = a + len(CUT) - 1
+        if e.text[b:b + 1] in ("，", ","):   # its comma too, selected or not, so the line reads on
+            b += 1
+        e.replace(a, b, "")
         self.sprite.bounce()
         yield from self.say("刪掉了！剩下的句子一樣通順。", "happy", at=lambda: e.char_rect(0, 1), avoid=e.used_rect)
 
@@ -1071,6 +1117,15 @@ class _Speech:
         box.draft = (self.start, self.end)
         box.update()
         self.typed = True
+
+    def retype(self, text: str):
+        """What this step heard reads text now (its marks put right), still the draft."""
+        box = self.box
+        if text == self.draft_text():
+            return
+        box.replace(self.own, self.end, text, draft=True)
+        self.end = self.own + len(text)
+        box.draft = (self.start, self.end)
 
     def go_on(self):
         """The next utterance comes after this one."""

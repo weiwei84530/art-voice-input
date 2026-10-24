@@ -93,7 +93,7 @@ def main():
                   (lambda: t.hear(("cmd", "復原")),), (shot, "undone")]
     steps += [
         (lambda: t._partial(t._token, ("text", "今天天氣很好")),), (shot, "partial"),
-        (lambda: t.hear(("text", "今天天氣很好，我們去公圓散步。")),), (shot, "read-ok"), (nxt,), (shot, "ask-second"),
+        (lambda: t.hear(("text", "今天天氣很好我們去公圓散步。")),), (shot, "read-ok"), (nxt,), (shot, "ask-second"),
         (lambda: t._partial(t._token, ("text", "爺爺的視力")),), (shot, "second-partial"),
         (lambda: t.hear(("text", "爺爺的視力很好。")),), (shot, "second"), (nxt,), (shot, "ask-third"),
         (lambda: t.hear(("text", "連對面的招牌都看得清楚。")),), ("wait", 250), (shot, "third-flash"), ("wait", 900),
@@ -109,7 +109,7 @@ def main():
         (shot, "selected"), (lambda: click(e, QPoint(400, 120)),), (shot, "lost"),
         (lambda: select(e, e.text.rfind("一張"), e.text.rfind("一張") + 2),), (shot, "reselected"),
         (lambda: t.hear(("text", "兩張。")),), (shot, "replaced"), (nxt,),
-        (shot, "ask-cut"), (lambda: select(e, 0, 7),), (shot, "cut-selected"), (lambda: t.hear(("cmd", "刪除")),),
+        (shot, "ask-cut"), (lambda: select(e, 0, 6),), (shot, "cut-selected"), (lambda: t.hear(("cmd", "刪除")),),
         (shot, "cut"), (nxt,),
         (shot, "described-intro"), (nxt,), (shot, "ask-described"), (lambda: t.hear(("text", "節日的節。")),),
         (shot, "described"), (nxt,), (shot, "send-intro"), (nxt,), ("wait", 700), (shot, "chat"),
