@@ -656,6 +656,9 @@ class DeskPicker(Picker):
     def _clamp(self):
         pass
 
+    def mousePressEvent(self, e):
+        e.accept()   # kept here: passed on, the desk closed the menu before the release picked (2026-10-24)
+
     def _no_activate(self):
         pass
 

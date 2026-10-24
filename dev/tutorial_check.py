@@ -88,7 +88,7 @@ def main():
         (shot, "undo-done"), (nxt,), (shot, "pick-intro"), (nxt,), ("wait", 1200), (shot, "planted"),
         (lambda: QTest.mouseDClick(e, Qt.LeftButton, Qt.NoModifier, char_pos(e, e.text.rfind("定"))),),
         ("wait", 300), (shot, "picker"),
-        (lambda: d.picker.pick("訂"),), (shot, "picked"), (nxt,), (shot, "pick-memory"), (nxt,),
+        (lambda: click(d.picker, d.picker._cells[1].center().toPoint()),), (shot, "picked"), (nxt,), (shot, "pick-memory"), (nxt,),
         (shot, "ask-select"), (lambda: select(e, e.text.rfind("一張"), e.text.rfind("一張") + 2),),
         (shot, "selected"), (lambda: t.hear(("text", "兩張。")),), (shot, "replaced"), (nxt,),
         (shot, "described-intro"), (nxt,), (shot, "ask-described"), (lambda: t.hear(("text", "節日的節。")),),
