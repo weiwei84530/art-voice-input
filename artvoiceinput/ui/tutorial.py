@@ -538,6 +538,7 @@ class Tutorial(QWidget):
                 skip = sp.misses >= MISSES or bool(self.mic_error) or sp.no_model
             elif want["kind"] == "click":
                 skip = bool(want.get("skip"))
+                alt = want.get("alt", ("", ""))
             if self._hint:
                 text = self._hint
             card.show_line(text, quote=quote, heard=heard, status=status, listening=listening, skip=skip,
@@ -624,10 +625,12 @@ class Tutorial(QWidget):
         return (yield dict(kind="next", text=text, face=face, at=at, ring=ring, next_text=next_text, avoid=avoid))
 
     def click(self, what, text: str, at=None, ring=_SAME, check=None, status: str = "", face: str = "idle",
-              avoid=None):
+              avoid=None, alt=("", "")):
+        """alt: another way, shown in gray after the red status (Card.show_line's)."""
         self._lines.append(text)
         return (yield dict(kind="click", what=set(what) if not isinstance(what, str) else {what}, text=text, at=at,
-                           ring=at if ring is _SAME else ring, check=check, status=status, face=face, avoid=avoid))
+                           ring=at if ring is _SAME else ring, check=check, status=status, face=face, avoid=avoid,
+                           alt=alt))
 
     def wait(self, ms: int):
         """A moment for an animation; the guide stays as it is."""
@@ -780,7 +783,7 @@ class Tutorial(QWidget):
         elif mode == "minimal":
             yield from self.click(("alt", "tray"), f"按一下鍵盤上的{key}，或點工作列上的阿特圖示，麥克風就會打開。",
                                   at=lambda: d.tray_rect(), ring=lambda: d.tray_rect().adjusted(-3, -3, 3, 3),
-                                  status=f"等你按{key} 或點圖示")
+                                  status=f"等你按{key}", alt=("", "app"))
         self.set_mic(True)   # 自動: on already, by the click
         yield from self.wait(260)
         self.sprite.bounce()
