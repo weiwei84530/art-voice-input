@@ -3,7 +3,7 @@ import sys
 import winreg
 from pathlib import Path
 
-from .paths import APP_DIR
+from .paths import APP_DIR, FROZEN
 
 APP_ID = "ArtVoiceInput"
 LAUNCHER = APP_DIR / "run.pyw"
@@ -16,12 +16,17 @@ def _python() -> str:
     return str(pyw if pyw.exists() else exe)
 
 
+def command() -> str:
+    """How this run is started again: the installed exe, else pythonw with run.pyw."""
+    return f'"{sys.executable}"' if FROZEN else f'"{_python()}" "{LAUNCHER}"'
+
+
 def set_enabled(enabled: bool, debug: bool = False) -> None:
     """debug: the entry launches with --debug too (it follows how this run was launched)."""
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run",
                         0, winreg.KEY_SET_VALUE) as k:
         if enabled:
-            winreg.SetValueEx(k, APP_ID, 0, winreg.REG_SZ, f'"{_python()}" "{LAUNCHER}" {FLAG}' + (" --debug" if debug else ""))
+            winreg.SetValueEx(k, APP_ID, 0, winreg.REG_SZ, f'{command()} {FLAG}' + (" --debug" if debug else ""))
         else:
             try:
                 winreg.DeleteValue(k, APP_ID)

@@ -2090,7 +2090,10 @@ class App(QObject):
         log.info("restart")
         self.settings.hide()
         args = [a for a in sys.argv[1:] if a != RESTARTED] + [RESTARTED]
-        QProcess.startDetached(sys.executable, [os.path.abspath(sys.argv[0])] + args, os.getcwd())
+        if paths.FROZEN:   # the installed exe: argv[0] is the exe itself
+            QProcess.startDetached(sys.executable, args, os.getcwd())
+        else:
+            QProcess.startDetached(sys.executable, [os.path.abspath(sys.argv[0])] + args, os.getcwd())
         self.quit()
 
     def quit(self):

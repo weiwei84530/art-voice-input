@@ -47,13 +47,19 @@ automatically; read it before reviving or redesigning something). Module docstri
 - Code, `.tools/`, `.venv/` stay in the app folder; user data in `paths.DATA_DIR` (`%LOCALAPPDATA%\ArtVoiceInput`):
   `config.json`, logs, lock, `models/`, `hotword-list.json`, `smart-picks.json`, `packs/`, `cache/`.
   `paths.migrate_legacy()` moves old in-folder data. Autostart is re-registered each launch.
-- Installer (planned, not started; decided 2026-10-24): PyInstaller onedir (onefile unpacks at every launch, more
-  antivirus false alarms) + Inno Setup, one `ArtVoiceInput-Setup-x.y.z.exe` offered on a website. Per-user install
-  to `%LOCALAPPDATA%\Programs\ArtVoiceInput` (no admin, no UAC; a 自訂路徑 button for another folder), uninstall
-  entry in HKCU so it shows in Windows 設定 → 應用程式; updates install over it with the same AppId, user data stays
-  in DATA_DIR. The models (X-ASR + VAD) ship inside the installer (works offline, no first-run download from
-  GitHub). Uninstall removes the autostart Run value and asks whether to delete settings and 詞庫 (default: keep).
-  Unsigned for now: SmartScreen's 其他資訊 → 仍要執行 is accepted; a code signing certificate later if needed.
+- Installer (2026-10-24, layout B of https://claude.ai/artifact/8jvXUtkd9V8MU8ozxwRijy; our own Qt setup, not Inno
+  Setup, so it looks like the app): `installer/build.py` builds the app with PyInstaller onedir (`installer/app.spec`;
+  onefile unpacks at every launch, more antivirus false alarms), copies the X-ASR files and the VAD into its `models/`,
+  builds the setup program onefile (`installer/setup.spec`) and appends the app folder to it as a zip
+  (`installer/payload.py`) -> `dist/ArtVoiceInput-Setup-<version>.exe` (~230MB). Per-user install to
+  `%LOCALAPPDATA%\Programs\ArtVoiceInput` (no admin, no UAC; 換個位置 picks a folder, an ArtVoiceInput folder is made
+  inside it), Start menu shortcut, uninstall entry in HKCU (Windows 設定 → 應用程式); `uninstall.exe` is the setup exe
+  without the payload, run from a temp copy; it closes the app, removes the folder, the shortcut, the entry and the
+  autostart Run value only when it points into the folder, and asks whether to delete settings and 詞庫 (default:
+  keep; `/quiet` keeps). The installed build (`paths.FROZEN`) reads its bundled models (`paths.BUNDLED_MODELS_DIR`),
+  registers the exe for autostart, skips `migrate_legacy`. Unsigned for now: SmartScreen's 其他資訊 → 仍要執行 is
+  accepted. Testing an install: `--dir <folder>` on the setup exe; launch the installed exe with LOCALAPPDATA pointed
+  elsewhere so it doesn't touch the real data.
 - Fixed models, no model choice, no LLM (`models.py`; URL
   `https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/<dir>.tar.bz2`):
   recognition X-ASR int8 `sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03` (130MB, ~0.75s per

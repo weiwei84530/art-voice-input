@@ -4,7 +4,7 @@ import tarfile
 import urllib.request
 from pathlib import Path
 
-from .paths import DEFAULT_MODELS_DIR
+from .paths import BUNDLED_MODELS_DIR, DEFAULT_MODELS_DIR, FROZEN
 
 BASE_URL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/"
 
@@ -33,6 +33,8 @@ VAD_FILE = "silero_vad.onnx"
 
 def vad_path() -> Path:
     """The VAD model, downloaded first if missing."""
+    if FROZEN and (BUNDLED_MODELS_DIR / VAD_FILE).exists():
+        return BUNDLED_MODELS_DIR / VAD_FILE
     path = DEFAULT_MODELS_DIR / VAD_FILE
     if not path.exists():
         fetch(BASE_URL + VAD_FILE, path)
@@ -40,6 +42,10 @@ def vad_path() -> Path:
 
 
 def model_dir(key: str) -> Path:
+    """The installed build's bundled copy when it has one, else the data folder's (downloaded)."""
+    bundled = BUNDLED_MODELS_DIR / MODELS[key]["dir"]
+    if FROZEN and bundled.exists():
+        return bundled
     return DEFAULT_MODELS_DIR / MODELS[key]["dir"]
 
 
