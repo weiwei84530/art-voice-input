@@ -1264,6 +1264,9 @@ class App(QObject):
                     self.listener.audio(lo, piece.hi), _bias([(w, _COMMAND_SCORE) for w in names]))
                 head, tail = _split_at(text, tokens, times, [(0, lo)], piece.start - _MARK_SLACK)
                 tail = _one_command(tail, names)   # the boost may repeat it (結束結束)
+                if head.strip() and not state["drafted"] and ctx.selection is not None \
+                        and edit.spelled(ctx.selection.text, text):
+                    head, tail = "", text   # a spelled word's first letter timed before the piece (_ran_tail)
                 # spelled letters checked without _command's learning: the path below runs it once more
                 spelt = not head.strip() and ctx.selection is not None and tail                     and edit.spelled(ctx.selection.text, tail)
                 op, typed = self._command(format_text(tail, True, []), ctx, []) if tail else (None, None)
@@ -1367,6 +1370,10 @@ class App(QObject):
         head, tail = _split_at(text, tokens, times, index, piece.start - _MARK_SLACK)
         if not tail:
             return False
+        if head.strip() and ctx.selection is not None and edit.spelled(ctx.selection.text, text):
+            # letters spelled over a selected word, the first one timed before the piece: the user's D E S I G N
+            # over Decide split as D | E S I G N and typed DESIGN as text (2026-10-27)
+            head, tail = "", text
         steps = []
         said = format_text(tail, True, steps)
         # raw for spelled letters (B L I P.) over a selected word, only when the piece is all that was said
