@@ -17,3 +17,6 @@ dist/
 
 # official website drafts (moved to the brand project later)
 website/
+
+# Playwright MCP snapshots and screenshots
+.playwright-mcp/
