@@ -59,13 +59,13 @@ from .keys import combo_vks, upgrade_hotkey
 from .listen import LEAD, Listener
 from .memory import Memory, is_latin, situation
 from .mute import Muter, recover as recover_mute
-from .output import (backspace, copy_text, paste_text, press_chord, press_delete, press_key, restore_now,
+from .output import (backspace, copy_text, paste_text, press_chord, press_delete, press_key, replay, restore_now,
                      text_before, watch_clipboard)
 from . import picker as picker_mod
 from .picker import Picker
 from .reading import reading_key
-from .selection import (Context, ContextProbe, caret_rect, focus_info, move_cursor_after, term_watcher,
-                        terminal_in_front)
+from .selection import (Context, ContextProbe, caret_rect, focus_holds, focus_info, move_cursor_after,
+                        term_watcher, terminal_in_front)
 from .session import Session, foreground
 from .tray import Tray, promote as tray_promote
 from .ui.window import WIZARD_THEME, SettingsWindow
@@ -186,7 +186,10 @@ class App(QObject):
         self._draft_start = 0                    # the sample the draft's audio starts at (the last commit)
         self._quitting = False
         self._marked = None                      # the buffer when the last commit added its sentence-final mark
-        self._owed = None                        # (mark, text): a commit that held its sentence end back (_owed_mark)
+        self._owed = None                        # (mark, text, nothing after it): a commit that held its sentence end back (_owed_mark)
+        # hook threads: input held back while the mark a sentence is due goes in before the caret leaves (_seal_job)
+        self._held, self._held_lock, self._seal_lock = None, threading.Lock(), threading.Lock()
+        self._seal_pool = ThreadPoolExecutor(max_workers=1)
         self._keyed = False                      # a key other than Enter typed while listening (_on_other_key)
         self._committed = None                   # (text before it, _Draft, its history step): 復原 may revive it
         self._spans: list = []                   # worker thread: the pieces of the draft's open sentence
@@ -276,6 +279,7 @@ class App(QObject):
 
         self.cfg.hotkey = upgrade_hotkey(self.cfg.hotkey)
         self.hotkeys = Hotkeys(self.hotkey_tap.emit, self._on_other_key)
+        self.hotkeys.hold = self._hold_key
         self.hotkeys.set_hotkey(self.cfg.hotkey)
         self.settings.capture_hotkey.connect(self._capture_hotkey)
         self.hotkeys.start()
@@ -326,6 +330,7 @@ class App(QObject):
     def _watch_mouse(self):
         """Any click may move the caret, which ends what session.py knows about the text before it. Left button
         drags may select text in a terminal (selection.TermWatcher). Our own clicks (injected) are skipped."""
+        import ctypes.wintypes
         from pynput import mouse
         downs = {0x201, 0x204, 0x207, 0x20B}   # left / right / middle / x button down
         clicks = {"down": None, "n": 0, "at": 0.0, "pt": None}   # the left button, for _auto_pick
@@ -335,6 +340,14 @@ class App(QObject):
                 return False
             if self.hotkeys.is_bound_mouse(msg, data.mouseData):
                 return False   # a button an operation uses is not a click
+            if msg in _HELD_BUTTONS and self._hold_mouse(msg, data.pt):
+                listener.suppress_event()   # sent again after the sentence's mark (_seal_job)
+                return
+            seen(msg, data)
+            return False   # never passed on to pynput's (unused) callbacks: keeps the hook cheap
+
+        def seen(msg, data):
+            """A button or wheel event: from the hook, or held back and sent again (_seal_job)."""
             if msg in downs:
                 if self._on_picker(data.pt) or self._on_float(data.pt):
                     return False   # a click in the 選字 menu or the floating button leaves the caret where it is
@@ -371,7 +384,11 @@ class App(QObject):
                         clicks["at"], clicks["pt"] = now, (x, y)
                         if clicks["n"] >= 2:
                             self.main.emit(self._auto_pick)   # a double (or triple) click
-            return False   # never passed on to pynput's (unused) callbacks: keeps the hook cheap
+
+        class _Event:
+            def __init__(self, x, y):
+                self.pt, self.mouseData = ctypes.wintypes.POINT(x, y), 0
+        self._mouse_seen = lambda msg, x, y: seen(msg, _Event(x, y))
         listener = mouse.Listener(win32_event_filter=on_event)
         listener.daemon = True
         listener.start()
@@ -879,6 +896,88 @@ class App(QObject):
         self._freeze(at)
         self._decoding(self._redo_job, at)
 
+    def _due_mark(self) -> str:
+        """Any thread: the mark the sentence before the caret gets if the caret now moves elsewhere in the same text
+        box (2026-10-27, the user's request: a draft left open got none): the open draft while listening, or a
+        sentence committed without its mark (_owed), only with nothing after it on its line."""
+        d = self._draft
+        if self._listening and d is not None and d.placed and d.typed and not self._moved():
+            if _TRAILING.search(d.typed) or not _after_blank(d.ctx):
+                return ""
+            live = self._live
+            raw = live[3].strip() if live is not None and live[0] == self._draft_start else ""
+            return _end_mark(d.typed, raw[-1:])
+        if self._owed is not None and self._owed[2]:
+            return self._owed_mark()
+        return ""
+
+    def _hold_key(self, vk: int, down: bool) -> bool:
+        """Keyboard hook thread: a key moving the caret (arrows, Home, End, Page Up / Down) while a mark is due is
+        held back (True) until the mark is typed; so is any key while something is held."""
+        with self._held_lock:
+            if self._held is not None:
+                self._held.append(("key", vk, down))
+                return True
+            if not down or vk not in _MOVE_KEYS or not self._due_mark():
+                return False
+            self._held = [("key", vk, True)]
+        self._seal_pool.submit(self._seal_job, None)
+        return True
+
+    def _hold_mouse(self, msg: int, pt) -> bool:
+        """Mouse hook thread: a left click while a mark is due is held back (True) until the mark is typed, when it
+        lands in the same text box (the focused control); so is any button while something is held."""
+        with self._held_lock:
+            if self._held is not None:
+                self._held.append(("mouse", msg, pt.x, pt.y))
+                return True
+            if msg != 0x201 or self._on_picker(pt) or self._on_float(pt) or not self._due_mark():
+                return False
+            self._held = [("mouse", msg, pt.x, pt.y)]
+        self._seal_pool.submit(self._seal_job, (pt.x, pt.y))
+        return True
+
+    def _seal_job(self, pt):
+        """The held click (at pt) or key: the due mark typed first when it stays in the same text box, then the
+        input sent again and handled as if it had just come (injected input skips the hooks)."""
+        live = [True]
+        try:
+            if pt is None or focus_holds(*pt):
+                done = threading.Event()
+                self.main.emit(lambda: (self._seal(live), done.set()))
+                done.wait(0.6)
+        except Exception:
+            log.exception("seal failed")
+        finally:
+            with self._seal_lock:
+                live[0] = False   # too late: never typed after the caret has moved
+            while True:
+                with self._held_lock:
+                    events = self._held
+                    self._held = [] if events else None
+                if not events:
+                    break
+                replay(events)
+                for ev in events:
+                    if ev[0] == "mouse":
+                        self._mouse_seen(*ev[1:])
+                    elif ev[2]:
+                        self._on_other_key(ev[1])
+
+    def _seal(self, live: list):
+        """Main thread: the due mark typed at the caret, which is about to leave."""
+        with self._seal_lock:
+            mark = self._due_mark() if live[0] else ""
+            if not mark:
+                return
+            d = self._draft
+            paste_text(mark)
+            self.session.dictated(mark, None, foreground())
+            if self._owed is None and d is not None:
+                d.typed = d.final = d.typed + mark
+            self._owed = None
+            log.info("caret leaving: %s added", mark)
+
     def _freeze(self, at: int | None = None):
         """Main thread: the caret moved away from the draft. It stays as typed; speech from `at` (default: the
         speech under way) starts a new draft."""
@@ -969,7 +1068,8 @@ class App(QObject):
                     marked, added = True, end is None   # added: the recognizer gave none
                 self._show_draft()
                 if not ends and d.final and d.placed and d.typed == d.final and not _inside(d.ctx):
-                    self._owed = (mark, d.typed)   # held back: put before what is said next right after it
+                    # held back: put before what is said next right after it, or as the caret leaves it (_due_mark)
+                    self._owed = (mark, d.typed, _after_blank(d.ctx))
                 logged = bool(d.final) and d.typed == d.final   # else left as typed (logged by _freeze)
                 if logged and command is None:
                     self.book.committed(before, d.typed, added, by_stop=final)
@@ -1014,7 +1114,7 @@ class App(QObject):
         clicked since and the text before the caret still ends with that sentence."""
         if self._owed is None:
             return ""
-        mark, text = self._owed
+        mark, text, _ = self._owed
         s = self.session
         return mark if s.clean() and s.buffer.endswith(text) else ""
 
@@ -2172,6 +2272,23 @@ _CJK_CHAR = re.compile(r"[㐀-䶿一-鿿]")
 _TRAILING = re.compile(r"[\s，。、！？；：,.!?;:…]+$")
 
 
+def _after_blank(ctx) -> bool:
+    """Nothing but spaces after the text on its line (unknown counts as nothing)."""
+    sel = ctx.selection if ctx is not None else None
+    after = sel.after if sel is not None else ctx.caret[1] if ctx is not None and ctx.caret else ""
+    return not after.strip()
+
+
+def _end_mark(text: str, raw_end: str) -> str:
+    """A sentence's closing mark: the recognizer's (raw_end, its text's last character) when it ended with one, else
+    ？ after 嗎, else 。 (. for a sentence with no Chinese)."""
+    cjk = bool(_CJK_CHAR.search(text))
+    for marks in ("。.", "？?", "！!"):
+        if raw_end and raw_end in marks:
+            return marks[0] if cjk else marks[1]
+    return "？" if text.endswith("嗎") else "。" if cjk else "."
+
+
 def _inside(ctx) -> bool:
     """The text goes between text on its line: the caret's, or a selection's (that one got a 。 until 2026-10-15)."""
     sel = ctx.selection
@@ -2278,6 +2395,8 @@ def _sample_at(index: list, offset: int) -> int:
 _SENTENCE_END = re.compile(r"[。？！.?!]$")
 _WORD_EDGE = re.compile(r"^[\s，。、！？；：,.!?;:…「」『』（）()\"']+|[\s，。、！？；：,.!?;:…「」『』（）()\"']+$")
 _WORD_MAX = 30   # 加入詞庫: longer is a sentence, not a word
+_MOVE_KEYS = range(0x21, 0x29)   # Page Up, Page Down, End, Home and the arrows: the caret moves (App._hold_key)
+_HELD_BUTTONS = {0x201, 0x202, 0x204, 0x205}   # left / right button down and up (App._hold_mouse)
 _MARKS = "，。？！；"          # punctuation that may close a settled part of a draft
 _MARK_SLACK = int(0.2 * SAMPLE_RATE)   # samples a mark may lie outside the pause it closes
 _GAP_KEEP = int(0.5 * SAMPLE_RATE)     # more of a pause kept between pieces than their own tail and lead-in

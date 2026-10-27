@@ -50,6 +50,7 @@ class Hotkeys:
     def __init__(self, on_tap, on_other_key=None):
         self.on_tap = on_tap
         self.on_other_key = on_other_key
+        self.hold = None                   # hold(vk, down) -> True: the key event is held back (not a modifier)
         self._mods, self._main, self._vk = frozenset(), "", None
         self._down: set[int] = set()       # modifier keys down now (the user's, not injected)
         self._swallow: set = set()         # the hotkey's key or button, down: its repeats and release suppressed
@@ -152,6 +153,9 @@ class Hotkeys:
                 self._swallow.discard(vk)
                 self._listener.suppress_event()
                 return
+        if vk not in MOD_OF and self.hold is not None and self.hold(vk, down):
+            self._listener.suppress_event()   # held back, sent again later (App._hold_key)
+            return
         if down and self.on_other_key and vk not in MOD_OF:
             self.on_other_key(vk)
         return True

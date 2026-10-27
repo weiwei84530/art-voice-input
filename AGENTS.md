@@ -155,7 +155,11 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
   (2026-10-27). A commit reuses the last pause's decode when its last piece is the spans' last (`App._live`).
 - **Caret moved** (click, key, selection; `_caret_left` from the hooks): the draft stays as typed, the next speech
   starts a new one; a late update is redone at the new caret (`_redo_job`). A draft started over a selection
-  replaces it.
+  replaces it. Leaving it within the same text box (2026-10-27, the user's request): a left click inside the
+  focused control (`selection.focus_holds`) or an arrow / Home / End / Page key while the open draft (or a sentence
+  owed its mark, `_owed`) has nothing after it on its line is held back by the hooks (`App._hold_key` /
+  `_hold_mouse`), the mark typed (`_due_mark`, `_seal`), then the input sent again (`output.replay`) and handled
+  as if just come. Clicks elsewhere and typing add nothing.
 - **Draft mark** (`highlight.py`, color `highlight_color`, default yellow because blue read as a selection; a 自訂
   color's opacity fixed at `config.MARK_ALPHA`, 2026-10-22): only the
   open sentence, read every 0.15s on a thread, hidden while the wheel turns, on caret moves or another window in

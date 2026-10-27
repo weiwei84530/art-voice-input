@@ -90,6 +90,16 @@ def focus_info():
         return None, None
 
 
+def focus_holds(x: int, y: int) -> bool:
+    """The point (screen pixels) lies in the focused control: a click there stays in the same text box."""
+    try:
+        uia, _ = _uia()
+        r = uia.GetFocusedElement().CurrentBoundingRectangle
+        return r.left <= x < r.right and r.top <= y < r.bottom
+    except Exception:
+        return False
+
+
 def focus_editable() -> bool | None:
     """Whether text can be typed where the focus is (2026-10-16): True in a text box, a contenteditable box or a
     terminal; False on a button, list, menu, a read-only document (a web page clicked outside its boxes), the desktop

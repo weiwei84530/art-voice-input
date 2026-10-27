@@ -12,7 +12,7 @@ rule:JSON (add an operation, rules.Rule.from_dict), at:WORD (put the caret right
 the end), say:TEXT (dictate TEXT as if recognized), op:PHRASE (a spoken operation of the
 user's config run without audio), clip:TEXT (the box's clipboard; the real one is never read), nocaret (the next
 probe cannot read the caret's line), set:NAME=VALUE (change a setting in memory only; apply: as the settings window does after a change), packs:ID+ID (tick term packs, in memory only) or key:BACK (the
-user presses Backspace n times: key:BACK*3), key:ENTER (the user presses Enter), key:TYPE (the user types a letter key), pick:N / pickw:WORD (click a row of the 選字 menu), feed:WAV (while
+user presses Backspace n times: key:BACK*3), key:ENTER (the user presses Enter), key:TYPE (the user types a letter key), key:LEFT (the user presses ←), pick:N / pickw:WORD (click a row of the 選字 menu), feed:WAV (while
 continuous listening is on: WAV and 1s of silence reach the microphone; feed:WAV+WAV joins clips with 0.6s pauses),
 logshot:NAME (the 辨識紀錄 tab saved as <dir>/NAME.png), realtime (feed: steps play at the microphone's own speed, not 3x:
 for timing; each pause's and command's latency is printed as [延遲]), wait:SEC (silence for SEC seconds), tap0 (a tap; the next step starts at once, while queued work
@@ -128,6 +128,8 @@ appmod.terminal_in_front = lambda: False       # the box is no terminal, whateve
 appmod.foreground = session.foreground = lambda: HWND
 appmod.Hotkeys.start = lambda self: None           # no real hotkey / keyboard hook
 appmod.App._watch_mouse = lambda self: None       # the user's real clicks must not end the simulated session
+appmod.focus_holds = lambda x, y: True   # a held click stays in the box
+appmod.replay = lambda events: [_left() for ev in events if ev[0] == "key" and ev[1] == 0x25 and ev[2]]
 
 
 class Listener(appmod.Listener):
@@ -215,6 +217,10 @@ class Muter:
 A.muter = Muter()
 A.cfg.save = lambda: None   # settings are never saved (the pack hint saves config.json)
 appmod.cues.play = lambda cue, kind, volume=100: print(f"      [音效] {kind}: {cue or '（無）'}")   # printed, not played
+
+
+def _left():
+    box.sel, box.caret = None, max(0, box.caret - 1)
 
 
 def pump(sec):
@@ -485,6 +491,14 @@ try:
             box.text, box.caret, box.sel = "", 0, None
             pump(1.0)
             print(f"[按 Enter] 聽寫中：{A._listening}")
+            continue
+        if step == "key:LEFT":   # the user presses ← (held back while a sentence's mark is due, App._hold_key)
+            if not A._hold_key(0x25, True):
+                _left()
+                A._on_other_key(0x25)
+            A._hold_key(0x25, False)
+            pump(1.0)
+            print(f"[按 ←] → 文字框：{box.text[:box.caret] + '|' + box.text[box.caret:]!r}")
             continue
         if step == "key:TYPE":   # the user types a key (an IME's composition: the box shows nothing yet)
             A._on_other_key(0x41)

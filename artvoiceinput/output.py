@@ -214,6 +214,29 @@ def press_chord(*vks: int) -> None:
     ctypes.windll.user32.SendInput(len(events), events, ctypes.sizeof(_INPUT))
 
 
+def replay(events: list) -> None:
+    """Input held back by a hook sent again in its order: ("key", vk, down) or ("mouse", msg, x, y) with msg a
+    WM_xBUTTONDOWN / UP of the left or right button, at that point (the pointer goes back where it is now)."""
+    flags = {0x201: 0x0002, 0x202: 0x0004, 0x204: 0x0008, 0x205: 0x0010}   # MOUSEEVENTF_LEFTDOWN …
+    u32 = ctypes.windll.user32
+    now = wt.POINT()
+    u32.GetCursorPos(ctypes.byref(now))
+    for ev in events:
+        one = (_INPUT * 1)()
+        if ev[0] == "key":
+            _, vk, down = ev
+            one[0].type = 1
+            one[0].ki = _KEYBDINPUT(vk, 0, (0 if down else 2) | (1 if vk in EXTENDED else 0), 0, None)
+        else:
+            _, msg, x, y = ev
+            u32.SetCursorPos(x, y)
+            one[0].type = 0
+            one[0].mi = _MOUSEINPUT(0, 0, 0, flags[msg], 0, None)
+        u32.SendInput(1, one, ctypes.sizeof(_INPUT))
+    if any(ev[0] == "mouse" for ev in events):
+        u32.SetCursorPos(now.x, now.y)
+
+
 def backspace(n: int, gap: float = 0.0) -> None:
     """gap: seconds between presses. Codex in a terminal dropped one of a burst of Backspaces after some
     text (abc_ascii, 2026-10-02); 20ms apart none were lost."""

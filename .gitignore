@@ -14,3 +14,6 @@ dev/sound-preview/*
 # installer builds (installer/build.py)
 build/
 dist/
+
+# official website drafts (moved to the brand project later)
+website/
