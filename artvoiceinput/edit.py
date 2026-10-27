@@ -46,16 +46,18 @@ def described(formatted: str) -> str | None:
     """The character when the whole utterance is <word>的<character> (節日的節 -> 節), else None. The part before 的
     must be one dictionary word, nothing else (2026-10-16, the user's rule, so the user knows what they are doing:
     只是顯示的是 typed 是; lead-ins such as 這個字是教育的育 no longer count, and the setting turns it all off). The
-    word holds the character, or one that sounds like it (X-ASR wrote 一張的章, 節日的結: the word's is typed)."""
+    word holds the character, or one that sounds like it (X-ASR wrote 一張的章, 節日的結: the word's is typed).
+    The character itself in the part before 的 counts without the dictionary (2026-10-27, the user's request:
+    一二的一, 一二 is no word); a sound-alike still needs a dictionary word."""
     from . import candidates
     m = _DESCRIBED.match(_PUNCT.sub("", formatted))
     if not m:
         return None
     word, ch = m.groups()
-    if not candidates.is_word(word):
-        return None
     if ch in word:
         return ch
+    if not candidates.is_word(word):
+        return None
     return next((c for c in reversed(word) if _sounds(c) & _sounds(ch)), None)
 
 

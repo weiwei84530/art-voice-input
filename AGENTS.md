@@ -203,7 +203,8 @@ and runs (nothing decoded when nothing was said since the last commit).
   點點點. 語音指令 shows the keycaps on one row, each mark's names under it (two on two lines); the card takes 7/10 of the width. Appended after existing punctuation;
   replace a selection; a mark said right after an added one replaces it (`edit.MARKS`: not —— or ／). A 自訂 row with the same phrase runs instead and is not marked as a clash (the user's choice).
 - Described characters (`describe_char`): everything before 的 exactly one dictionary word, no lead-in (節日的節 →
-  節; 顯示的是 → 示). Spelled letters over a selected English word type that word (`edit.spelled`, counts as a pick).
+  節; 顯示的是 → 示); 2-6 characters before 的 holding the character itself need no dictionary (一二的一 → 一,
+  2026-10-27). Spelled letters over a selected English word type that word (`edit.spelled`, counts as a pick).
 - Not carried over from press-and-talk yet: `period_to_comma` (selected 。 → ，+ utterance + 。; checkbox hidden,
   `app.py` ignores it) and trimming punctuation when replacing a selection.
 - **復原** (`Session.history`, unlimited while the caret hasn't moved): takes back Art VoiceInput's last change while it
