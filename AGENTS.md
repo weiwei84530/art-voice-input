@@ -67,7 +67,7 @@ automatically; read it before reviving or redesigning something). Module docstri
   keep; `/quiet` keeps). The installed build (`paths.FROZEN`) reads its bundled models (`paths.BUNDLED_MODELS_DIR`),
   registers the exe for autostart, skips `migrate_legacy`. Unsigned for now: SmartScreen's 其他資訊 → 仍要執行 is
   accepted. Testing an install: `--dir <folder>` on the setup exe; launch the installed exe with LOCALAPPDATA pointed
-  elsewhere so it doesn't touch the user's installed data. `build.py` copies the models from the development data
+  elsewhere so it doesn't touch the user's installed data (the HKCU Run value ArtVoiceInput is still rewritten to that exe: put it back after). `build.py` copies the models from the development data
   folder.
 - Fixed models, no model choice, no LLM (`models.py`; URL
   `https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/<dir>.tar.bz2`):
