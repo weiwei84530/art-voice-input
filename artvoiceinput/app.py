@@ -187,6 +187,7 @@ class App(QObject):
         self._quitting = False
         self._marked = None                      # the buffer when the last commit added its sentence-final mark
         self._owed = None                        # (mark, text): a commit that held its sentence end back (_owed_mark)
+        self._keyed = False                      # a key other than Enter typed while listening (_on_other_key)
         self._committed = None                   # (text before it, _Draft, its history step): 復原 may revive it
         self._spans: list = []                   # worker thread: the pieces of the draft's open sentence
         # worker thread: the last pause's decode of the open sentence, (start, anchor, its last piece, raw text): a
@@ -290,11 +291,16 @@ class App(QObject):
 
     def _on_other_key(self, vk: int):
         """Keyboard hook thread: a key the user pressed (injected keys never get here); it closes the 選字 menu.
-        Enter (or Ctrl+Enter, not Shift or Alt) sends: with 送出後關閉麥克風 listening turns off."""
+        Enter (or Ctrl+Enter, not Shift or Alt) sends: with 送出後關閉麥克風 listening turns off. Not the first Enter
+        after other keys were typed (2026-10-27, the user's choice): an IME (新注音) takes it to confirm a pick."""
         if vk == 0x0D and self._listening and self.cfg.stop_on_enter and not _held(0x10) and not _held(0x12) \
                 and not _ours(foreground()):
-            log.info("listen: off, Enter pressed")
-            self.main.emit(lambda: self._stop_listen() if self._listening else None)
+            if self._keyed:
+                log.info("Enter after typing: listening stays on (an IME may have taken it)")
+            else:
+                log.info("listen: off, Enter pressed")
+                self.main.emit(lambda: self._stop_listen() if self._listening else None)
+        self._keyed = vk != 0x0D
         self.session.on_input()
         term_watcher.forget()
         self.main.emit(self.picker.dismiss)
@@ -491,6 +497,7 @@ class App(QObject):
             return
         log.info("listen: on (%s)", press.key)
         self._listen_shown = True
+        self._keyed = False
         self.book.new_session()
         self._tray.set_listening(True)
         self.settings.set_listening(True)

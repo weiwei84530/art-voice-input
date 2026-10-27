@@ -116,7 +116,7 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
   window; `App._tray_clicked`: the window typed into before gets the foreground back from the taskbar;
   setup wizard unfinished → opens it; the menu is on the right button),
   點進輸入框時 = 自動開麥克風 (`auto_listen`), spoken 結束,
-  送出訊息後自動關閉麥克風 (`stop_on_enter`: Enter / Ctrl+Enter or an operation's Enter step), 沒講話多久自動關閉
+  送出訊息後自動關閉麥克風 (`stop_on_enter`: Enter / Ctrl+Enter or an operation's Enter step; not the first Enter after other keys typed while listening, `App._keyed`: an IME such as 新注音 takes it to confirm a pick, 2026-10-27), 沒講話多久自動關閉
   (no speech for `auto_off_minutes`, default 5, chips or a 自訂 chip taking 1-240 minutes; tray notice), 自動關閉麥克風
   (`auto_off`, below). Red warning on 麥克風 when nothing can turn it on.
 - **Focus** (`App._watch_focus`, every 0.3s, `selection.focus_info`: editable?, identity, rect; a terminal always

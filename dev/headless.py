@@ -12,7 +12,7 @@ rule:JSON (add an operation, rules.Rule.from_dict), at:WORD (put the caret right
 the end), say:TEXT (dictate TEXT as if recognized), op:PHRASE (a spoken operation of the
 user's config run without audio), clip:TEXT (the box's clipboard; the real one is never read), nocaret (the next
 probe cannot read the caret's line), set:NAME=VALUE (change a setting in memory only; apply: as the settings window does after a change), packs:ID+ID (tick term packs, in memory only) or key:BACK (the
-user presses Backspace n times: key:BACK*3), key:ENTER (the user presses Enter), pick:N / pickw:WORD (click a row of the 選字 menu), feed:WAV (while
+user presses Backspace n times: key:BACK*3), key:ENTER (the user presses Enter), key:TYPE (the user types a letter key), pick:N / pickw:WORD (click a row of the 選字 menu), feed:WAV (while
 continuous listening is on: WAV and 1s of silence reach the microphone; feed:WAV+WAV joins clips with 0.6s pauses),
 logshot:NAME (the 辨識紀錄 tab saved as <dir>/NAME.png), realtime (feed: steps play at the microphone's own speed, not 3x:
 for timing; each pause's and command's latency is printed as [延遲]), wait:SEC (silence for SEC seconds), tap0 (a tap; the next step starts at once, while queued work
@@ -485,6 +485,11 @@ try:
             box.text, box.caret, box.sel = "", 0, None
             pump(1.0)
             print(f"[按 Enter] 聽寫中：{A._listening}")
+            continue
+        if step == "key:TYPE":   # the user types a key (an IME's composition: the box shows nothing yet)
+            A._on_other_key(0x41)
+            pump(0.3)
+            print(f"[按一個字鍵] 聽寫中：{A._listening}")
             continue
         if step.startswith("key:BACK"):
             n = int(step.split("*")[1]) if "*" in step else 1
