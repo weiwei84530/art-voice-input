@@ -24,6 +24,7 @@ BUILT = {
     (rules.WRAP, ("「", "」")): (0, "打出", "「 ｜ 」", "wrap", "游標停在中間；有選取時包住選取的字"),
     (rules.KEYS, "Backspace"): (1, "按下", "Backspace", "key", "有選取時刪掉選取的字"),
     (rules.COMMAND, rules.UNDO): (1, "", "復原上一步", "cmd", "收回剛才打的字或改動，一次一步"),
+    (rules.COMMAND, rules.ADD_WORD): (1, "", "把選取的字加入詞庫", "cmd", "之後更容易聽對這個詞"),
     (rules.COMMAND, rules.SELECT_ALL): (2, "", "全選", "cmd", "終端機裡無法全選"),
     (rules.COMMAND, rules.COPY): (2, "", "複製", "cmd", "複製選取的文字"),
     (rules.COMMAND, rules.CUT): (2, "", "剪下", "cmd", "剪下選取的文字"),

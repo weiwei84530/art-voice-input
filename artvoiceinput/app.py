@@ -909,12 +909,9 @@ class App(QObject):
         _go_on(d)
         d.settled = _joined(d.settled, settled)
         d.anchor = after
+        # no mark at the end while speaking (the user's choice, 2026-10-27; 2026-10-15 to 10-27 the recognizer's
+        # 。？！ showed): an operation that ends the sentence puts it back (_ends_sentence)
         d.final = _TRAILING.sub("", _joined(d.settled, live))
-        # the recognizer's 。？！ at the end is shown; the next pause turns it into ， when the sentence goes on (the
-        # user's request, 2026-10-15; until then drafts had none while speaking)
-        end = _SENTENCE_END.search(_joined(d.settled, live))
-        if end and d.final and not _inside(d.ctx):
-            d.final += end.group()
         self.listener.keep(after)
         last = self.session.history[-1] if self.session.history else None
         self._show_draft(step=True)
@@ -930,10 +927,10 @@ class App(QObject):
     def _commit(self, text: str, start: int, anchor: int, at: int, ctx, command=None, final: bool = False,
                 spans: list = ()):
         """Main thread: the draft's open sentence decoded again joins its settled text and the draft is done; then
-        the command it ended with runs. Listening goes on from `at`. final (an operation or the end of listening):
-        the recognizer's 。？！ at the end is kept, or 。 added when it gave none (the user's choice, 2026-10-14/15:
-        not while speaking, where a pause is not a sentence end, nor before a spoken punctuation mark), unless the
-        caret had text on both sides."""
+        the command it ended with runs. Listening goes on from `at`. An operation that ends the sentence
+        (_ends_sentence: 送出, 換行, 結束 …) puts the recognizer's 。？！ at the end, or 。 when it gave none, unless the
+        caret had text on both sides; anything else (another operation, a spoken mark, listening turned off another
+        way) adds none (the user's choice, 2026-10-27)."""
         d = self._draft
         marked = added = logged = False
         before = ""
@@ -949,8 +946,7 @@ class App(QObject):
                     _go_on(d)
                 d.final = _TRAILING.sub("", _joined(d.settled, text))
                 end = _SENTENCE_END.search(_joined(d.settled, text))
-                # no mark added before an operation that takes back what precedes the caret (_no_mark_first)
-                if final and d.final and not _inside(d.ctx) and not (end is None and _no_mark_first(command)):
+                if _ends_sentence(command) and d.final and not _inside(d.ctx):
                     # none from the recognizer (a short sentence often has none): 。 (the user's choice, 2026-10-15),
                     # ？ after 嗎 (the user's request the same day)
                     d.final += end.group() if end else "？" if d.final.endswith("嗎") \
@@ -1496,6 +1492,8 @@ class App(QObject):
                     self._on_main(lambda r=rect: self._open_symbols(press, sel, r))
                 elif step.type == rules.COMMAND and step.value == rules.OSK:
                     _open_osk()
+                elif step.type == rules.COMMAND and step.value == rules.ADD_WORD:
+                    self._on_main(lambda: self._add_word(sel))
             if stop:
                 log.info("listen: off, sent")
                 self._on_main(lambda: self._stop_listen() if self._listening else None)
@@ -1561,6 +1559,21 @@ class App(QObject):
             return
         press.deleted = sel
         self.session.replaced_selection(sel.before, text, foreground(), sel.before + sel.text)
+
+    def _add_word(self, sel):
+        """Main thread: 加入詞庫 (2026-10-27, the user's request): the selected text added to the 詞庫 list as typed on
+        its tab, a notice saying so."""
+        word = _WORD_EDGE.sub("", sel.text) if sel is not None else ""
+        if not word:
+            self._notify("先選取要加入詞庫的字")
+        elif "\n" in word or "\r" in word or len(word) > _WORD_MAX:
+            self._notify("選取的文字太長，選一個詞就好")
+        elif not self.hotwords.add(word):
+            self._notify("單一個中文字不能加入詞庫")
+        else:
+            log.info("added to the word list: %s", word)
+            self.settings.refresh_hotwords()
+            self._notify(f"「{word}」已加入詞庫")
 
     def _edit_command(self, press: _Press, command: str, sel):
         """Main thread: 全選 / 複製 / 剪下 / 貼上 (2026-10-16). In an ordinary app their keys (Ctrl+A / C / X / V). In a
@@ -2124,17 +2137,13 @@ def _inside(ctx) -> bool:
     return sides is not None and all(t.strip() for t in sides)
 
 
-def _no_mark_first(command) -> bool:
-    """An operation that takes back what is before the caret: Backspace (刪除) would delete a mark the commit added
-    and seem to do nothing (2026-10-15); 復原 (撤銷) showed the 。 for a moment before taking back the last update
-    (2026-10-16). The symbol menu and the on-screen keyboard: what is picked or typed may be the mark
-    (2026-10-22)."""
+def _ends_sentence(command) -> bool:
+    """An operation that ends the sentence (the user's choice, 2026-10-27): a step pressing Enter (送出 Enter, 換行
+    Shift+Enter, Ctrl+Enter …) or turning listening off (結束)."""
     op = command[0] if command is not None else None
-    if op is None or not op.steps:
-        return False
-    st = op.steps[0]
-    return (st.type, st.value) in ((rules.KEYS, "Backspace"), (rules.COMMAND, rules.UNDO),
-                                   (rules.COMMAND, rules.KEYBOARD), (rules.COMMAND, rules.OSK))
+    return op is not None and any(
+        st.type == rules.KEYS and isinstance(st.value, str) and st.value.split("+")[-1] == "Enter"
+        or st.type == rules.COMMAND and st.value == rules.STOP for st in op.steps)
 
 
 def _open_osk():
@@ -2225,6 +2234,8 @@ def _sample_at(index: list, offset: int) -> int:
 
 
 _SENTENCE_END = re.compile(r"[。？！.?!]$")
+_WORD_EDGE = re.compile(r"^[\s，。、！？；：,.!?;:…「」『』（）()\"']+|[\s，。、！？；：,.!?;:…「」『』（）()\"']+$")
+_WORD_MAX = 30   # 加入詞庫: longer is a sentence, not a word
 _MARKS = "，。？！；"          # punctuation that may close a settled part of a draft
 _MARK_SLACK = int(0.2 * SAMPLE_RATE)   # samples a mark may lie outside the pause it closes
 _GAP_KEEP = int(0.5 * SAMPLE_RATE)     # more of a pause kept between pieces than their own tail and lead-in

@@ -649,14 +649,15 @@ class Tutorial(QWidget):
         return (yield dict(kind="click", what={"timer"}, keep=True))
 
     def listen(self, box, text: str, target: str = "", commands=(), char: str = "", what=(), ring=None,
-               quote: str | None = None, join: bool = False, plant=None, alt=("", ""), sel=()):
+               quote: str | None = None, join: bool = False, plant=None, alt=("", ""), sel=(), lead: str = ""):
         """Speech into box: a reading of target, a command of commands, or a described character (char). join: it
-        goes on the draft before it (one sentence, the draft's closing mark becomes ，); plant: (heard right, shown)
+        goes on the draft before it (one sentence, the draft's closing mark becomes ，); lead: the mark the text
+        before gets once this speech shows (the sentence before settles, as at a pause); plant: (heard right, shown)
         swapped in what is typed; what: clicks or keys that also do (shown after 正在聽… as alt, Card.show_line's);
         sel: the selections it needs (a click losing it returns ("lost", None), what
         was typed taken back). Returns ("ok", text), ("cmd", name), (one of what, None) or ("skip", None)."""
         self._lines.append(text)
-        self._sp = _Speech(box, target, set(commands), char, join=join, plant=plant)
+        self._sp = _Speech(box, target, set(commands), char, join=join, plant=plant, lead=lead)
         return (yield dict(kind="speech", text=text, quote=target if quote is None else quote,
                            at=lambda: _box_rect(self.desk, box), ring=ring, what=set(what), alt=alt,
                            sel=tuple(sel)))
@@ -745,8 +746,7 @@ class Tutorial(QWidget):
         if sp.target:
             draft = sp.draft_text()
             if passes(draft, sp.target):
-                end = _END.search(draft)
-                draft = sp.target + (end.group() if end else "")   # what was asked, quietly (the user's design)
+                draft = sp.target   # what was asked, quietly (the user's design)
                 sp.retype(draft)
                 self._resume(("ok", draft))
                 return
@@ -829,18 +829,18 @@ class Tutorial(QWidget):
         if result[0] == "skip":
             self._sp.settle(FIRST, draft=True)
         a, b = e.draft or (0, len(e.text))
-        e.replace(a, b, _END.sub("", e.text[a:b]) + "。", draft=True)   # the recognizer's 。 ends the draft
+        e.replace(a, b, _END.sub("", e.text[a:b]), draft=True)   # a draft shows no closing mark, as in the app
         self.sprite.bounce()
         yield from self.say("念好了！黃底的字叫「未定稿」，代表我還在聽，隨時可能修正。", "proud",
                             at=lambda: e.char_rect(*(e.draft or (0, 1))), avoid=e.used_rect)
         result = yield from self.listen(e, "接著念第二句。念的時候看看上一句：黃底會消失，它定稿了。", target=SECOND,
-                                        plant=MISHEARD)
+                                        plant=MISHEARD, lead="。")
         sp = self._sp
         shown = SECOND.replace(*MISHEARD)
         if result[0] == "skip":
-            sp.settle(shown + "。", draft=True)
+            sp.settle(shown, draft=True)
         else:   # as said, with the planted mishearing
-            e.replace(sp.own, sp.end, shown + "。", draft=True)
+            e.replace(sp.own, sp.end, shown, draft=True)
 
         def wrong():
             at = e.text.rfind(MISHEARD[1])
@@ -869,19 +869,14 @@ class Tutorial(QWidget):
 
     def ch_commit(self):
         e = self.desk.notepad.edit
-        a, b = e.draft or (len(e.text), len(e.text))
-        if _END.search(e.text[a:b]):   # the recognizer's 。 shows already: why 句號 still
-            ask = "句尾的「。」是我先猜的，黃底代表還沒定稿。說「句號」，這句就定稿了：黃底消失。"
-        else:
-            ask = "說「句號」，這句就定稿了：黃底消失，句尾加上「。」"
-        result = yield from self.listen(e, ask, commands=["句號"])
+        result = yield from self.listen(e, "說「句號」，這句就定稿了：黃底消失，句尾加上「。」", commands=["句號"])
         a, b = e.draft or (len(e.text), len(e.text))
         body = _END.sub("", e.text[a:b])
         e.replace(a, b, body + "。")
         e.commit()
         self.sprite.bounce()
         yield from self.say("定稿了！「逗號」「問號」也一樣，說出名字就會打出來。", "happy")
-        yield from self.say("不說也沒關係：說下一個指令，或關掉麥克風時，句尾會自動補上「。」")
+        yield from self.say("說話時句尾不會自己加標點；說「下一行」「送出」或「結束」時，我會幫你補上。")
 
     def ch_undo(self):
         e = self.desk.notepad.edit
@@ -1103,8 +1098,9 @@ class _Speech:
     """A step taking speech into a text box: where what is said goes (the draft, from `start`), what came before
     (for 復原), the misses."""
 
-    def __init__(self, box, target: str, commands: set, char: str, join: bool = False, plant=None):
+    def __init__(self, box, target: str, commands: set, char: str, join: bool = False, plant=None, lead: str = ""):
         self.box, self.target, self.commands, self.char = box, target, commands, char
+        self.lead = lead                 # typed before this speech when it shows (the sentence before settles)
         self.plant = plant               # (heard right, shown): swapped in what is typed
         self.before = (box.text, box.anchor, box.caret, box.draft)   # 復原 puts this back
         # join: the draft before goes on with this speech, one sentence (its closing mark becomes ， when this is
@@ -1127,28 +1123,31 @@ class _Speech:
         self.miss = False
 
     def _join(self):
-        if self.join is None or self.joined:
+        if self.joined or (self.join is None and not self.lead):
             return
         box = self.box
-        head = box.text[self.start:self.own]
-        new = _END.sub("", head) + "，"
-        box.replace(self.start, self.own, new)
-        moved = len(new) - len(head)
+        if self.join is None:   # lead: the text before gets its mark, this speech's draft starts after it
+            box.replace(self.own, self.own, self.lead)
+            self.start += len(self.lead)
+            moved = len(self.lead)
+        else:
+            head = box.text[self.start:self.own]
+            new = _END.sub("", head) + "，"
+            box.replace(self.start, self.own, new)
+            moved = len(new) - len(head)
         self.own += moved
         self.utt += moved
         self.end += moved
         self.joined = True
 
     def type(self, text: str):
-        """The utterance being said reads text now (replacing its last decode); with text after it on the line
-        (a selection replaced mid-sentence) without the recognizer's closing mark, as the app does."""
+        """The utterance being said reads text now (replacing its last decode), without the recognizer's closing
+        mark, as the app shows a draft (2026-10-27)."""
         box = self.box
         if self.plant:
             text = text.replace(*self.plant)
         self._join()
-        after = box.text[self.end:self.end + 1]
-        if after and after != "\n":
-            text = re.sub(r"[。，、！？；：.,!?;:]+$", "", text)
+        text = re.sub(r"[。，、！？；：.,!?;:]+$", "", text)
         box.replace(self.utt, self.end, text, draft=True)
         self.end = self.utt + len(text)
         box.draft = (self.start, self.end)

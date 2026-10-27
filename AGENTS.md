@@ -89,7 +89,7 @@ automatically; read it before reviving or redesigning something). Module docstri
 | `output.py` | Win32 clipboard paste, key sending, clipboard restore and watch |
 | `selection.py` | UIA: selection, caret line, `focus_info`, `TermWatcher` (terminal mouse selections) |
 | `highlight.py` | draft mark rectangles (`draft_rects`) and `DraftMarks` windows |
-| `rules.py` | spoken operations (自訂操作), `defaults`, `upgrade` / `simplify` (rules_version 16) |
+| `rules.py` | spoken operations (自訂操作), `defaults`, `upgrade` / `simplify` (rules_version 17) |
 | `edit.py` | punctuation names (`symbol`), described characters (`described`), spelled letters (`spelled`) |
 | `candidates.py` | McBopomofo dictionary: `is_word`, `frequency`, `ranked`, `sounds_alike`, fuzzy pairs |
 | `sounds.py` | English near-sounding words (CMUdict + wordfreq, `dict/english.tsv.gz`) |
@@ -146,10 +146,11 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
   pause the open sentence is decoded again and retyped (`_refine_job`). Text up to a ，/。 the recognizer put in a
   pause is settled; only the open sentence is re-decoded, from its pieces only (`App._speech`: gaps cut, 0.5s more
   of each pause kept, `_GAP_KEEP`) — beyond 30s the recognizer gives no timestamps, so nothing would settle. A draft
-  shows the recognizer's 。？！ at its end; the next pause turns it into ， when the sentence goes on.
-- **Commit**: on a command or the end of listening (a draft over 60s commits at a pause). It keeps the recognizer's
-  。？！ or adds 。 (？ after 嗎, . when the draft has no Chinese), not when the caret has text on both sides; a
-  spoken mark replaces that. A commit reuses the last pause's decode when its last piece is the spans' last (`App._live`).
+  shows no mark at its end (2026-10-27, the user's choice: no 。 unless asked; settled parts keep theirs).
+- **Commit**: on a command or the end of listening (a draft over 60s commits at a pause). Only an operation that
+  ends the sentence (`_ends_sentence`: a step pressing Enter, Shift+Enter …, or 結束錄音: 送出, 換行 / 下一行, 結束)
+  puts back the recognizer's 。？！ or adds 。 (？ after 嗎, . when the draft has no Chinese), not when the caret has
+  text on both sides; other operations, a spoken mark and listening turned off another way add none (2026-10-27). A commit reuses the last pause's decode when its last piece is the spans' last (`App._live`).
 - **Caret moved** (click, key, selection; `_caret_left` from the hooks): the draft stays as typed, the next speech
   starts a new one; a late update is redone at the new caret (`_redo_job`). A draft started over a selection
   replaces it.
@@ -188,7 +189,8 @@ and runs (nothing decoded when nothing was said since the last commit).
 - Spoken operations (`rules.py`, 自訂操作 tab): phrase(s) separated by 、 → one step: keys, text, 左右輸入文字
   (`WRAP`, caret put back between), or a command: 復原, 結束錄音, 全選 / 複製 / 剪下 / 貼上. Defaults
   (`rules.defaults`, rows fixed but the phrase; empty turns off): 換行、下一行 Shift+Enter, 空白, 括號 （）,
-  引號 「」, 符號 (the symbol menu, below), 鍵盤 (Windows' on-screen keyboard osk.exe, `rules.OSK`, rules_version 16; 符號 and 鍵盤 are the 工具 group on 語音指令, 2026-10-22), 刪除 Backspace, 復原 / 撤銷, clipboard four, 送出 Enter
+  引號 「」, 符號 (the symbol menu, below), 鍵盤 (Windows' on-screen keyboard osk.exe, `rules.OSK`, rules_version 16; 符號 and 鍵盤 are the 工具 group on 語音指令, 2026-10-22), 刪除 Backspace, 復原 / 撤銷, 加入詞庫 (`rules.ADD_WORD`, rules_version 17, 2026-10-27: the selection, its edge punctuation trimmed,
+  ≤30 characters, added as on the 詞庫 tab, tray notice either way), clipboard four, 送出 Enter
   (listening goes on), 結束. With --debug the
   defaults (`rules.defaults(dev=True)`) also have the user's `rules.dev_rules` as 自訂 rows (標點 = "- ", 貼上圖片 = Alt+V);
   a --debug launch adds them when missing. 自訂 rows can't take
@@ -212,8 +214,7 @@ and runs (nothing decoded when nothing was said since the last commit).
   over a selection (selection comes back), a deleted selection, 剪下 / 貼上 (ordinary apps; paste of one line ≤300
   chars), a Backspace after the caret moved (`Session.known`; only if the caret's line still reads as expected,
   `_still_reads`, else a notice). The draft comes back as it was, marked and re-decodable (`Step.restore`,
-  `_Draft.restored`, audio held up to 180s by `Listener.hold`), else as fixed text. Operations starting with
-  Backspace / 復原 add no sentence end (`_no_mark_first`). Typing or clicking ends the history; nothing to take back
+  `_Draft.restored`, audio held up to 180s by `Listener.hold`), else as fixed text. Typing or clicking ends the history; nothing to take back
   → tray notice with the reason.
 
 ## Text pipeline
@@ -401,7 +402,8 @@ the floating button, bubble and glow are colored and not themed. `dev/settings_p
   (2026-10-24). Turning the mic off before the last chapter only wiggles the red words (a line hid what was asked). Taskbar tray as Windows 11 lays it out (︿, app icon only for 簡約 (pinned) with tray.py's ring while listening, 英, Wi-Fi, volume,
   evenly spaced); floating button 24px in from the right like `floatbtn`. The guide's listening ripple leans with it.
   Chapters are generators yielding what they wait for: 打開記事本, 開麥克風 (click → bubble → listening), 念三句
-  (2026-10-24, the user's design: a warm-up 今天天氣很好…; 爺爺的視力很好 settles it and is shown with a planted
+  (2026-10-24, the user's design: a warm-up 今天天氣很好… (a draft shows no closing mark, the one before gets its 。
+  when the next sentence shows, 2026-10-27); 爺爺的視力很好 settles it and is shown with a planted
   勢力; 連對面的招牌都看得清楚 joins the same sentence, then 勢力 → 視力 with a red flash), 定稿 (句號), 換行與復原
   (下一行: 換行 failed more often), 選字 (planted 請幫我定一張車票, fixed candidates; a wrong pick is put back to 定), 選取重講 (一張 → 兩張, the 選字 menu
   opening by itself over 一張 as in the app, the user told to let it be; then 今天天氣很好， selected and 刪除; a
