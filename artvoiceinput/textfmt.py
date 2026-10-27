@@ -76,37 +76,29 @@ _FULL_END = str.maketrans(".?!", "。？！")
 _FILLER = re.compile(r"[嗯呃]+[，,、。]?\s*")
 
 # Disfluencies (2026-09-29, from the user's log: 我們我們明天見, 你可不可不可以, 今天今天, 先打開那個，先打開設定頁).
-# Repeated 2-4 character chunks are removed unless they are ABAB reduplication (研究研究, 討論討論: listed in the
-# dictionary or in _ABAB), counting (一個一個) or laughter-like (哈哈哈哈). A-not-A (是不是不會, 能不能不用) is
-# a repeat only when the A comes a third time (可不可不可以). Single repeated characters (選選字, 預預期, 很很) are
-# judged by the dictionary in _dedupe_chars (2026-10-02).
+# A 2-4 character chunk said twice is removed only when it is a word people repeat while thinking (_DISFLUENT;
+# since 2026-10-27, the user's choice: any other was cut unless the dictionary listed it as ABAB, and 嗶哩嗶哩 lost
+# half). A-not-A (是不是不會, 能不能不用) is a repeat only when the A comes a third time (可不可不可以). Single
+# repeated characters (選選字, 預預期, 很很) are judged by the dictionary in _dedupe_chars (2026-10-02).
 _REPEAT = re.compile(rf"([{CJK}]{{2,4}})\1")
 _RESTART = re.compile(rf"([{CJK}]{{3,6}})(?:那個|這個|就是)?[，,、 ]*\1")
 _STUTTER = re.compile(r"([我你他她它就先把這那要會])\1(?!\1)")   # works before the dictionary has loaded
 _CJK_CHAR = re.compile(f"[{CJK}]")
 _DISFLUENT = set("還有 就是 然後 那個 這個 所以 因為 但是 如果 我們 你們 他們 我想 我要 你要 應該 可以 今天 明天 "
-                 "現在 其實 反正 不過 而且 可是 還是 或是 我覺得 就是說".split())
-_KEEP_REPEAT = set("好的 對啊 是的 沒錯 謝謝 拜拜".split())
-# Verbs and adjectives said twice on purpose (討論討論 = discuss a bit) that the dictionary does not list as ABAB
-_ABAB = set("討論 休息 檢查 了解 瞭解 學習 練習 準備 打掃 整理 研究 考慮 商量 介紹 說明 認識 收拾 活動 放鬆 輕鬆 "
-            "熱鬧 高興 開心 溝通 比較 參考 思考 測試 觀察 體驗 欣賞 運動 散步 交流 調整 反省 檢討 討教 請教 "
-            "涼快 暖和 舒服 乾淨 清楚 明白 快樂".split())
+                 "現在 其實 反正 不過 而且 可是 還是 或是 我覺得 就是說 關於 對於 那麼 好像 比如 例如".split())
+# a character that is a word of its own and also starts the next one: 重點是是否 is 是 + 是否 (2026-10-27)
+_STARTS_NEXT = set("是有的了")
 _CHAR_KEEP = set("在") | set(NUM)   # 現在在猶豫: 在 is a word after 現在; numbers are not stutters
 _PREFER_RATIO = 20   # 選選字: the pair is a rare word, the first character + the next one is much more common
 
 
 def _dedupe_repeat(m) -> str:
     x = m.group(1)
-    if x in _KEEP_REPEAT or len(set(x)) == 1 or x[0] in NUM or x[0] == "每":
-        return m.group(0)
-    if len(x) == 2 and x[1] in "不沒" and m.string[m.end():m.end() + 1] != x[0]:
-        return m.group(0)                        # 是不是不會, 有沒有沒: A-not-A followed by another word
-    if x not in _DISFLUENT:
-        from .candidates import is_word         # lazy: textfmt is imported before the dictionary is needed
-        known = is_word(x + x)
-        if known is None or known or x in _ABAB:   # None: dictionary not loaded yet, keep to be safe
-            return m.group(0)
-    return x
+    if x in _DISFLUENT:
+        return x
+    if len(x) == 2 and x[1] in "不沒" and m.string[m.end():m.end() + 1] == x[0]:
+        return x                                 # 可不可不可以; 是不是不會 stays (A-not-A followed by another word)
+    return m.group(0)
 
 
 def _dedupe_chars(text: str) -> str:
@@ -130,8 +122,10 @@ def _dedupe_chars(text: str) -> str:
 
 
 def _keep_pair(text: str, i: int, frequency, is_word) -> bool:
-    if text[i + 2:i + 3] in ("的", "地"):
-        return True                              # 髒髒的, 慢慢地
+    if text[i + 2:i + 3] in ("的", "地", "看"):
+        return True                              # 髒髒的, 慢慢地, 用用看
+    if text[i] in _STARTS_NEXT and is_word(text[i + 1:i + 3]):
+        return True                              # 是|是否
     if i > 0 and is_word(text[i - 1:i + 1]) and is_word(text[i + 1:i + 3]):
         return True                              # 開關|關掉, 小時|時間, 勾選|選項
     best = max((text[s:s + n] for n in (2, 3, 4) for s in range(i + 2 - n, i + 1)

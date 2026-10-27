@@ -150,7 +150,9 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
 - **Commit**: on a command or the end of listening (a draft over 60s commits at a pause). Only an operation that
   ends the sentence (`_ends_sentence`: a step pressing Enter, Shift+Enter …, or 結束錄音: 送出, 換行 / 下一行, 結束)
   puts back the recognizer's 。？！ or adds 。 (？ after 嗎, . when the draft has no Chinese), not when the caret has
-  text on both sides; other operations, a spoken mark and listening turned off another way add none (2026-10-27). A commit reuses the last pause's decode when its last piece is the spans' last (`App._live`).
+  text on both sides; other operations, a spoken mark and listening turned off another way hold it back (`App._owed`): put before the next draft typed right after that sentence (nothing typed or
+  clicked since, `_owed_mark`), or before 送出 / 換行 / 結束 said with nothing new; a spoken mark or character drops it
+  (2026-10-27). A commit reuses the last pause's decode when its last piece is the spans' last (`App._live`).
 - **Caret moved** (click, key, selection; `_caret_left` from the hooks): the draft stays as typed, the next speech
   starts a new one; a late update is redone at the new caret (`_redo_job`). A draft started over a selection
   replaces it.
@@ -225,8 +227,10 @@ and shown in 辨識紀錄. Order inside `format_text` matters: s2tw → filler r
 numerals → spelled letters → 點 → percent → number+letter → English punctuation → CJK/ASCII spacing → English
 sentence end → 嗎 questions → trailing punctuation.
 - OpenCC `s2tw` only (`s2twp` rewrites vocabulary: 程序 → 程式); then 臺 → 台, 熒幕/熒光 → 螢幕/螢光. 嗯 / 呃 removed.
-- Disfluencies (`remove_disfluencies`): repeated 2-4 char chunks, restarts, stutters; kept: dictionary ABAB
-  (研究研究, `_ABAB`), counting (一個一個), laughter, 好的好的, words sharing a character (開關關掉), 剛剛 etc. A-not-A
+- Disfluencies (`remove_disfluencies`): restarts (3-6 chars), stutters, and 2-4 char chunks said twice only when
+  listed as thinking words (`_DISFLUENT`: 還是, 關於, 我們 …; 2026-10-27, the user's choice after 嗶哩嗶哩 lost half);
+  one repeated character kept when a word (剛剛), before 的 / 地 / 看 (用用看), a word starting at the second one after
+  是 / 有 / 的 / 了 (是是否, `_STARTS_NEXT`), or words sharing it (開關關掉). A-not-A
   is a repeat only when A comes a third time (是不是不會 must keep its meaning). 在 is not a stutter character.
 - Numerals: single-character numbers stay Chinese (一個, 第二種) unless decimal / percent / before a single letter;
   multi-character become digits (十五 → 15); `_KEEP_WORDS` (統一, 星期三 …), ranges (三四), 幾, fractions skipped.

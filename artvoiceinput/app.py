@@ -186,6 +186,7 @@ class App(QObject):
         self._draft_start = 0                    # the sample the draft's audio starts at (the last commit)
         self._quitting = False
         self._marked = None                      # the buffer when the last commit added its sentence-final mark
+        self._owed = None                        # (mark, text): a commit that held its sentence end back (_owed_mark)
         self._committed = None                   # (text before it, _Draft, its history step): 復原 may revive it
         self._spans: list = []                   # worker thread: the pieces of the draft's open sentence
         # worker thread: the last pause's decode of the open sentence, (start, anchor, its last piece, raw text): a
@@ -832,7 +833,12 @@ class App(QObject):
             else:
                 if self._menu and self._menu[0] == "symbols":
                     self._close_menu()   # speech typed at the caret: the keyboard was for where it was
-                d.lead = " " if self.session.clean() and _space_between(self.session.buffer[-1:], text) else ""
+                owed = self._owed_mark()
+                self._owed = None
+                if owed:   # the sentence before goes on no more: its mark first
+                    d.lead = owed + (" " if owed in ".?!" else "")
+                else:
+                    d.lead = " " if self.session.clean() and _space_between(self.session.buffer[-1:], text) else ""
                 paste_text(d.lead + text)
                 self.session.dictated(d.lead + text, None, foreground())
             d.placed, d.typed = True, text
@@ -946,13 +952,17 @@ class App(QObject):
                     _go_on(d)
                 d.final = _TRAILING.sub("", _joined(d.settled, text))
                 end = _SENTENCE_END.search(_joined(d.settled, text))
-                if _ends_sentence(command) and d.final and not _inside(d.ctx):
-                    # none from the recognizer (a short sentence often has none): 。 (the user's choice, 2026-10-15),
-                    # ？ after 嗎 (the user's request the same day)
-                    d.final += end.group() if end else "？" if d.final.endswith("嗎") \
-                        else "。" if _CJK_CHAR.search(d.final) else "."
+                # none from the recognizer (a short sentence often has none): 。 (the user's choice, 2026-10-15),
+                # ？ after 嗎 (the user's request the same day)
+                mark = end.group() if end else "？" if d.final.endswith("嗎") \
+                    else "。" if _CJK_CHAR.search(d.final) else "."
+                ends = _ends_sentence(command) and d.final and not _inside(d.ctx)
+                if ends:
+                    d.final += mark
                     marked, added = True, end is None   # added: the recognizer gave none
                 self._show_draft()
+                if not ends and d.final and d.placed and d.typed == d.final and not _inside(d.ctx):
+                    self._owed = (mark, d.typed)   # held back: put before what is said next right after it
                 logged = bool(d.final) and d.typed == d.final   # else left as typed (logged by _freeze)
                 if logged and command is None:
                     self.book.committed(before, d.typed, added, by_stop=final)
@@ -969,6 +979,14 @@ class App(QObject):
                 if self._committed is not None and pre.placed:
                     self.listener.hold(pre.anchor)
         if command is not None:
+            owed = self._owed_mark()
+            if command[0] is None:
+                self._owed = None   # a spoken mark or character goes there instead
+            elif owed and _ends_sentence(command):
+                # 送出 / 下一行 / 結束 after a sentence another command or the microphone turned off ended
+                self._owed = None
+                paste_text(owed)
+                self.session.dictated(owed, None, foreground())
             # the selection made before the command was said, unless the text before it went there
             sel = ctx.selection
             if d is not None and d.placed and d.sel is sel:
@@ -982,6 +1000,16 @@ class App(QObject):
                 log.info("command done %.2fs after the piece ended", time.monotonic() - entry["piece_at"])
         self._overlay_idle()
         self._input_done()
+
+    def _owed_mark(self) -> str:
+        """The mark a sentence committed without one is owed (2026-10-27, the user's choice: an operation that
+        does not end the sentence, or the microphone turned off, holds it back), while nothing has been typed or
+        clicked since and the text before the caret still ends with that sentence."""
+        if self._owed is None:
+            return ""
+        mark, text = self._owed
+        s = self.session
+        return mark if s.clean() and s.buffer.endswith(text) else ""
 
     def _run_command(self, command, ctx, sel=None):
         """Main thread: an operation spoken alone runs its steps; a punctuation name or a described character is
