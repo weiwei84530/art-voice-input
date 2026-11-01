@@ -296,9 +296,10 @@ def _hold(w: QWidget):
 
 def _release(top: QWidget):
     # re-enabled, the window was not always painted again: a theme picked on 系統 showed only after going home
-    # (2026-10-21)
+    # (2026-10-21); update() was not enough either: a row added by 新增一句 showed only when something else
+    # repainted (2026-11-01), so the window is painted at once
     top.setUpdatesEnabled(True)
-    top.update()
+    top.repaint()
 
 
 def _note(text: str):
