@@ -1,6 +1,8 @@
-"""The setup window, layout B: the app icon, the name, one button (安裝 / 開始使用 / 解除安裝) that a progress bar takes the
+"""The setup window, layout B: the app icon, the name, one button (安裝 / 更新 / 開始使用 / 解除安裝) that a progress bar takes the
 place of while working, and a line at the bottom with the folder and a link (換個位置, 取消安裝 …). Light only, the
-settings window's tokens (`theme.LIGHT`)."""
+settings window's tokens (`theme.LIGHT`). Over an earlier install it is an update (2026-11-01, the user's request):
+更新, the installed and the new version, no other place offered, the user's data said to stay; Art VoiceInput, if it
+was running, is started again."""
 import ctypes
 import shutil
 import sys
@@ -142,7 +144,7 @@ class Worker(QObject):
     def run(self, job, *args):
         def go():
             try:
-                job(*args, lambda v, what: self.progressed.emit(v, what))
+                self.result = job(*args, lambda v, what: self.progressed.emit(v, what))
                 self.finished.emit("")
             except ops.SetupError as e:
                 self.finished.emit(str(e))
@@ -156,6 +158,10 @@ class Window(QWidget):
         super().__init__(None, Qt.Window | Qt.FramelessWindowHint)
         self.uninstall_dir = uninstall_dir
         self.folder = folder or ops.installed_dir() or ops.DEFAULT_DIR
+        # an update: the folder already holds the app (settings live elsewhere and stay); no other place offered
+        self.updating = not uninstall_dir and ops.is_ours(self.folder)
+        self.old_version = (ops.installed_version() if ops.installed_dir() == self.folder else None) or ""
+        self.relaunched = False
         self.busy = False
         self._press_at = None
         self.setWindowTitle(f"{ops.NAME} 解除安裝" if uninstall_dir else f"{ops.NAME} 安裝")
@@ -232,6 +238,7 @@ class Window(QWidget):
         v.addWidget(self.link, 0, Qt.AlignHCenter)
 
         self.worker = Worker()
+        self.worker.result = None
         self.worker.progressed.connect(self._progressed)
         self.worker.finished.connect(self._finished)
         self._show("u-ask" if uninstall_dir else "start")
@@ -270,12 +277,21 @@ class Window(QWidget):
             "done": (ok.format("安裝完成"), "開始使用", "pri", "之後可以在 Windows 設定的「應用程式」解除安裝",
                      "先不開啟，關閉"),
             "error": (err.format(message), "再試一次", "pri", self._path_text(), "換個位置"),
+            "start-up": (f"已安裝 <span style=\"{num}\">&nbsp;{escape(self.old_version)}"
+                         f"&nbsp;→&nbsp;{__version__}</span>" if self.old_version
+                         else f"更新到 <span style=\"{num}\">&nbsp;{__version__}</span>",
+                         "更新", "pri", "你的設定、詞庫和辨識紀錄都會保留", ""),
+            "busy-up": ("正在準備", "", "pri", "你的設定、詞庫和辨識紀錄都會保留", ""),
+            "done-up": (ok.format("更新完成"), "關閉", "pri", "阿特語音輸入法已重新開啟", "")
+                       if self.relaunched else
+                       (ok.format("更新完成"), "開始使用", "pri", "你的設定、詞庫和辨識紀錄都已保留", "先不開啟，關閉"),
+            "error-up": (err.format(message), "再試一次", "pri", self._path_text(), ""),
             "u-ask": ("會移除程式、辨識模型和開機自動啟動", "解除安裝", "danger",
                       "不勾的話會留著，之後重新安裝會接著用", "取消"),
             "u-busy": ("正在準備", "", "danger", "", ""),
             "u-done": (ok.format("已解除安裝"), "關閉", "pri", "", ""),
             "u-error": (err.format(message), "再試一次", "danger", "", "關閉"),
-        }[state]
+        }[f"{state}-up" if self.updating and not state.startswith("u-") else state]
         self.sub.setText(sub)
         self.ok.setVisible(state in ("done", "u-done"))
         self.button.setText(button)
@@ -294,7 +310,8 @@ class Window(QWidget):
             self._show("busy")
             self.worker.run(ops.install, self.folder)
         elif s == "done":
-            ops.launch(self.folder)
+            if not self.relaunched:
+                ops.launch(self.folder)
             self.close()
         elif s in ("u-ask", "u-error"):
             self._show("u-busy")
@@ -320,6 +337,7 @@ class Window(QWidget):
         if error:
             self._show("u-error" if un else "error", error)
         else:
+            self.relaunched = not un and bool(self.worker.result)
             self._show("u-done" if un else "done")
 
     def closeEvent(self, e):

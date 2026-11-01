@@ -69,6 +69,12 @@ automatically; read it before reviving or redesigning something). Module docstri
   accepted. Testing an install: `--dir <folder>` on the setup exe; launch the installed exe with LOCALAPPDATA pointed
   elsewhere so it doesn't touch the user's installed data (the HKCU Run value ArtVoiceInput is still rewritten to that exe: put it back after). `build.py` copies the models from the development data
   folder.
+  Update (2026-11-01, the user's request): the setup over a folder already holding the app shows 更新 with
+  已安裝 <old> → <new> (the uninstall entry's DisplayVersion), offers no other place, says settings, 詞庫 and logs
+  stay (they live in DATA_DIR; only the app folder is replaced); the app, if it was running, is started again.
+- Version (`artvoiceinput.__version__`; the user's rule, 2026-11-01): every build the user asks for raises it one
+  step before building, normally the third number (0.9.1 → 0.9.2) for small changes; raising the second number
+  (0.9.x → 0.10.0) only after asking the user with options.
 - Fixed models, no model choice, no LLM (`models.py`; URL
   `https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/<dir>.tar.bz2`):
   recognition X-ASR int8 `sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03` (130MB, ~0.75s per

@@ -40,6 +40,15 @@ def installed_dir() -> Path | None:
         return None
 
 
+def installed_version() -> str | None:
+    """The version the uninstall entry names (the last install or update)."""
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY) as k:
+            return str(winreg.QueryValueEx(k, "DisplayVersion")[0])
+    except OSError:
+        return None
+
+
 def target(chosen: Path) -> Path:
     """A folder the user picked gets its own ArtVoiceInput folder inside, so uninstall never takes their files."""
     return chosen if chosen.name.lower() == APP_ID.lower() else chosen / APP_ID
@@ -49,10 +58,12 @@ def is_ours(folder: Path) -> bool:
     return (folder / EXE).is_file()
 
 
-def close_running() -> None:
-    """Art VoiceInput holds its files open: it is closed first (a kill; a mute it set is undone at its next launch)."""
-    subprocess.run(["taskkill", "/F", "/IM", EXE], capture_output=True, creationflags=NO_WINDOW)
+def close_running() -> bool:
+    """Art VoiceInput holds its files open: it is closed first (a kill; a mute it set is undone at its next launch).
+    True when it was running."""
+    r = subprocess.run(["taskkill", "/F", "/IM", EXE], capture_output=True, creationflags=NO_WINDOW)
     time.sleep(0.5)
+    return r.returncode == 0
 
 
 def _remove(folder: Path) -> None:
@@ -67,17 +78,19 @@ def _remove(folder: Path) -> None:
     raise SetupError(f"有檔案還在使用中，刪不掉：{folder}")
 
 
-def install(folder: Path, progress) -> None:
-    """progress(fraction, what) from this worker thread."""
+def install(folder: Path, progress) -> bool:
+    """progress(fraction, what) from this worker thread. Over an earlier install (an update) only the app folder is
+    replaced: settings, 詞庫 and logs live in DATA_DIR and are not touched. Art VoiceInput, if it was running, is
+    started again at the end; True then."""
     z = payload.open_zip(Path(sys.executable))
     if z is None:
         raise SetupError("安裝檔不完整，請重新下載。")
     progress(0.0, "正在關閉阿特語音輸入法")
-    close_running()
+    was_running = close_running()
     if folder.exists() and any(folder.iterdir()):
         if not is_ours(folder):
             raise SetupError(f"這個資料夾裡已經有其他檔案：{folder}")
-        progress(0.0, "正在移除舊版")
+        progress(0.0, "正在替換舊版")
         _remove(folder)
     folder.mkdir(parents=True, exist_ok=True)
     items = [i for i in z.infolist() if not i.is_dir()]
@@ -98,7 +111,10 @@ def install(folder: Path, progress) -> None:
     z.close()
     _shortcut(folder / EXE)
     _register(folder, total)
+    if was_running:
+        launch(folder)
     progress(1.0, "安裝完成")
+    return was_running
 
 
 def _shortcut(exe: Path) -> None:
