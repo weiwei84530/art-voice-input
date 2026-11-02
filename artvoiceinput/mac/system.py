@@ -296,8 +296,21 @@ def trusted(prompt: bool = False) -> bool:
 def permissions(notify) -> None:
     """At launch: ask for what macOS needs the user to allow: Accessibility (reading the selection, typing, the event
     taps) and Input Monitoring (keys in the event tap). The taps are tried again until allowed, so no restart is
-    needed. The microphone is asked by macOS itself the first time listening opens it (AVFoundation, which could ask
-    sooner, does not load in the PyInstaller build: its Swift libraries are not found)."""
+    needed. The microphone is asked for here too: a stream opened before the answer waits for it (the window
+    froze behind macOS's question)."""
+    try:   # AVFoundation's own bundle (pyobjc's wrapper needs Swift libraries the PyInstaller build lacks)
+        av = {}
+        objc.loadBundle("AVFoundation", av, bundle_path="/System/Library/Frameworks/AVFoundation.framework")
+        device = av["AVCaptureDevice"]
+        status = device.authorizationStatusForMediaType_("soun")   # AVMediaTypeAudio
+        if status == 0:     # not determined: macOS asks now, not when the first stream opens (which waits for it)
+            device.requestAccessForMediaType_completionHandler_("soun", lambda ok: log.info("microphone %s",
+                                                                 "allowed" if ok else "refused"))
+        elif status in (1, 2):   # restricted / denied
+            notify("麥克風沒有開放：請在「系統設定 › 隱私權與安全性 › 麥克風」打開 Art VoiceInput")
+            open_privacy("microphone")
+    except Exception:
+        log.exception("microphone permission check failed")
     ok = trusted(prompt=True)
     try:
         if not Q.CGPreflightListenEventAccess():

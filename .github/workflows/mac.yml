@@ -70,6 +70,8 @@ jobs:
           codesign --verify --strict --verbose "$APP"
           codesign -dvvv "$APP" 2>&1 | grep -E "Identifier|CDHash"
           ls "$HOME/Library/Application Support/ArtVoiceInput/app" | head
+          # the setup wizard counts as done: its microphone meter would wait for macOS's question, which nobody answers
+          echo '{"setup_done": true}' > "$HOME/Library/Application Support/ArtVoiceInput/config.json"
           open -a "$APP" --args --autostart
           LOG="$HOME/Library/Application Support/ArtVoiceInput/artvoiceinput.log"
           for i in $(seq 1 120); do grep -q "就緒" "$LOG" 2>/dev/null && break; sleep 2; done
