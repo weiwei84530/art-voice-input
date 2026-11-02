@@ -1,25 +1,21 @@
 """The tray icon (2026-10-21, the user's design): the app icon (`appicon`); while listening the microphone becomes a
 white ring turning on the icon's square. A left click turns listening on or off, the right button opens the menu.
 
-`promote` puts the icon on the taskbar itself instead of the ^ overflow (系統's 在工作列顯示圖示): Windows 11 keeps
-one key per icon under HKCU\\Control Panel\\NotifyIconSettings, named by Explorer once the icon has been shown, and
-its IsPromoted value is that choice in Windows' own settings."""
-import ctypes
+`promote` puts the icon on the taskbar itself instead of the ^ overflow (系統's 在工作列顯示圖示; system.promote_tray,
+Windows only: the menu bar always shows it)."""
 import logging
-import winreg
 
 from PySide6.QtCore import QObject, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QCursor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QSystemTrayIcon
 
-from . import appicon
+from . import appicon, system
 
 log = logging.getLogger(__name__)
 
 SIZES = (16, 20, 24, 32, 40, 48, 64)   # drawn for each, so 16px is not a scaled-down 64px
 FRAMES = 30                            # one turn of the ring
 TURN_MS = 1200                         # one turn
-_KEY = r"Control Panel\NotifyIconSettings"
 
 
 def _ring(s: int, turn: float) -> QPixmap:
@@ -63,8 +59,20 @@ class Tray(QObject):
         self._step = 1
         self._timer = QTimer(self, timeout=self._turn)
         self.icon = QSystemTrayIcon(self.idle)
-        self.icon.setContextMenu(menu)
-        self.icon.activated.connect(lambda reason: self.clicked.emit() if reason == QSystemTrayIcon.Trigger else None)
+        self._menu = menu
+        if system.MAC:
+            # a menu set on it would open at every click (the menu bar's way): a click does what it does on Windows
+            # (the user's choice, 2026-11-02), the right button or Control-click opens the menu
+            self.icon.activated.connect(self._activated)
+        else:
+            self.icon.setContextMenu(menu)
+            self.icon.activated.connect(lambda r: self.clicked.emit() if r == QSystemTrayIcon.Trigger else None)
+
+    def _activated(self, reason):
+        if reason == QSystemTrayIcon.Context:
+            self._menu.popup(QCursor.pos())
+        elif reason == QSystemTrayIcon.Trigger:
+            self.clicked.emit()
 
     def show(self):
         self.icon.show()
@@ -92,33 +100,6 @@ class Tray(QObject):
         self.icon.setIcon(self._frames[self._frame])
 
 
-def _exe() -> str:
-    """This process's own executable: a venv's pythonw.exe starts the base interpreter, which owns the icon."""
-    buf = ctypes.create_unicode_buffer(1024)
-    ctypes.windll.kernel32.GetModuleFileNameW(None, buf, len(buf))
-    return buf.value
-
-
 def promote(on: bool) -> bool:
-    """Set IsPromoted on this executable's icon entries; False when Explorer has not listed the icon yet."""
-    exe, found = _exe().lower(), False
-    try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _KEY) as root:
-            i = 0
-            while True:
-                try:
-                    name = winreg.EnumKey(root, i)
-                except OSError:
-                    break
-                i += 1
-                with winreg.OpenKey(root, name, 0, winreg.KEY_READ | winreg.KEY_SET_VALUE) as k:
-                    try:
-                        path = winreg.QueryValueEx(k, "ExecutablePath")[0]
-                    except OSError:
-                        continue
-                    if path.lower() == exe:
-                        winreg.SetValueEx(k, "IsPromoted", 0, winreg.REG_DWORD, 1 if on else 0)
-                        found = True
-    except OSError:
-        log.exception("tray promote failed")
-    return found
+    """The icon on the taskbar itself (True) or in the overflow; False when Windows has not listed it yet."""
+    return system.promote_tray(on)

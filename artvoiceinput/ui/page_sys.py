@@ -1,6 +1,5 @@
 """系統: 外觀模式 (light, dark, Windows'), autostart, the tray icon on the taskbar, the settings file, about; with
 --debug a Debug card of test options under them."""
-import os
 import time
 from pathlib import Path
 
@@ -8,7 +7,7 @@ from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QPainter, QPen
 from PySide6.QtWidgets import QComboBox, QFileDialog, QGridLayout, QHBoxLayout, QMessageBox, QVBoxLayout, QWidget
 
-from .. import __version__, appicon, config, paths, userdata
+from .. import __version__, appicon, config, paths, system, userdata
 from . import theme
 from .kit import (Choice, Info, Switch, T, button, card, crossfade, dim, draw_icon, hbox, icon, label, sep,
                   set_calm, titled, vbox)
@@ -179,9 +178,9 @@ class SysPage(QWidget):
         about = QGridLayout()
         about.setHorizontalSpacing(24)
         about.setVerticalSpacing(1)
-        folder = label(f"%LOCALAPPDATA%\\{paths.ID}")
+        folder = label(paths.DATA_LABEL)
         folder.setCursor(Qt.PointingHandCursor)
-        folder.mouseReleaseEvent = lambda e: os.startfile(paths.DATA_DIR) if e.button() == Qt.LeftButton else None
+        folder.mouseReleaseEvent = lambda e: system.open_path(paths.DATA_DIR) if e.button() == Qt.LeftButton else None
         self.folder = folder
         for col, (k, val) in enumerate((("版本", __version__), ("辨識引擎", "X-ASR · 本機"), ("資料夾", folder))):
             if isinstance(val, str):

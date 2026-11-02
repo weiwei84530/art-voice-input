@@ -21,8 +21,8 @@ from dataclasses import dataclass, field
 
 
 def foreground() -> int:
-    import ctypes
-    return ctypes.windll.user32.GetForegroundWindow()
+    from .system import foreground as front
+    return front()
 
 
 @dataclass

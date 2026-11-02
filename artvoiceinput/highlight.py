@@ -14,14 +14,13 @@ from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QColor, QGuiApplication, QPainter
 from PySide6.QtWidgets import QWidget
 
-from . import selection
+from .selection import draft_rects  # noqa: F401  (app.py imports it from here)
 
 log = logging.getLogger("artvoiceinput")
 
 # the 外觀 tab's colors (#AARRGGBB): highlighter yellow first (the default), selection blue last
 COLORS = [("#78FFE45C", "螢光黃"), ("#6E7CE08A", "淡綠"), ("#64FF8FC8", "粉紅"), ("#6EFFB35C", "淡橘"),
           ("#5A3390FF", "選取藍")]
-_ROWS_BACK = 12         # input box rows walked back from a terminal's cursor
 
 
 def _logical(x: int, y: int):
@@ -85,81 +84,3 @@ class DraftMarks:
             self._shown = ()
             for m in self._marks:
                 m.hide()
-
-
-def _flat(text: str) -> str:
-    return "".join(text.split())
-
-
-def draft_rects(text: str) -> list | None:
-    """Any thread: screen rectangles of text right before the caret of the focused control, or None when the text
-    there is not text (or cannot be read)."""
-    try:
-        uia, U = selection._uia()
-        el = uia.GetFocusedElement()
-        pattern = el.GetCurrentPattern(U.UIA_TextPatternId)
-        if not pattern:
-            return None
-        pattern = pattern.QueryInterface(U.IUIAutomationTextPattern)
-        if selection._proc_name(el.CurrentProcessId) in selection._TERMINALS or el.CurrentClassName == "TermControl":
-            return _term_rects(pattern, U, text)
-        ranges = pattern.GetSelection()
-        if ranges.Length != 1:
-            return None
-        r = ranges.GetElement(0).Clone()
-        if r.GetText(-1):
-            return None                       # text is selected: no draft at a caret
-        r.MoveEndpointByUnit(U.TextPatternRangeEndpoint_Start, U.TextUnit_Character, -len(text.replace("\r", "")))
-        if _flat(r.GetText(-1)) != _flat(text):
-            return None
-        flat = list(r.GetBoundingRectangles() or [])
-        return [tuple(flat[i:i + 4]) for i in range(0, len(flat), 4) if flat[i + 2] > 0]
-    except Exception:
-        log.debug("highlight: reading the draft's place failed", exc_info=True)
-        return None
-
-
-def _term_rects(pattern, U, text: str) -> list | None:
-    """Windows Terminal: the input box rows from the cursor back, each from the box's text start to its right
-    border, until they hold the draft (spaces ignored: a row's end is padding)."""
-    cursor = selection._term_cursor(pattern)
-    if cursor is None:
-        return None
-    line, col = cursor
-    row = line.GetText(-1).rstrip("\r\n")
-    start = selection.term_watcher._input_start(row, line, col, cursor)
-    if start is None:
-        return None
-    need = _flat(text)
-    got, rects, end = "", [], col
-    for _ in range(_ROWS_BACK):
-        right = min((i for i in (row.find("│", start), row.find("┃", start)) if i >= 0), default=len(row))
-        part = row[start:min(end, right)].rstrip()
-        b = start + len(part)
-        if part.strip():
-            # the row's part of the draft: from where the rest of it starts to the end of the text on the row
-            take = need[:len(need) - len(got)]
-            a = b
-            count = 0
-            while a > start and count < len(take):
-                a -= 1
-                if not row[a].isspace():
-                    count += 1
-            got = _flat(row[a:b]) + got
-            first, last = selection._char_rect(line, a), selection._char_rect(line, b - 1)
-            right = last[0] + last[2]
-            if b < len(row):
-                # Windows Terminal reports a wide character 3 cells wide (it takes 2): the next cell's left edge is
-                # where it ends (the user saw half a character too much in Claude Code, 2026-10-16)
-                nxt = selection._char_rect(line, b)
-                if nxt[1] == first[1] and nxt[0] > last[0]:
-                    right = nxt[0]
-            rects.append((first[0], first[1], right - first[0], first[3]))
-        if len(got) >= len(need):
-            break
-        line = line.Clone()
-        if line.Move(U.TextUnit_Line, -1) != -1:
-            return None
-        row = line.GetText(-1).rstrip("\r\n")
-        end = len(row)
-    return rects if got == need else None

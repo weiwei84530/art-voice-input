@@ -2,7 +2,6 @@
 block on the left (logo, 阿特語音輸入法, version) and six tiles, each with its icon bled large into the corner. A tile
 opens its page: the block shrinks to a 56px strip that leads back home, the tile's icon flies to the page title
 (transition 1, Fly), the page fades in."""
-import ctypes
 import time
 
 from PySide6.QtCore import QEasingCurve, QPointF, QRect, QRectF, Qt, QTimer, QVariantAnimation, Signal
@@ -637,8 +636,7 @@ class Shell(QWidget):
 def _round_corners(w):
     """Windows 11 rounds the frameless window's corners and gives it the usual shadow."""
     try:
-        hwnd = int(w.winId())
-        pref = ctypes.c_int(2)   # DWMWCP_ROUND
-        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(pref), ctypes.sizeof(pref))
+        from .. import system
+        system.round_corners(w)
     except (AttributeError, OSError):
         pass

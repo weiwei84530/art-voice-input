@@ -14,15 +14,14 @@ The same menu is the symbol keyboard (2026-10-22, design A of https://claude.ai/
 user's pick): said 符號 or 鍵盤, it opens under the caret with SYMBOLS' tabs (全形, 半形, 英文, 數字), no word leading the first; a click types
 the symbol, a pair (PAIRS) with the caret put back between, and closes it.
 """
-import ctypes
 
 from PySide6.QtCore import QPoint, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QFontMetrics, QGuiApplication, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QWidget
 
+from . import system
 from .ui import theme as themes
 
-_GWL_EXSTYLE, _WS_EX_NOACTIVATE, _WS_EX_TOPMOST = -20, 0x08000000, 0x8
 SINGLE = (3, 5)   # columns, rows per tab for one Chinese character (the user's choice: 15, rows like words')
 WORDS = (2, 5)    # for words and English
 _SHADOW = 12      # room around the menu for its shadow
@@ -101,9 +100,6 @@ class Picker(QWidget):
         self._fill(tabs, single=len(word) == 1 and "㐀" <= word <= "鿿", message="沒有候選字")
         if self.isVisible():
             QTimer.singleShot(0, self._clamp)
-
-    def owns(self, hwnd: int) -> bool:
-        return bool(hwnd) and ctypes.windll.user32.GetAncestor(hwnd, 2) == int(self.winId())   # GA_ROOT
 
     def dismiss(self):
         if self.isVisible():
@@ -317,10 +313,7 @@ class Picker(QWidget):
         self.move(x, y)
 
     def _no_activate(self):
-        hwnd = int(self.winId())
-        user32 = ctypes.windll.user32
-        user32.SetWindowLongW(hwnd, _GWL_EXSTYLE, user32.GetWindowLongW(hwnd, _GWL_EXSTYLE)
-                              | _WS_EX_NOACTIVATE | _WS_EX_TOPMOST)
+        system.no_activate(self)
 
     def hideEvent(self, e):
         if not self._answered:

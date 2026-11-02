@@ -15,12 +15,12 @@ for growing; the room is transparent, so clicks there go through. The button's p
 Where it shows is the 麥克風 page's three ticks (`float_away`, `float_box`, `float_rec`).
 按鈕大小 (`button_scale`, 75-125%) scales both buttons.
 """
-import ctypes
 
 from PySide6.QtCore import QEasingCurve, QPoint, QPointF, QRectF, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QCursor, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
+from . import system
 from .glow import FADE_MS
 from .orbs import ACTIVE_SPEED, IDLE_SPEED, OrbPlayer
 
@@ -30,7 +30,6 @@ _HOVER = 1.12    # the size under the pointer, times the size at rest
 _ACTIVE = 0.88   # the size while listening (kept on screen)
 _BURST = 1.5     # the size it grows to as it fades out
 EDGE = 24        # the place before it is dragged: this far in from the right edge (Config.float_pos [])
-_GWL_EXSTYLE, _WS_EX_NOACTIVATE, _WS_EX_TOPMOST = -20, 0x08000000, 0x8
 
 
 
@@ -271,14 +270,9 @@ class _OnTop(OrbButton):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setToolTip("開啟麥克風")
 
-    def hwnd(self) -> int:
-        return int(self.winId())
-
     def _appear(self):
         self.show()
-        hwnd = self.hwnd()
-        u32 = ctypes.windll.user32
-        u32.SetWindowLongW(hwnd, _GWL_EXSTYLE, u32.GetWindowLongW(hwnd, _GWL_EXSTYLE) | _WS_EX_NOACTIVATE | _WS_EX_TOPMOST)
+        system.no_activate(self)
 
 
 class Bubble(_OnTop):

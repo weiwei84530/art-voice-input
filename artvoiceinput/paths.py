@@ -7,10 +7,16 @@ from pathlib import Path
 
 FROZEN = getattr(sys, "frozen", False)   # the installed build (PyInstaller): APP_DIR is the install folder
 APP_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
+MAC = sys.platform == "darwin"
 
 # the installed build and a development copy keep apart: data folder, autostart value, single-instance pipe
 ID = "ArtVoiceInput" if FROZEN else "ArtVoiceInput-dev"
-DATA_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / ID
+if MAC:   # the Mac's per-user data place; the installed app's code lives beside it (mac/install.py)
+    DATA_DIR = Path.home() / "Library" / "Application Support" / ID
+    DATA_LABEL = f"~/Library/Application Support/{ID}"   # shown on 系統
+else:
+    DATA_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / ID
+    DATA_LABEL = f"%LOCALAPPDATA%\\{ID}"
 
 CONFIG_PATH = DATA_DIR / "config.json"
 LOG_PATH = DATA_DIR / "artvoiceinput.log"

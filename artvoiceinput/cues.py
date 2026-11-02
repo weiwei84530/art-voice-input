@@ -1,6 +1,6 @@
 """Sounds when the recording indicator shows and when the recording ends (2026-10-13, the user's request; picked on
 the 一般 tab, the first pair by default). ElevenLabs sound effects generated for the app (dev/sound-preview), turned
-into loudness-matched wav by dev/build_cues.py and played with winsound, which needs no package. Played from the
+into loudness-matched wav by dev/build_cues.py and played by system.play_sound (winsound on Windows). Played from the
 file: winsound cannot play asynchronously from memory (RuntimeError; the first version was silent, 2026-10-13).
 A volume below 100% (提示音's 音量, 2026-10-21) plays a scaled copy written once to DATA_DIR/cache/cues; winsound
 has no volume of its own.
@@ -9,9 +9,9 @@ import logging
 import array
 import threading
 import wave
-import winsound
 from pathlib import Path
 
+from . import system
 from .paths import DATA_DIR
 
 
@@ -91,6 +91,6 @@ def play(cue_id: str, kind: str, volume: int = 100):
         return
     try:
         path = _file(cue_id, kind, min(max(int(volume), VOLUME_RANGE[0]), 100))
-        winsound.PlaySound(str(path), winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
+        system.play_sound(str(path))
     except (RuntimeError, OSError, wave.Error):
         log.exception("playing %s-%s failed", cue_id, kind)

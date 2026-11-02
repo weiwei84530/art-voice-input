@@ -4,8 +4,11 @@
 The hotkey (2026-10-17, the user's design: click, then press anything) is any keyboard key or mouse button but the
 left one, with or without held modifiers: "[ctrl+][shift+][alt+][win+]<main>", main "mouse_middle", "mouse_right",
 "mouse_x1", "mouse_x2" or "vk:<hex>" (a left or right modifier alone is its own vk, "vk:a3" right Ctrl).
+
+Keys are Windows virtual-key codes on both platforms (mac/keyboard.py translates them). On a Mac the names follow
+its keyboard: Alt is Option, Win is Command (the user's choice, 2026-11-02: 右 Alt's place, 右 Option, for 簡約).
 """
-import ctypes
+from .system import MAC
 
 MOUSE_BUTTONS = {"mouse_middle": "滑鼠中鍵", "mouse_right": "滑鼠右鍵", "mouse_x2": "滑鼠側鍵（上）",
                  "mouse_x1": "滑鼠側鍵（下）"}
@@ -16,6 +19,10 @@ MOD_OF = {0x10: "shift", 0xA0: "shift", 0xA1: "shift", 0x11: "ctrl", 0xA2: "ctrl
 _MOD_LABELS = {"ctrl": "Ctrl", "shift": "Shift", "alt": "Alt", "win": "Win"}
 _SIDE_LABELS = {0xA0: "左 Shift", 0xA1: "右 Shift", 0xA2: "左 Ctrl", 0xA3: "右 Ctrl", 0xA4: "左 Alt", 0xA5: "右 Alt",
                 0x5B: "左 Win", 0x5C: "右 Win"}
+if MAC:
+    _MOD_LABELS = {"ctrl": "Control", "shift": "Shift", "alt": "Option", "win": "Command"}
+    _SIDE_LABELS = {0xA0: "左 Shift", 0xA1: "右 Shift", 0xA2: "左 Control", 0xA3: "右 Control", 0xA4: "左 Option",
+                    0xA5: "右 Option", 0x5B: "左 Command", 0x5C: "右 Command"}
 _KEY_LABELS = {0x14: "CapsLock", 0x91: "ScrollLock", 0x13: "Pause", 0x90: "NumLock", 0x2C: "PrintScreen",
                0x5D: "Menu", 0x1B: "Esc", 0xA6: "瀏覽器上一頁", 0xA7: "瀏覽器下一頁", 0xA8: "瀏覽器重新整理",
                0xAA: "瀏覽器搜尋", 0xAB: "瀏覽器我的最愛", 0xAC: "瀏覽器首頁", 0xAD: "靜音", 0xAE: "音量－",
@@ -64,14 +71,8 @@ def _vk_label(vk: int) -> str:
         return _KEY_LABELS[vk]
     if vk in _VK_NAMES:
         return _VK_NAMES[vk]
-    u32 = ctypes.windll.user32
-    scan = u32.MapVirtualKeyW(vk, 4)   # MAPVK_VK_TO_VSC_EX: an extended key's scan code has 0xE0 above it
-    if scan & 0xFF:
-        extended = (scan >> 8) in (0xE0, 0xE1) or vk in EXTENDED
-        buf = ctypes.create_unicode_buffer(64)
-        if u32.GetKeyNameTextW(((scan & 0xFF) << 16) | ((1 << 24) if extended else 0), buf, 64):
-            return buf.value
-    return f"按鍵 0x{vk:02X}"
+    from .system import key_name
+    return key_name(vk, vk in EXTENDED) or f"按鍵 0x{vk:02X}"
 
 
 def hotkey_label(spec: str) -> str:

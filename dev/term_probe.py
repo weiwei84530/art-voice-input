@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from artvoiceinput.selection import _uia, _proc_name  # noqa: E402
+from artvoiceinput.win.selection import _uia, _proc_name  # noqa: E402
 
 ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))  # physical pixels, like UIA
 _CHAR, _LINE, _START, _END = 0, 3, 0, 1

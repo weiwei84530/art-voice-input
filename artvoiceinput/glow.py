@@ -264,12 +264,8 @@ def render(lut: np.ndarray, turn_at: np.ndarray, alpha: np.ndarray, angle: float
 
 
 def _click_through(widget):
-    import ctypes
-    hwnd = int(widget.winId())
-    GWL_EXSTYLE, WS_EX_NOACTIVATE, WS_EX_TRANSPARENT, WS_EX_TOPMOST = -20, 0x08000000, 0x20, 0x8
-    user32 = ctypes.windll.user32
-    style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-    user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_TOPMOST)
+    from . import system
+    system.click_through(widget)
 
 
 class _Strip(QWidget):

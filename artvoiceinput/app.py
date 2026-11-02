@@ -28,7 +28,6 @@ The one popup (picker.py) is the 選字 candidate menu; it came back 2026-10-11 
 popup and was redesigned 2026-10-16 (tabs by how close the candidates sound, no input box). The second opinion
 (SenseVoice + suspects.py) is commented out below.
 """
-import ctypes
 import logging
 import os
 import re
@@ -45,7 +44,7 @@ from PySide6.QtGui import QAction, QCursor, QGuiApplication
 from PySide6.QtWidgets import QApplication, QMenu
 
 from . import (appicon, autostart, candidates, config, cues, edit, models, numforms, packs, paths, recordings, rules,
-               sounds, spelling, syllables)
+               sounds, spelling, syllables, system)
 from .asr import SAMPLE_RATE, Recognizer
 from .config import Config
 from .floatbtn import Bubble, FloatButton
@@ -128,22 +127,6 @@ def _pickable(text: str) -> bool:
                 or words and not re.search("[A-Za-z]", words))
 
 
-def _double_click_time() -> float:
-    import ctypes
-    return ctypes.windll.user32.GetDoubleClickTime() / 1000
-
-
-def foreground_pid() -> int:
-    return window_pid(ctypes.windll.user32.GetForegroundWindow())
-
-
-def window_pid(hwnd) -> int:
-    import ctypes.wintypes
-    pid = ctypes.wintypes.DWORD()
-    ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    return pid.value
-
-
 @dataclass
 class _Press:
     """What turned listening on (the hotkey, the floating button, the bubble, the focus), or a spoken operation
@@ -222,7 +205,7 @@ class App(QObject):
         self.float_btn.moved.connect(self._float_moved)
         self.bubble = Bubble()
         self.bubble.clicked.connect(lambda: self._listen_now("bubble"))
-        self._own_hwnds = {self.float_btn.hwnd(), self.bubble.hwnd()}
+        self._own_hwnds = {system.window_handle(self.float_btn), system.window_handle(self.bubble)}
         self._apply_look()   # clicks on these are not caret moves
         self._box = None                         # the text box the focus is in, its identity
         self._click = None                       # (point, time) of a click the bubble may show by
@@ -239,7 +222,7 @@ class App(QObject):
         self.picker = Picker()
         self.picker.picked.connect(self.on_menu_pick)
         self.picker.closed.connect(self._forget_menu)
-        self._picker_hwnd = int(self.picker.winId())
+        self._picker_hwnd = system.window_handle(self.picker)
         self.settings = SettingsWindow(self.cfg, self.hotwords, self.memory)
         self.settings.applied.connect(self.apply_settings)
         self.picker.use_theme(self.settings.theme)   # light or dark with the settings window
@@ -297,8 +280,8 @@ class App(QObject):
         """Keyboard hook thread: a key the user pressed (injected keys never get here); it closes the 選字 menu.
         Enter (or Ctrl+Enter, not Shift or Alt) sends: with 送出後關閉麥克風 listening turns off. Not the first Enter
         after other keys were typed (2026-10-27, the user's choice): an IME (新注音) takes it to confirm a pick."""
-        if vk == 0x0D and self._listening and self.cfg.stop_on_enter and not _held(0x10) and not _held(0x12) \
-                and not _ours(foreground()):
+        if vk == 0x0D and self._listening and self.cfg.stop_on_enter and not system.key_held(0x10) \
+                and not system.key_held(0x12) and not system.is_ours(system.foreground()):
             if self._keyed:
                 log.info("Enter after typing: listening stays on (an IME may have taken it)")
             else:
@@ -311,53 +294,40 @@ class App(QObject):
         self.main.emit(self.bubble.hide)   # typing: the bubble is in the way (the user's request, 2026-10-16)
         self.main.emit(self._caret_left)
 
-    def _on_picker(self, pt) -> bool:
+    def _on_picker(self, x: int, y: int) -> bool:
         """Mouse hook thread: the point is on the 選字 menu."""
-        import ctypes.wintypes
-        u32 = ctypes.windll.user32
-        u32.WindowFromPoint.argtypes = [ctypes.wintypes.POINT]
-        hwnd = u32.WindowFromPoint(pt)
-        return bool(hwnd) and u32.GetAncestor(hwnd, 2) == self._picker_hwnd   # GA_ROOT
+        return system.on_window({self._picker_hwnd}, x, y)
 
-    def _on_float(self, pt) -> bool:
+    def _on_float(self, x: int, y: int) -> bool:
         """Mouse hook thread: the point is on the floating button or the bubble."""
-        import ctypes.wintypes
-        u32 = ctypes.windll.user32
-        u32.WindowFromPoint.argtypes = [ctypes.wintypes.POINT]
-        hwnd = u32.WindowFromPoint(pt)
-        return bool(hwnd) and u32.GetAncestor(hwnd, 2) in self._own_hwnds   # GA_ROOT
+        return system.on_window(self._own_hwnds, x, y)
 
     def _watch_mouse(self):
         """Any click may move the caret, which ends what session.py knows about the text before it. Left button
         drags may select text in a terminal (selection.TermWatcher). Our own clicks (injected) are skipped."""
-        import ctypes.wintypes
-        from pynput import mouse
         downs = {0x201, 0x204, 0x207, 0x20B}   # left / right / middle / x button down
         clicks = {"down": None, "n": 0, "at": 0.0, "pt": None}   # the left button, for _auto_pick
 
-        def on_event(msg, data):
-            if data.flags & 1:   # LLMHF_INJECTED
-                return False
-            if self.hotkeys.is_bound_mouse(msg, data.mouseData):
+        def on_event(msg, x, y, mouse_data) -> bool:
+            if self.hotkeys.is_bound_mouse(msg, mouse_data):
                 return False   # a button an operation uses is not a click
-            if msg in _HELD_BUTTONS and self._hold_mouse(msg, data.pt):
-                listener.suppress_event()   # sent again after the sentence's mark (_seal_job)
-                return
-            seen(msg, data)
-            return False   # never passed on to pynput's (unused) callbacks: keeps the hook cheap
+            if msg in _HELD_BUTTONS and self._hold_mouse(msg, x, y):
+                return True    # sent again after the sentence's mark (_seal_job)
+            seen(msg, x, y)
+            return False
 
-        def seen(msg, data):
+        def seen(msg, x, y):
             """A button or wheel event: from the hook, or held back and sent again (_seal_job)."""
             if msg in downs:
-                if self._on_picker(data.pt) or self._on_float(data.pt):
-                    return False   # a click in the 選字 menu or the floating button leaves the caret where it is
+                if self._on_picker(x, y) or self._on_float(x, y):
+                    return   # a click in the 選字 menu or the floating button leaves the caret where it is
                 self.main.emit(self.picker.dismiss)   # a click anywhere else closes it
                 self.session.on_input()
                 self.main.emit(self._caret_left)
                 self._pick_gen += 1
                 if msg == 0x201:
-                    term_watcher.mouse_down(data.pt.x, data.pt.y)
-                    clicks["down"] = (data.pt.x, data.pt.y)
+                    term_watcher.mouse_down(x, y)
+                    clicks["down"] = (x, y)
                 else:
                     term_watcher.forget()
                     clicks["down"] = None
@@ -367,32 +337,26 @@ class App(QObject):
                 if self.cfg.show_bubble:
                     self.main.emit(self.bubble.hide)   # the user's request, 2026-10-16
             elif msg == 0x202:
-                term_watcher.mouse_up(data.pt.x, data.pt.y)
+                term_watcher.mouse_up(x, y)
                 down, clicks["down"] = clicks["down"], None
-                if down is not None and abs(down[0] - data.pt.x) + abs(down[1] - data.pt.y) <= 4:
-                    pt = (data.pt.x, data.pt.y)
+                if down is not None and abs(down[0] - x) + abs(down[1] - y) <= 4:
+                    pt = (x, y)
                     self.main.emit(lambda: self._clicked(pt))
                 if down is not None and self._listening:
-                    x, y = data.pt.x, data.pt.y
                     if abs(down[0] - x) + abs(down[1] - y) > 4:
                         clicks["n"] = 0
                         self.main.emit(self._auto_pick)   # a drag
                     else:
                         now, pt = time.monotonic(), clicks["pt"]
                         near = pt is not None and abs(pt[0] - x) + abs(pt[1] - y) <= 4
-                        clicks["n"] = clicks["n"] + 1 if near and now - clicks["at"] <= _double_click_time() else 1
+                        quick = now - clicks["at"] <= system.double_click_time()
+                        clicks["n"] = clicks["n"] + 1 if near and quick else 1
                         clicks["at"], clicks["pt"] = now, (x, y)
                         if clicks["n"] >= 2:
                             self.main.emit(self._auto_pick)   # a double (or triple) click
 
-        class _Event:
-            def __init__(self, x, y):
-                self.pt, self.mouseData = ctypes.wintypes.POINT(x, y), 0
-        self._mouse_seen = lambda msg, x, y: seen(msg, _Event(x, y))
-        listener = mouse.Listener(win32_event_filter=on_event)
-        listener.daemon = True
-        listener.start()
-        return listener
+        self._mouse_seen = seen
+        return system.MouseHook(on_event).start()
 
     # --- models ---
     def _load_model_job(self):
@@ -581,21 +545,16 @@ class App(QObject):
         if self._listening:
             self._stop_listen()
             return
-        if self._typing_hwnd and _taskbar(foreground()):
-            ctypes.windll.user32.SetForegroundWindow(self._typing_hwnd)
+        if self._typing_hwnd and system.is_taskbar(system.foreground()):
+            system.set_foreground(self._typing_hwnd)
         self._listen_now("tray")
 
     def _watch_foreground(self):
-        """The last foreground window that is not the taskbar or ours (a WinEvent hook, called on this thread)."""
-        proto = ctypes.WINFUNCTYPE(None, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_long,
-                                   ctypes.c_long, ctypes.c_uint32, ctypes.c_uint32)
-
-        def changed(_hook, _event, hwnd, *_):
-            if hwnd and not _taskbar(hwnd) and window_pid(hwnd) != os.getpid():
+        """The last foreground window that is not the taskbar or ours (called on this thread)."""
+        def changed(hwnd):
+            if not system.is_taskbar(hwnd) and not system.is_ours(hwnd):
                 self._typing_hwnd = hwnd
-        callback = proto(changed)
-        hook = ctypes.windll.user32.SetWinEventHook(0x0003, 0x0003, None, callback, 0, 0, 0)   # EVENT_SYSTEM_FOREGROUND
-        return hook, callback   # the callback must outlive the hook
+        return system.watch_foreground(changed)   # kept: the hook lives as long as it
 
     def _pin_tray(self):
         """系統's 在工作列顯示圖示: Explorer lists a new icon a moment after it first shows, so tried again a few
@@ -685,12 +644,12 @@ class App(QObject):
                 or self._focus_busy or self._quitting:
             return
         self._focus_busy = True
-        settings = int(self.settings.winId()) if self.settings.isVisible() else 0
+        settings = system.window_handle(self.settings) if self.settings.isVisible() else 0
 
         def read():
             started = time.monotonic()   # a click before this is where the focus read is
             info = focus_info()
-            if info[0] is None and settings and foreground() == settings:
+            if info[0] is None and settings and system.front_is(settings):
                 # our settings window in front counts as a place where nothing can be typed (2026-10-20, the
                 # user's request: with listening still on the user believes the text box still takes it); the
                 # floating button, bubble and 選字 menu never take the foreground and still change nothing
@@ -924,17 +883,17 @@ class App(QObject):
         self._seal_pool.submit(self._seal_job, None)
         return True
 
-    def _hold_mouse(self, msg: int, pt) -> bool:
+    def _hold_mouse(self, msg: int, x: int, y: int) -> bool:
         """Mouse hook thread: a left click while a mark is due is held back (True) until the mark is typed, when it
         lands in the same text box (the focused control); so is any button while something is held."""
         with self._held_lock:
             if self._held is not None:
-                self._held.append(("mouse", msg, pt.x, pt.y))
+                self._held.append(("mouse", msg, x, y))
                 return True
-            if msg != 0x201 or self._on_picker(pt) or self._on_float(pt) or not self._due_mark():
+            if msg != 0x201 or self._on_picker(x, y) or self._on_float(x, y) or not self._due_mark():
                 return False
-            self._held = [("mouse", msg, pt.x, pt.y)]
-        self._seal_pool.submit(self._seal_job, (pt.x, pt.y))
+            self._held = [("mouse", msg, x, y)]
+        self._seal_pool.submit(self._seal_job, (x, y))
         return True
 
     def _seal_job(self, pt):
@@ -1727,7 +1686,7 @@ class App(QObject):
         restore_now()
         if not term:
             text = _plain(_clipboard_text()) if command == rules.PASTE else ""
-            press_chord(0x11, {rules.SELECT_ALL: 0x41, rules.COPY: 0x43, rules.CUT: 0x58, rules.PASTE: 0x56}[command])
+            press_chord(system.SHORTCUT_MOD, {rules.SELECT_ALL: 0x41, rules.COPY: 0x43, rules.CUT: 0x58, rules.PASTE: 0x56}[command])
             # 剪下 / 貼上 are changes 復原 takes back (2026-10-17, the user's request) when what they did is known
             if command == rules.CUT and sel is not None:
                 self._typed_over(press, sel, "")
@@ -1743,7 +1702,7 @@ class App(QObject):
             return
         if command == rules.PASTE and sel is None:
             text = _plain(_clipboard_text())
-            press_chord(0x11, 0x56)
+            press_chord(system.SHORTCUT_MOD, 0x56)
             if text:
                 self.session.dictated(text, None, foreground())
             else:
@@ -1958,7 +1917,7 @@ class App(QObject):
             sel = ctx.selection
             if gen != self._pick_gen or not self._listening or self._menu is not None:
                 return
-            if sel is None or not _pickable(sel.text) or foreground_pid() == os.getpid():
+            if sel is None or not _pickable(sel.text) or system.foreground_pid() == os.getpid():
                 return
             log.info("auto pick: %r", sel.text)
             self._open_candidates(sel, ctx.terms)
@@ -2306,10 +2265,9 @@ def _ends_sentence(command) -> bool:
 
 
 def _open_osk():
-    """鍵盤 (2026-10-22, the user's request): Windows' on-screen keyboard. ShellExecute, since osk.exe asks for UI
-    access and CreateProcess refuses it; a second call leaves the one already open."""
-    if ctypes.windll.shell32.ShellExecuteW(None, "open", "osk.exe", None, None, 1) <= 32:
-        log.warning("osk.exe did not start")
+    """鍵盤 (2026-10-22, the user's request): the on-screen keyboard (Windows' osk.exe, the Mac's 鍵盤檢視器)."""
+    if not system.open_osk():
+        log.warning("the on-screen keyboard did not open")
 
 
 def _clipboard_text() -> str:
@@ -2344,19 +2302,6 @@ def _alike(raw: str, names: list) -> str:
     hits = [n for n in names if candidates.sounds_alike(rules.normalize(n), said)]
     # spellings of one punctuation name (驚嘆號 / 驚歎號) are one command
     return hits[0] if len({edit.SYMBOLS.get(n, n) for n in hits}) == 1 else ""
-
-
-def _held(vk: int) -> bool:
-    import ctypes
-    return bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000)
-
-
-def _ours(hwnd: int) -> bool:
-    """The window is Art VoiceInput's own (its settings): an Enter there sends nothing."""
-    import ctypes
-    pid = ctypes.c_ulong()
-    ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    return pid.value == os.getpid()
 
 
 def _go_on(d) -> None:
@@ -2487,14 +2432,6 @@ def _is_cjk(text: str) -> bool:
     return bool(text) and bool(re.match(r"[㐀-䶿一-鿿]", text))
 
 
-def _taskbar(hwnd: int) -> bool:
-    """The taskbar, its tray overflow or the Start menu (where a click on the tray icon puts the foreground)."""
-    cls = ctypes.create_unicode_buffer(64)
-    ctypes.windll.user32.GetClassNameW(hwnd, cls, 64)
-    return cls.value in ("Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow",
-                         "TopLevelWindowForOverflowXamlIsland", "Windows.UI.Core.CoreWindow")
-
-
 def _paste_over(sel, text: str) -> bool:
     """Replace the selected text: a paste replaces a selection, except in a terminal."""
     if sel.term is not None and not _delete_selection(sel):
@@ -2505,13 +2442,13 @@ def _paste_over(sel, text: str) -> bool:
 
 RESTARTED = "--restarted"   # started by App.restart
 # where a second launch asks the running Art VoiceInput to show its settings (a named pipe, one per user)
-PIPE = f"{paths.ID}-{os.environ.get('USERNAME', '')}"
+PIPE = f"{paths.ID}-{os.environ.get('USERNAME') or os.environ.get('USER', '')}"
 
 
 def _show_running():
     """Launched again by the user while running: the running one shows its settings window's home. It may take the
     foreground: this process has it now."""
-    ctypes.windll.user32.AllowSetForegroundWindow(-1)   # ASFW_ANY
+    system.allow_set_foreground()
     sock = QLocalSocket()
     sock.connectToServer(PIPE)
     if sock.waitForConnected(1000):

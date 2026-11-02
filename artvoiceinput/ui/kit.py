@@ -1,5 +1,4 @@
 """Building blocks of the redesigned settings window: icons, the switch, cards, chips, segmented buttons, ⓘ."""
-import ctypes
 import math
 import time
 
@@ -238,9 +237,8 @@ def T(key: str, alpha: float | None = None) -> QColor:
 def dark_frame(w, dark: bool):
     """A window's title bar dark or light (DWMWA_USE_IMMERSIVE_DARK_MODE)."""
     try:
-        hwnd = int(w.winId())
-        v = ctypes.c_int(1 if dark else 0)
-        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(v), ctypes.sizeof(v))
+        from .. import system
+        system.dark_title(w, dark)
     except (AttributeError, OSError):
         pass
 

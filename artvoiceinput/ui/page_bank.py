@@ -1,7 +1,6 @@
 """詞庫 (design 1, the user's pick): four lists under segmented tabs with their counts, a search box and the list's
 order: 詞包 to switch on, 詞庫列表 (each word's 優先度 as a bar from 少出現 to 多出現; words are typed in here), 選字記憶
 (這個ying3片是 → 這個影片是) and 英文替換. Every change is saved at once."""
-import os
 
 from pypinyin import lazy_pinyin
 from PySide6.QtCore import QEasingCurve, QPoint, QRectF, Qt, QVariantAnimation
@@ -10,7 +9,7 @@ from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QLineEdit, QSizeP
                                QWidget)
 
 from .. import hotwords as hw
-from .. import packs
+from .. import packs, system
 from ..memory import BOUNDARY
 from . import theme
 from .kit import Choice, Switch, T, Tip, button, calm, card, dim, draw_icon, icon, label
@@ -468,7 +467,7 @@ class BankPage(QWidget):
         path = packs.path(pack_id)
         if not path.exists():
             packs.install()
-        os.startfile(path)
+        system.open_path(path)
 
     def _add_word(self):
         word = self.add_input.text().strip()
