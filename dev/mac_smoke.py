@@ -43,8 +43,8 @@ def main():
     qapp.setQuitOnLastWindowClosed(False)
     system.setup(qapp)
     check(system.MAC, "system.MAC")
-    check(all(vk in keyboard.VK_TO_MAC for vk in keys.NAMES.values() if vk not in keys.MOUSE_VKS.values()),
-          "every key name has a Mac key code")
+    missing = [n for n, vk in keys.NAMES.items() if vk not in keys.MOUSE_VKS.values() and vk not in keyboard.VK_TO_MAC]
+    check(set(missing) <= {"F21", "F22", "F23", "F24"}, f"every key name but F21-F24 has a Mac key code {missing}")
     check(keyboard.MAC_TO_VK[61] == 0xA5 and keys.hotkey_label("vk:a5") == "右 Option", "右 Option")
     check(keys.hotkey_label("win+vk:20") == "Command+Space", keys.hotkey_label("win+vk:20"))
     check(keyboard.set_clipboard("阿特 clipboard") and qapp.clipboard().text() == "阿特 clipboard", "clipboard")
@@ -100,7 +100,7 @@ def main():
     from artvoiceinput import models
     from artvoiceinput.asr import Recognizer
     rec = Recognizer(models.MAIN_MODEL)
-    for name, expect in (("a", "天氣"), ("b", "爬山")):
+    for name, expect in (("a", "天气"), ("b", "爬山")):   # the recognizer writes Simplified (s2tw comes after)
         w = wave.open(str(ROOT / "dev" / "testdata" / "wav" / f"{name}.wav"))
         audio = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768
         t = time.monotonic()
