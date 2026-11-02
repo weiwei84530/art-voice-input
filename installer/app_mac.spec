@@ -18,7 +18,7 @@ a = Analysis(
     datas=datas,
     hiddenimports=["artvoiceinput.mac.system", "artvoiceinput.mac.keyboard", "artvoiceinput.mac.hotkey",
                    "artvoiceinput.mac.selection", "artvoiceinput.mac.mute", "artvoiceinput.mac.autostart",
-                   "AVFoundation", "ApplicationServices", "Quartz", "AppKit", "objc"],
+                   "ApplicationServices", "Quartz", "AppKit", "objc"],
     excludes=["tkinter", "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtPdf", "PySide6.QtWebEngineCore",
               "pynput", "comtypes"],
 )

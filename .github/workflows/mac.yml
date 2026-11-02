@@ -72,9 +72,13 @@ jobs:
           ls "$HOME/Library/Application Support/ArtVoiceInput/app" | head
           open -a "$APP" --args --autostart
           LOG="$HOME/Library/Application Support/ArtVoiceInput/artvoiceinput.log"
-          for i in $(seq 1 60); do grep -q "就緒" "$LOG" 2>/dev/null && break; sleep 2; done
+          for i in $(seq 1 120); do grep -q "就緒" "$LOG" 2>/dev/null && break; sleep 2; done
           cat "$LOG"
-          grep -q "就緒" "$LOG"
+          if ! grep -q "就緒" "$LOG"; then
+            python -m pip install -q py-spy
+            sudo "$(python -c 'import shutil; print(shutil.which("py-spy"))')" dump --pid "$(pgrep -f 'ArtVoiceInput/app/ArtVoiceInput' | head -1)" || true
+            exit 1
+          fi
           pkill -f "Application Support/ArtVoiceInput/app/ArtVoiceInput" || true
 
       - name: Launcher bundle (commit it as packaging/mac/launcher once its signature is right)

@@ -294,19 +294,10 @@ def trusted(prompt: bool = False) -> bool:
 
 
 def permissions(notify) -> None:
-    """At launch: ask for what macOS needs the user to allow: the microphone, Accessibility (reading the selection,
-    typing, the event taps) and Input Monitoring (keys in the event tap). The taps are tried again until allowed,
-    so no restart is needed."""
-    try:
-        from AVFoundation import AVCaptureDevice, AVMediaTypeAudio
-        status = AVCaptureDevice.authorizationStatusForMediaType_(AVMediaTypeAudio)
-        if status == 0:     # not determined: macOS asks
-            AVCaptureDevice.requestAccessForMediaType_completionHandler_(AVMediaTypeAudio, lambda ok: None)
-        elif status in (1, 2):   # restricted / denied
-            notify("麥克風沒有開放：請在「系統設定 › 隱私權與安全性 › 麥克風」打開 Art VoiceInput")
-            open_privacy("microphone")
-    except Exception:
-        log.exception("microphone permission check failed")
+    """At launch: ask for what macOS needs the user to allow: Accessibility (reading the selection, typing, the event
+    taps) and Input Monitoring (keys in the event tap). The taps are tried again until allowed, so no restart is
+    needed. The microphone is asked by macOS itself the first time listening opens it (AVFoundation, which could ask
+    sooner, does not load in the PyInstaller build: its Swift libraries are not found)."""
     ok = trusted(prompt=True)
     try:
         if not Q.CGPreflightListenEventAccess():
