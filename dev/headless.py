@@ -195,6 +195,7 @@ appmod.caret_rect = lambda: None           # nor its caret: the symbol keyboard 
 _show_at = appmod.Bubble.show_at
 appmod.Bubble.show_at = lambda self, pt: (print(f"      [語音氣泡 在 {pt}]"), _show_at(self, pt))
 A = appmod.App(qapp)
+A.cfg.setup_done = True   # a new data folder (CI) has the setup wizard unfinished: the app would rest
 A.tray.hide()
 A.tray.showMessage = lambda title, text, *a: print(f"      [通知] {title}: {text}")
 
