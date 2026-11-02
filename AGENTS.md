@@ -63,8 +63,9 @@ automatically; read it before reviving or redesigning something). Module docstri
   `~/Library/Application Support/ArtVoiceInput/app` and `Art VoiceInput.app`, a small launcher
   (`packaging/mac/launcher.m`), in /Applications (or ~/Applications). macOS ties the microphone, Accessibility and
   Input Monitoring to the app's ad hoc signature: the launcher never changes (its Info.plist holds no version), the
-  real app runs as its child, so permissions survive updates. Commit the launcher CI built as
-  `packaging/mac/launcher/Art VoiceInput.app` once it works (build_mac.py prefers it). `dev/build_icns.py` writes
+  real app runs as its child, so permissions survive updates. The launcher CI built is committed as
+  `packaging/mac/launcher/Art VoiceInput.app` (2026-11-02, `-text` in .gitattributes; build_mac.py uses it): never
+  rebuild it without need, a new one makes every user give the permissions again. `dev/build_icns.py` writes
   `packaging/mac/appicon.icns`. The repo is public for now (free macOS CI minutes; the user plans to make it private
   again later).
 - Development copy and installed build kept apart (2026-10-24, the user's request: no mixing them up): `paths.ID` is

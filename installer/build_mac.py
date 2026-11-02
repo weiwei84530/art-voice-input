@@ -47,6 +47,7 @@ def launcher():
     shutil.rmtree(LAUNCHER, ignore_errors=True)
     if COMMITTED.exists():
         shutil.copytree(COMMITTED, LAUNCHER, symlinks=True)
+        (LAUNCHER / "Contents" / "MacOS" / "ArtVoiceInput").chmod(0o755)
         run("codesign", "--verify", "--strict", "--verbose", LAUNCHER)
         return
     macos = LAUNCHER / "Contents" / "MacOS"

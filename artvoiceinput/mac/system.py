@@ -302,6 +302,10 @@ def permissions(notify) -> None:
         av = {}
         objc.loadBundle("AVFoundation", av, bundle_path="/System/Library/Frameworks/AVFoundation.framework")
         device = av["AVCaptureDevice"]
+        objc.registerMetaDataForSelector(   # the completion handler's signature, which the wrapper would give
+            b"AVCaptureDevice", b"requestAccessForMediaType:completionHandler:",
+            {"arguments": {3: {"callable": {"retval": {"type": b"v"},
+                                            "arguments": {0: {"type": b"^v"}, 1: {"type": b"Z"}}}}}})
         status = device.authorizationStatusForMediaType_("soun")   # AVMediaTypeAudio
         if status == 0:     # not determined: macOS asks now, not when the first stream opens (which waits for it)
             device.requestAccessForMediaType_completionHandler_("soun", lambda ok: log.info("microphone %s",
