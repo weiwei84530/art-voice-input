@@ -43,8 +43,30 @@ automatically; read it before reviving or redesigning something). Module docstri
   as identifiers (data folder, autostart value, package, log, lock); repo `art-voice-input`. "VoiceInput" alone
   never names the app (a fork used `%LOCALAPPDATA%\VoiceInput` and the same autostart value).
 
-- Windows only (2026-10-03, macOS failed: no hotkey worked). Don't add `sys.platform` branches;
-  `docs/macos-port.md` lists what a port needs.
+- Windows and macOS (2026-11-02, the user's request; Windows only from 2026-10-03 until then). One code base (the
+  user's choice): everything that talks to the OS lives in `artvoiceinput/win/` and `artvoiceinput/mac/` behind the
+  same functions, picked by the modules at the old names (`system`, `selection`, `hotkey`, `output`'s keyboard,
+  `mute`, `autostart`); `system.MAC` is the one `sys.platform` check, besides data tables (`keys` labels, `paths`,
+  `ui/theme` fonts, `tray` menu, `installer/ui`). Don't spread platform checks elsewhere. Keys are Windows virtual-key
+  codes on both (`mac/keyboard.py` translates); screen points are "physical pixels" on both (`mac/system.physical`
+  scales macOS points so the shared conversions work). What is shared by the hotkey hooks: `hotkeycore.py`.
+- Mac port (`docs/macos-port.md`: status, what is untested): phase 1 = installer, setup wizard, listening, drafts,
+  commands, 復原, 選字, settings window, floating button, bubble, glow; phase 2 = the tutorial (its desktop is a
+  Windows 11 one) and terminal mouse-selection edits. Target: the user's iMac 2019 (Intel, macOS Sequoia 15) and
+  Apple Silicon (only CI tests it). Free, unsigned (no Apple Developer ID): the first launch needs 系統設定 →
+  隱私權與安全性 → 強制打開. Mac decisions (2026-11-02): menu bar icon clicks like Windows (`tray_click`; menu on the
+  right button / Control-click), Dock icon only while the settings window is open (`system.set_dock`), 右 Alt → 右
+  Option (Alt is Option, Win is Command in key names; the clipboard commands press Command, `system.SHORTCUT_MOD`).
+- Mac packaging (`installer/build_mac.py`, CI `.github/workflows/mac.yml` on macos-14 and macos-15-intel, the .dmg
+  as an artifact for the user to try): our own Qt setup in a .dmg (the same window as Windows, `installer/ui.py` with
+  `ops_mac.py`; no other place offered, no uninstaller yet). It puts the real app (PyInstaller onedir) in
+  `~/Library/Application Support/ArtVoiceInput/app` and `Art VoiceInput.app`, a small launcher
+  (`packaging/mac/launcher.m`), in /Applications (or ~/Applications). macOS ties the microphone, Accessibility and
+  Input Monitoring to the app's ad hoc signature: the launcher never changes (its Info.plist holds no version), the
+  real app runs as its child, so permissions survive updates. Commit the launcher CI built as
+  `packaging/mac/launcher/Art VoiceInput.app` once it works (build_mac.py prefers it). `dev/build_icns.py` writes
+  `packaging/mac/appicon.icns`. The repo is public for now (free macOS CI minutes; the user plans to make it private
+  again later).
 - Development copy and installed build kept apart (2026-10-24, the user's request: no mixing them up): `paths.ID` is
   `ArtVoiceInput-dev` for a copy run from the repo (`run.pyw`) and `ArtVoiceInput` for the installed exe
   (`paths.FROZEN`); it names the data folder, the autostart Run value and the single-instance pipe, so both can run
@@ -92,8 +114,9 @@ automatically; read it before reviving or redesigning something). Module docstri
 | `asr.py` | `Recognizer`: X-ASR, hotword biasing, `recognize_timed` (token times), `_pieces` (>30s audio) |
 | `textfmt.py` | `format_text` pipeline (below), `changes` for the log |
 | `session.py` | text Art VoiceInput typed before the caret, `history` of `Step`s for 復原 |
-| `output.py` | Win32 clipboard paste, key sending, clipboard restore and watch |
-| `selection.py` | UIA: selection, caret line, `focus_info`, `TermWatcher` (terminal mouse selections) |
+| `system.py` | the platform's windows, focus, mouse hook, sounds, permissions (`win/system.py`, `mac/system.py`) |
+| `output.py` | clipboard paste, key sending, clipboard restore and watch (`win/keyboard.py` / `mac/keyboard.py`) |
+| `selection.py` | selection, caret line, `focus_info`, draft rectangles, `TermWatcher` (`win/`: UIA, `mac/`: AX) |
 | `highlight.py` | draft mark rectangles (`draft_rects`) and `DraftMarks` windows |
 | `rules.py` | spoken operations (自訂操作), `defaults`, `upgrade` / `simplify` (rules_version 17) |
 | `edit.py` | punctuation names (`symbol`), described characters (`described`), spelled letters (`spelled`) |
@@ -109,7 +132,7 @@ automatically; read it before reviving or redesigning something). Module docstri
 | `ui/` | settings window (2026-10 redesign): `theme.py` tokens + QSS, `kit.py` widgets, `shell.py` home and transition, `window.py` app interface, `page_*.py` the six pages, `wizard.py` setup wizard, `tutorial.py` / `desk.py` / `sprite.py` the tutorial, `sheet.py` in-window question |
 | `logbook.py` | 辨識紀錄 rows |
 | `config.py` / `userdata.py` | `Config` (load migrates old keys) / settings file export, import, reset |
-| `hotkey.py` / `keys.py` | low-level hooks, hotkey capture, key names |
+| `hotkey.py` / `hotkeycore.py` / `keys.py` | the platform's hooks / what they decide, hotkey capture / key names |
 | `cues.py`, `mute.py`, `recordings.py`, `autostart.py` | sounds, speaker mute (`recover`), dev recordings, autostart |
 
 ## Listening (continuous)

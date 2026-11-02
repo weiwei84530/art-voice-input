@@ -1,5 +1,6 @@
 """Colors and fonts of the settings window and the 選字 menu (the 2026-10 redesign, style C): an orange brand on silver
 white (light) or dark gray (dark). config.theme picks light, dark or the Windows setting (system)."""
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal
@@ -9,6 +10,8 @@ ACCENT = "#FF453A"
 FONT = "Noto Sans TC"            # Windows 11's optional font; Microsoft JhengHei UI stands in
 FONT_FALLBACK = "Microsoft JhengHei UI"
 NUM_FONT = "Bahnschrift SemiCondensed"   # version number, counts, keys (Barlow Semi Condensed in the mockups)
+if sys.platform == "darwin":   # fonts every Mac has: 蘋方 for the text, Avenir Next Condensed for the numbers
+    FONT, FONT_FALLBACK, NUM_FONT = "PingFang TC", "Heiti TC", "Avenir Next Condensed"
 # for a style-sheet-sized widget (its font-size resets the family): numbers in NUM_FONT, the rest falls to FONT
 NUM_FAMILY = f"font-family: '{NUM_FONT}', '{FONT}', '{FONT_FALLBACK}';"
 

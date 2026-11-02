@@ -19,9 +19,14 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QFileDialog, QGraphicsDr
 from artvoiceinput import __version__, appicon
 from artvoiceinput.ui import theme
 
-from . import ops
+MAC = sys.platform == "darwin"
+if MAC:   # the same window; what it does on disk differs (ops_mac.py)
+    from . import ops_mac as ops
+else:
+    from . import ops
 
 T = theme.LIGHT
+MOVE = "" if MAC else "換個位置"   # the Mac's app goes where its launcher looks for it
 W, H = 520, 360
 
 
@@ -253,6 +258,8 @@ class Window(QWidget):
 
     def _path_text(self) -> str:
         fm = QFontMetrics(self.note.font())
+        if MAC:
+            return "安裝到「應用程式」資料夾"
         return fm.elidedText(f"安裝到 {self.folder}", Qt.ElideMiddle, W - 80)
 
     # states: start, busy, done, error; u-ask, u-busy, u-done, u-error
@@ -272,11 +279,12 @@ class Window(QWidget):
         self.sub.setToolTip(whole if escape(whole) != message else "")
         sub, button, kind, note, link = {
             "start": (f"Art VoiceInput <span style=\"{num}\">&nbsp;{__version__}</span>", "安裝", "pri",
-                      self._path_text(), "換個位置"),
+                      self._path_text(), MOVE),
             "busy": ("正在準備", "", "pri", self._path_text(), ""),
-            "done": (ok.format("安裝完成"), "開始使用", "pri", "之後可以在 Windows 設定的「應用程式」解除安裝",
+            "done": (ok.format("安裝完成"), "開始使用", "pri",
+                     "之後可以在「應用程式」資料夾打開它" if MAC else "之後可以在 Windows 設定的「應用程式」解除安裝",
                      "先不開啟，關閉"),
-            "error": (err.format(message), "再試一次", "pri", self._path_text(), "換個位置"),
+            "error": (err.format(message), "再試一次", "pri", self._path_text(), MOVE),
             "start-up": (f"已安裝 <span style=\"{num}\">&nbsp;{escape(self.old_version)}"
                          f"&nbsp;→&nbsp;{__version__}</span>" if self.old_version
                          else f"更新到 <span style=\"{num}\">&nbsp;{__version__}</span>",
@@ -385,11 +393,17 @@ def _arg(name: str) -> str | None:
 
 def main() -> int:
     exe = Path(sys.executable)
-    from . import payload
-    z = payload.open_zip(exe)
-    uninstalling = z is None
-    if z is not None:
-        z.close()
+    if MAC:   # the payload is a file in the setup app's Resources; no uninstaller of its own
+        uninstalling = False
+        if "--quiet" in sys.argv:   # CI: install without the window
+            ops.install(ops.DEFAULT_DIR, lambda v, what: print(f"{v:4.0%} {what}", flush=True))
+            return 0
+    else:
+        from . import payload
+        z = payload.open_zip(exe)
+        uninstalling = z is None
+        if z is not None:
+            z.close()
     if uninstalling:
         folder = Path(_arg("--from") or exe.parent)
         if _arg("--from") is None:

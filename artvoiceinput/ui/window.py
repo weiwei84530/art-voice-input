@@ -4,7 +4,7 @@ import sys
 
 from PySide6.QtCore import QEvent, Signal
 
-from .. import packs
+from .. import packs, system
 from . import theme
 from .shell import Shell
 
@@ -124,6 +124,7 @@ class SettingsWindow(Shell):
         self.mic_page.hotkey_captured(spec)
 
     def showEvent(self, e):
+        system.set_dock(True)   # a Mac shows the app in the Dock while this window is open
         if not e.spontaneous():   # opened again, not restored from the taskbar (that keeps the page)
             self.show_home_now()
             if not self.cfg.setup_done and (self.wizard is None or self.wizard.isHidden()) and not self.tutoring:
@@ -226,6 +227,8 @@ class SettingsWindow(Shell):
             self.applied.emit()
 
     def hideEvent(self, e):
+        if not self.isMinimized():
+            system.set_dock(False)
         self.mic_page.stop_capture()
         if self.tutorial is not None and self.tutorial.isVisibleTo(self):
             # closed midway: the first run comes back at its chapter next time (cfg.tutorial_at); a replay just ends

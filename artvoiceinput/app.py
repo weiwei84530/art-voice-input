@@ -2163,8 +2163,7 @@ class App(QObject):
         self.settings.set_log(self.book.sessions)
         self.settings.set_status(self._status_text)
         self.settings.show()
-        self.settings.raise_()
-        self.settings.activateWindow()
+        system.bring_to_front(self.settings)
 
     def apply_settings(self):
         self.hotkeys.set_hotkey(self.cfg.hotkey)
@@ -2206,7 +2205,10 @@ class App(QObject):
         args = [a for a in sys.argv[1:] if a != RESTARTED and not a.startswith(WIZARD_THEME)] + [RESTARTED]
         if wizard_theme:
             args.append(WIZARD_THEME + wizard_theme)
-        if paths.FROZEN:   # the installed exe: argv[0] is the exe itself
+        bundle = os.environ.get("ARTVOICEINPUT_APP") if system.MAC else None
+        if paths.FROZEN and bundle:   # the Mac app: started as that app again, so its permissions hold
+            QProcess.startDetached("/usr/bin/open", ["-n", "-a", bundle, "--args"] + args, os.getcwd())
+        elif paths.FROZEN:   # the installed exe: argv[0] is the exe itself
             QProcess.startDetached(sys.executable, args, os.getcwd())
         else:
             QProcess.startDetached(sys.executable, [os.path.abspath(sys.argv[0])] + args, os.getcwd())
@@ -2473,6 +2475,7 @@ def main():
     qapp = QApplication(sys.argv)
     qapp.setQuitOnLastWindowClosed(False)
     qapp.setWindowIcon(appicon.icon())   # the settings window on the taskbar and in Alt+Tab
+    system.setup(qapp)
 
     lock = QLockFile(str(paths.LOCK_PATH))
     if not lock.tryLock(10000 if RESTARTED in sys.argv else 100):   # restarted: the old one is still closing
@@ -2483,6 +2486,7 @@ def main():
 
     recover_mute()   # killed while listening last time: the speakers come back (not in App: tests build one)
     app = App(qapp)  # noqa: F841 (keep reference alive)
+    system.permissions(app._notify)   # the Mac asks for the microphone, Accessibility and Input Monitoring
     server = QLocalServer()
     QLocalServer.removeServer(PIPE)
 

@@ -1,0 +1,98 @@
+name: macOS
+
+# Builds the Mac setup .dmg on Apple Silicon and Intel, after the checks that need no permission or person:
+# dev/mac_smoke.py (modules, key tables, clipboard, windows, recognition), dev/headless.py (the real App against a
+# simulated text box) and an install from the .dmg that launches the app until it is ready.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**", "website/**"]
+  workflow_dispatch:
+
+jobs:
+  mac:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15-intel]   # Apple Silicon; Intel (the user's iMac 2019)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Packages
+        run: |
+          sw_vers; uname -m
+          python -m pip install -r requirements.txt pyinstaller pyflakes
+
+      - name: Lint
+        run: python -m pyflakes artvoiceinput installer dev/mac_smoke.py dev/headless.py | grep -v "imported but unused\|unable to detect undefined names" || true
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/Library/Application Support/ArtVoiceInput-dev/models
+          key: models-xasr-2026-06-03-vad
+
+      - name: Models
+        run: |
+          python -m artvoiceinput.models xasr
+          python -c "from artvoiceinput import models; print(models.vad_path())"
+
+      - name: Smoke test
+        run: python dev/mac_smoke.py "$RUNNER_TEMP/smoke"
+
+      - name: Headless end-to-end
+        run: |
+          T="$RUNNER_TEMP/hl"; mkdir -p "$T"; cp -R dev/testdata/wav "$T/wav"
+          python dev/headless.py "$T" "rules:default,tap0,feed:a,feed:nl,feed:b,feed:dot,tap" | tee "$T/out.txt"
+          grep -q "今天天氣很好。" "$T/out.txt"
+          grep -q "我們明天去爬山。" "$T/out.txt"
+
+      - name: Build the .dmg
+        run: python installer/build_mac.py
+
+      - name: Install from the .dmg and launch
+        run: |
+          DMG=$(ls dist/*.dmg)
+          hdiutil attach "$DMG" -mountpoint /Volumes/avi -nobrowse
+          "/Volumes/avi/安裝阿特語音輸入法.app/Contents/MacOS/ArtVoiceInputSetup" --quiet
+          hdiutil detach /Volumes/avi
+          APP="/Applications/Art VoiceInput.app"
+          [ -d "$APP" ] || APP="$HOME/Applications/Art VoiceInput.app"
+          codesign --verify --strict --verbose "$APP"
+          codesign -dvvv "$APP" 2>&1 | grep -E "Identifier|CDHash"
+          ls "$HOME/Library/Application Support/ArtVoiceInput/app" | head
+          open -a "$APP" --args --autostart
+          LOG="$HOME/Library/Application Support/ArtVoiceInput/artvoiceinput.log"
+          for i in $(seq 1 60); do grep -q "就緒" "$LOG" 2>/dev/null && break; sleep 2; done
+          cat "$LOG"
+          grep -q "就緒" "$LOG"
+          pkill -f "Application Support/ArtVoiceInput/app/ArtVoiceInput" || true
+
+      - name: Launcher bundle (commit it as packaging/mac/launcher once its signature is right)
+        run: ditto -c -k --keepParent "build/Art VoiceInput.app" "$RUNNER_TEMP/launcher.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ArtVoiceInput-mac-${{ runner.arch }}
+          path: dist/*.dmg
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diagnostics-${{ runner.arch }}
+          path: |
+            ${{ runner.temp }}/smoke/*.png
+            ${{ runner.temp }}/hl/*.txt
+            ${{ runner.temp }}/launcher.zip
+            ~/Library/Application Support/ArtVoiceInput/artvoiceinput.log
+          retention-days: 14

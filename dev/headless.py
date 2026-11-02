@@ -93,7 +93,7 @@ class Box:
                 self.clip = self.text[self.sel[0]:self.sel[1]]
                 if vks[1] == 0x58:
                     self.delete()
-        elif vks == (0x11, 0x56):   # Ctrl+V
+        elif vks in ((0x11, 0x56), (0x5B, 0x56)):   # Ctrl+V, Command+V
             self.paste(self.clip)
         else:
             print(f"      [按鍵] {[hex(v) for v in vks]}")

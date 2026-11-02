@@ -24,6 +24,19 @@ def setup(qapp) -> None:
     """Nothing to do before the first window on Windows."""
 
 
+def set_dock(shown: bool) -> None:
+    """The Mac's Dock icon: Windows shows the window on the taskbar by itself."""
+
+
+def bring_to_front(widget) -> None:
+    widget.raise_()
+    widget.activateWindow()
+
+
+def permissions(notify) -> None:
+    """Nothing to allow on Windows."""
+
+
 def double_click_time() -> float:
     return _u32.GetDoubleClickTime() / 1000
 
