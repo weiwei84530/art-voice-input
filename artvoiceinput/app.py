@@ -1322,6 +1322,8 @@ class App(QObject):
                 text, tokens, times = self.recognizer.recognize_timed(
                     self.listener.audio(lo, piece.hi), _bias([(w, _COMMAND_SCORE) for w in names]))
                 head, tail = _split_at(text, tokens, times, [(0, lo)], piece.start - _MARK_SLACK)
+                if self._first_piece(piece):
+                    head, tail = "", text
                 tail = _one_command(tail, names)   # the boost may repeat it (結束結束)
                 if head.strip() and not state["drafted"] and ctx.selection is not None \
                         and edit.spelled(ctx.selection.text, text):
@@ -1422,11 +1424,19 @@ class App(QObject):
         info = dict(info or {}, redo_s=time.monotonic() - t0, bank=bank_of({"steps": steps}), piece_at=piece.at)
         self.main.emit(lambda: self._refine(start, anchor, settled, live, after, piece.hi, ctx, info, prior))
 
+    def _first_piece(self, piece) -> bool:
+        """No other speech in the open sentence before this piece: all the decoded text is the piece's. X-ASR may
+        time a first token well before the speech (in the lead-in or the silence before it): the user's 實際的實
+        split as 實 | 際的實 and was typed as text, not as 實 (2026-11-05)."""
+        return bool(self._spans) and all(p is piece for p in self._spans)
+
     def _ran_tail(self, text, tokens, times, index, piece, ctx, start, anchor, t0, info=None) -> bool:
         """The last piece, decoded after the speech before it, may be a command it was not alone: the user's 換行
         came out as "Hang Hung," alone and 送出 as "Contral.", as themselves after it, and were typed as text
         (2026-10-15). Then the speech before it is committed and the command runs (True)."""
         head, tail = _split_at(text, tokens, times, index, piece.start - _MARK_SLACK)
+        if self._first_piece(piece):
+            head, tail = "", text
         if not tail:
             return False
         if head.strip() and ctx.selection is not None and edit.spelled(ctx.selection.text, text):
