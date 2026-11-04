@@ -16,6 +16,8 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from artvoiceinput import appicon  # noqa: E402
 
+appicon.use_release()
+
 OUT = ROOT / "packaging" / "mac" / "appicon.icns"
 # ICNS element types holding PNG data, by pixel size (the @2x ones share sizes with plain ones)
 TYPES = [("icp4", 16), ("icp5", 32), ("ic07", 128), ("ic08", 256), ("ic09", 512), ("ic10", 1024), ("ic11", 32),

@@ -15,11 +15,13 @@ automatically; read it before reviving or redesigning something). Module docstri
 - Any UI design change (settings window, floating button, bubble, glow, 選字 menu, popups): use the design plugin
   skills (e.g. `design:design-critique`, `design:ux-copy`, `design:accessibility-review`) and
   `frontend-design:frontend-design` while designing it.
-- After every commit, restart Art VoiceInput (start it even if it isn't running), always with `--debug`:
+- After every commit, restart Art VoiceInput (start it even if it isn't running), always with `--debug`. If the
+  installed build (`ArtVoiceInput.exe`) is running, close it first, then start the development copy (2026-11-05,
+  the user's rule: one at a time, so the user knows which one they are testing):
 
   ```powershell
   $root = (git rev-parse --show-toplevel) -replace '/', '\'
-  $procs = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*$root\run.pyw*" }
+  $procs = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*$root\run.pyw*" -or $_.Name -eq 'ArtVoiceInput.exe' })
   if ($procs) {
       $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
       $procs | ForEach-Object { Wait-Process -Id $_.ProcessId -Timeout 10 -ErrorAction SilentlyContinue }
@@ -128,7 +130,7 @@ automatically; read it before reviving or redesigning something). Module docstri
 | `picker.py` | the 選字 menu |
 | `floatbtn.py` / `orbs.py` | floating button and bubble (`OrbButton`), the ten 按鈕樣式 looks |
 | `glow.py` | screen-edge glow while listening |
-| `appicon.py` | the app icon (design J 光澤: warm diagonal gradient, sheen, white mic): tray, wizard badge, window icon; `dev/build_icon.py` writes `appicon.ico` for the exe |
+| `appicon.py` | the app icon (design J 光澤: warm diagonal gradient, sheen, white mic; blue in a development copy, 2026-11-05): tray, wizard badge, window icon; `dev/build_icon.py` writes `appicon.ico` for the exe (`use_release`) |
 | `tray.py` | tray icon (the app icon, a turning ring on its square while listening), `promote` (taskbar, not ^) |
 | `ui/` | settings window (2026-10 redesign): `theme.py` tokens + QSS, `kit.py` widgets, `shell.py` home and transition, `window.py` app interface, `page_*.py` the six pages, `wizard.py` setup wizard, `tutorial.py` / `desk.py` / `sprite.py` the tutorial, `sheet.py` in-window question |
 | `logbook.py` | 辨識紀錄 rows |
@@ -260,7 +262,7 @@ and runs (nothing decoded when nothing was said since the last commit).
 and shown in 辨識紀錄. Order inside `format_text` matters: s2tw → filler removal → disfluencies → 百分之 →
 numerals → spelled letters → 點 → percent → number+letter → English punctuation → CJK/ASCII spacing → English
 sentence end → 嗎 questions → trailing punctuation.
-- OpenCC `s2tw` only (`s2twp` rewrites vocabulary: 程序 → 程式); then 臺 → 台, 熒幕/熒光 → 螢幕/螢光. 嗯 / 呃 removed.
+- OpenCC `s2tw` only (`s2twp` rewrites vocabulary: 程序 → 程式); then 臺 → 台, 熒幕/熒光 → 螢幕/螢光, 隻能/隻有 → 只能/只有 (s2tw took 這只能 as the classifier; `textfmt._GLYPH_FIXES`). 嗯 / 呃 removed.
 - Disfluencies (`remove_disfluencies`): restarts (3-6 chars), stutters, and 2-4 char chunks said twice only when
   listed as thinking words (`_DISFLUENT`: 還是, 關於, 我們 …; 2026-10-27, the user's choice after 嗶哩嗶哩 lost half);
   one repeated character kept when a word (剛剛), before 的 / 地 / 看 (用用看), a word starting at the second one after

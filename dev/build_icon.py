@@ -14,6 +14,8 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from artvoiceinput import appicon  # noqa: E402
 
+appicon.use_release()
+
 OUT = ROOT / "artvoiceinput" / "appicon.ico"
 
 

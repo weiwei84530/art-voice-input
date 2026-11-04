@@ -2,13 +2,25 @@
 square in a warm diagonal gradient (orange top left, the brand's red-orange, a little redder bottom right), a soft
 curved sheen over its top, a highlight along its top edge, and the logo's white microphone over a soft dark red
 shadow. Drawn on a 64 grid; `tile` alone is the base the tray's listening ring sits on. Used by the tray, the
-setup wizard's badge and every window's icon (`icon`)."""
+setup wizard's badge and every window's icon (`icon`). A development copy (not `paths.FROZEN`) is blue, so it is
+told apart from the installed build at a glance (2026-11-05, the user's request)."""
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 
+from . import paths
+
 SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)   # drawn for each, so 16px is not a scaled-down 256px
 RADIUS = 14                                       # on the 64 grid (22%)
-SHADOW = QColor("#780A00")
+# the gradient top left, middle, bottom right, and the microphone's shadow
+RELEASE = ("#FF6E3C", "#FF453A", "#EE3340", "#780A00")
+DEVELOPMENT = ("#3CB4FF", "#2F7BF5", "#3D5AFE", "#0A2A78")
+_COLORS = RELEASE if paths.FROZEN else DEVELOPMENT
+
+
+def use_release():
+    """The installed build's colors in a development copy: dev/build_icon.py and build_icns.py write the exe's."""
+    global _COLORS
+    _COLORS = RELEASE
 
 
 def tile(p: QPainter, s: float):
@@ -17,9 +29,9 @@ def tile(p: QPainter, s: float):
     p.save()
     p.setPen(Qt.NoPen)
     g = QLinearGradient(0, 0, s, s)
-    g.setColorAt(0, QColor("#FF6E3C"))
-    g.setColorAt(0.55, QColor("#FF453A"))
-    g.setColorAt(1, QColor("#EE3340"))
+    g.setColorAt(0, QColor(_COLORS[0]))
+    g.setColorAt(0.55, QColor(_COLORS[1]))
+    g.setColorAt(1, QColor(_COLORS[2]))
     p.setBrush(g)
     p.drawRoundedRect(QRectF(0, 0, s, s), RADIUS * k, RADIUS * k)
     # the sheen: the top of the square down to a shallow curve
@@ -68,7 +80,7 @@ def paint(p: QPainter, s: float):
     tile(p, s)
     k = s / 64
     # the soft shadow: nine faint copies spread round a point 1.6 units down (Qt has no blur for a painter)
-    shade = QColor(SHADOW)
+    shade = QColor(_COLORS[3])
     shade.setAlpha(18)
     for i in (-1, 0, 1):
         for j in (-1, 0, 1):

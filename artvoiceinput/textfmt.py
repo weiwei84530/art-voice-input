@@ -13,8 +13,9 @@ _t2s = opencc.OpenCC("t2s")
 
 
 # s2tw picks glyphs Taiwan does not use: 台 becomes 臺 (台北 -> 臺北), and 荧 becomes 熒 (X-ASR writes 荧幕 for
-# 螢幕, 2026-10-11); these are put back
-_GLYPH_FIXES = {"臺": "台", "熒幕": "螢幕", "熒光": "螢光"}
+# 螢幕, 2026-10-11); these are put back. 這只能 / 那只有 / 一只有 become 這隻能 …: 只 read as the classifier
+# (2026-11-05, the user's report; 這隻有點胖 is written 只 too, rarer)
+_GLYPH_FIXES = {"臺": "台", "熒幕": "螢幕", "熒光": "螢光", "隻能": "只能", "隻有": "只有"}
 
 
 def to_traditional(text: str) -> str:
