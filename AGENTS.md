@@ -59,7 +59,7 @@ automatically; read it before reviving or redesigning something). Module docstri
   隱私權與安全性 → 強制打開. Mac decisions (2026-11-02): menu bar icon clicks like Windows (`tray_click`; menu on the
   right button / Control-click), Dock icon only while the settings window is open (`system.set_dock`), 右 Alt → 右
   Option (Alt is Option, Win is Command in key names; the clipboard commands press Command, `system.SHORTCUT_MOD`).
-- Mac packaging (`installer/build_mac.py`, CI `.github/workflows/mac.yml` on macos-14 and macos-15-intel, the .dmg
+- Mac packaging (`installer/build_mac.py`, CI `.github/workflows/mac.yml` on macos-15 (Apple Silicon; macos-14 was retired, 2026-11) and macos-15-intel, the .dmg
   as an artifact for the user to try): our own Qt setup in a .dmg (the same window as Windows, `installer/ui.py` with
   `ops_mac.py`; no other place offered, no uninstaller yet). It puts the real app (PyInstaller onedir) in
   `~/Library/Application Support/ArtVoiceInput/app` and `Art VoiceInput.app`, a small launcher

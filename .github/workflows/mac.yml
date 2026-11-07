@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15-intel]   # Apple Silicon; Intel (the user's iMac 2019)
+        os: [macos-15, macos-15-intel]   # Apple Silicon; Intel (the user's iMac 2019)
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
