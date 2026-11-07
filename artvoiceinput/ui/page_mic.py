@@ -8,8 +8,11 @@ from PySide6.QtWidgets import (QAbstractButton, QComboBox, QFrame, QGridLayout, 
                                QLineEdit, QVBoxLayout, QWidget)
 
 from .. import audio
+from ..glow import style_for
 from ..keys import hotkey_label
+from ..orbs import palette
 from . import theme
+from .bubblepop import pop_bubble
 from .illus import Illustration
 from .kit import (Choice, Info, Pill, Switch, T, button, card, dim, hbox, label, prop, sep, titled, vbox)
 
@@ -208,6 +211,11 @@ class Option(QAbstractButton):
         self.setFixedHeight(46)
         self.setAccessibleName(name)
         self._over = False
+        self.tool = None   # a small button on its right (語音氣泡's 調整, shown while picked)
+
+    def resizeEvent(self, e):
+        if self.tool is not None:
+            self.tool.move(self.width() - self.tool.width() - 9, (self.height() - self.tool.height()) // 2)
 
     def enterEvent(self, e):
         self._over = True
@@ -248,14 +256,51 @@ class Option(QAbstractButton):
             p.setPen(QPen(T("muted"), 1.5))
             p.setBrush(Qt.NoBrush)
             p.drawEllipse(QRectF(8.75, c - 7.25, 14.5, 14.5))
+        room = r.width() - 40 - (self.tool.width() + 8 if self.tool is not None and self.tool.isVisible() else 0)
         p.setPen(T("ink"))
         p.setFont(theme.font(13.5, 500))
-        p.drawText(QRectF(34, 5, r.width() - 40, 19), Qt.AlignLeft | Qt.AlignVCenter, self.name)
+        p.drawText(QRectF(34, 5, room, 19), Qt.AlignLeft | Qt.AlignVCenter, self.name)
         p.setPen(T("muted"))
         p.setFont(theme.font(12))
         fm = p.fontMetrics()
-        p.drawText(QRectF(34, 24, r.width() - 40, 17), Qt.AlignLeft | Qt.AlignVCenter,
-                   fm.elidedText(self.desc, Qt.ElideRight, int(r.width() - 40)))
+        p.drawText(QRectF(34, 24, room, 17), Qt.AlignLeft | Qt.AlignVCenter,
+                   fm.elidedText(self.desc, Qt.ElideRight, int(room)))
+
+
+class TuneButton(QAbstractButton):
+    """28px, a sliders icon (design A of the bubble mockups, 2026-11-07): opens 語音氣泡's card."""
+
+    def __init__(self, parent: QWidget, name: str):
+        super().__init__(parent)
+        self.setFixedSize(28, 28)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setAccessibleName(name)
+        self.open = False
+
+    def enterEvent(self, e):
+        self.update()
+
+    def leaveEvent(self, e):
+        self.update()
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        lit = self.open or self.underMouse() or self.hasFocus()
+        p.setPen(QPen(T("acc") if lit else T("line"), 1))
+        p.setBrush(T("tile"))
+        p.drawRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), 7, 7)
+        color = T("acc") if lit else T("muted")
+        p.setPen(QPen(color, 1.6, Qt.SolidLine, Qt.RoundCap))
+        p.setBrush(Qt.NoBrush)
+        # two lines with a knob each (16px icon in the middle)
+        p.translate(6, 6)
+        p.drawLine(QPointF(2, 4), QPointF(9, 4))
+        p.drawLine(QPointF(13, 4), QPointF(14, 4))
+        p.drawLine(QPointF(2, 12), QPointF(4, 12))
+        p.drawLine(QPointF(8, 12), QPointF(14, 12))
+        p.drawEllipse(QPointF(11, 4), 2, 2)
+        p.drawEllipse(QPointF(6, 12), 2, 2)
 
 
 def _row(text: QWidget, switch: QWidget) -> QHBoxLayout:
@@ -305,7 +350,7 @@ class MicPage(QWidget):
         self.near_pill = Pill()
         c.addLayout(hbox(label("點進輸入框時", h3=True), Info(
             "用滑鼠左鍵點進可以打字的地方時：\n・語音氣泡：點擊處旁出現小按鈕，點一下開麥克風；打字、捲動滾輪或點到不能打字的"
-            "地方就收起來\n・自動開麥克風：在語音氣泡會出現的時候直接開麥克風（用鍵盤移進輸入框不算）"), None,
+            "地方就收起來；右邊的調整鈕可以改它出現的方向、距離和自動收起的時間\n・自動開麥克風：在語音氣泡會出現的時候直接開麥克風（用鍵盤移進輸入框不算）"), None,
             self.near_pill, spacing=6))
         self.nears = {}
         box = vbox(spacing=2)
@@ -314,6 +359,9 @@ class MicPage(QWidget):
             o.clicked.connect(lambda _=False, k=key: self._near(k))
             self.nears[key] = o
             box.addWidget(o)
+        bubble = self.nears["bubble"]
+        self.tune = bubble.tool = TuneButton(bubble, "調整氣泡的位置和自動收起")
+        self.tune.clicked.connect(self._tune)
         c.addLayout(box)
         c.addStretch(1)
         grid.addWidget(self.near_card, 0, 1)
@@ -487,7 +535,20 @@ class MicPage(QWidget):
         key = "listen" if self.cfg.auto_listen else "bubble" if self.cfg.show_bubble else ""
         for k, o in self.nears.items():
             o.setChecked(k == key)
+        self.tune.setVisible(key == "bubble")
+        self.nears["bubble"].update()
         self.near_pill.set({"": "未使用", "bubble": "語音氣泡", "listen": "自動開"}[key], bool(key))
+
+    def _tune(self):
+        """語音氣泡's card: direction, distance, auto-hide."""
+        def closed():
+            self.tune.open = False
+            self.tune.update()
+            self.win.save()
+        self.tune.open = True
+        self.tune.update()
+        colors = palette(style_for(self.cfg.glow, self.cfg.glow_edits))
+        pop_bubble(self.cfg, colors, self.tune, lambda: None, self.win.save, closed)
 
     def _float(self, key: str, on: bool):
         setattr(self.cfg, key, on)

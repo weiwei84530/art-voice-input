@@ -1,6 +1,8 @@
 """Shows the redesigned settings window on a copy of the settings, so nothing of the user's is written.
 
-    .venv/Scripts/python dev/settings_preview.py [page | wizard[2|3] | tutorial[N]] [--dark] [--shot out.png]
+    .venv/Scripts/python dev/settings_preview.py [page | wizard[2|3] | tutorial[N]] [--dark] [--bubble] [out.png]
+
+--bubble opens 語音氣泡's card on the 麥克風 page (give the page: mic), saved as out-card.png too.
 
 tutorialN opens the tutorial at chapter N (1-based); it decodes nothing (no recognizer: the speech steps say the
 model is getting ready), dev/tutorial_check.py drives it.
@@ -86,11 +88,17 @@ def main():
         QTimer.singleShot(200, lambda: win.open_page(page))
         if scroll:
             QTimer.singleShot(1300, lambda: win.pages[page].scroll.verticalScrollBar().setValue(scroll))
+    if "--bubble" in args:   # 語音氣泡's card open (the 麥克風 page)
+        QTimer.singleShot(1300, lambda: win.pages["mic"].page.tune.click())
     if shot:
         def grab():
             win.grab().save(shot)
+            if "--bubble" in args:   # the card is a window of its own: beside the shot, -card.png
+                from artvoiceinput.ui import bubblepop
+                if bubblepop._open is not None:
+                    bubblepop._open.grab().save(shot[:-4] + "-card.png")
             app.quit()
-        QTimer.singleShot(1600 if page or win.wizard or win.tutorial else 600, grab)
+        QTimer.singleShot(2600 if "--bubble" in args else 1600 if page or win.wizard or win.tutorial else 600, grab)
     app.exec()
 
 

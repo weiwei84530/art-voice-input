@@ -14,6 +14,8 @@ DEBUG = False
 # colors (highlight.COLORS) are 0x5A-0x78
 MARK_ALPHA = 0x6E
 BUTTON_SCALE_RANGE = (75, 125)
+BUBBLE_GAP_RANGE = (0, 60)   # px between the click and the bubble's edge
+BUBBLE_HIDE_MAX = 15        # seconds
 
 
 @dataclass
@@ -65,6 +67,13 @@ class Config:
     # auto_listen): the bubble by the click that put the focus in a text box, and the draggable floating button
     # (kept on screen with float_rec, a fixed place to turn listening off); either may go with auto_listen
     show_bubble: bool = True
+    # where the bubble shows (2026-11-07, the user's design: 語音氣泡's small button on the 麥克風 page opens a card):
+    # the direction from the click, degrees clockwise from the right; the gap between the click and the bubble's edge
+    # in px (the click is the middle of the text cursor, the I-beam, so 0° reads as right of the cursor)
+    bubble_angle: int = 0
+    bubble_gap: int = 10
+    # seconds the bubble stays when nobody points at it (0: until typing, the wheel or the focus moves it away)
+    bubble_hide: int = 0
     # 點進輸入框時 自動開麥克風 (the 麥克風 page): a left click that puts the focus in a text box turns listening on,
     # at the moments the bubble would show (2026-10-20, the user's design; keyboard focus does nothing). One choice
     # with show_bubble (點進輸入框時: 不使用 / bubble / this), so at most one of them is on
@@ -141,6 +150,9 @@ class Config:
         if len(mark) == 9 and mark.startswith("#") and int(mark[1:3], 16) > 0x78:   # a 自訂 picked with its own opacity
             cfg.highlight_color = f"#{MARK_ALPHA:02X}{mark[3:].upper()}"
         cfg.button_scale = min(max(int(cfg.button_scale), BUTTON_SCALE_RANGE[0]), BUTTON_SCALE_RANGE[1])
+        cfg.bubble_angle = int(cfg.bubble_angle) % 360
+        cfg.bubble_gap = min(max(int(cfg.bubble_gap), BUBBLE_GAP_RANGE[0]), BUBBLE_GAP_RANGE[1])
+        cfg.bubble_hide = min(max(int(cfg.bubble_hide), 0), BUBBLE_HIDE_MAX)
         cfg.save_recordings = DEBUG   # no setting (2026-10-20): recordings are kept exactly in debug mode
         if "rules" in data:
             old = rules.upgrade([rules.Rule.from_dict(d) for d in data["rules"]], data.get("rules_version", 1))

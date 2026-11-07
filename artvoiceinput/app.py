@@ -594,6 +594,7 @@ class App(QObject):
         colors = palette(style_for(self.cfg.glow, self.cfg.glow_edits))
         for w in (self.float_btn, self.bubble):
             w.set_look(self.cfg.button_look, colors, self.cfg.orb_lite, self.cfg.button_scale)
+        self.bubble.set_place(self.cfg.bubble_angle, self.cfg.bubble_gap, self.cfg.bubble_hide)
 
     def _float_moved(self, fx: float, fy: float):
         self.cfg.float_pos = [round(fx, 4), round(fy, 4)]

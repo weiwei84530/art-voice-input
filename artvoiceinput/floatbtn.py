@@ -16,6 +16,8 @@ Where it shows is the 麥克風 page's three ticks (`float_away`, `float_box`, `
 按鈕大小 (`button_scale`, 75-125%) scales both buttons.
 """
 
+import math
+
 from PySide6.QtCore import QEasingCurve, QPoint, QPointF, QRectF, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QCursor, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import QWidget
@@ -286,6 +288,20 @@ class Bubble(_OnTop):
     def __init__(self):
         super().__init__(self.SIZE)
         self._at = None   # the click it shows by (physical pixels)
+        self.angle, self.gap = 0, 10   # config.bubble_angle / bubble_gap (set by App.apply_settings)
+        # bubble_hide: gone after that many seconds with the pointer not on it (2026-11-07, the user's request)
+        self._linger = QTimer(self, singleShot=True, timeout=self.fade_out)
+
+    def set_place(self, angle: int, gap: int, hide: int):
+        self.angle, self.gap = angle, gap
+        self._linger.setInterval(max(0, hide) * 1000)
+        if hide <= 0:
+            self._linger.stop()
+
+    def _count(self):
+        """(Re)start the time it stays, unless it stays until something moves it away."""
+        if self._linger.interval() > 0 and not self._over:
+            self._linger.start()
 
     def show_at(self, pt):
         """By the click at pt (x, y) in physical pixels: just right of it, centered on it, kept on screen. Fading in,
@@ -298,9 +314,11 @@ class Bubble(_OnTop):
             self._place()
             self.update()
             self._fade_to(1.0, 160)
+            self._count()
             return
         self._place()
         self.fade_in(160)
+        self._count()
 
     def _place(self):
         if self._at is None:
@@ -309,11 +327,39 @@ class Bubble(_OnTop):
         screen = QGuiApplication.screenAt(p) or QGuiApplication.primaryScreen()
         a = screen.availableGeometry()
         size, m = self.bsize, self.margin
-        self.move(min(max(p.x() + 10, a.left()), a.right() - size) - m,
-                  min(max(p.y() - size // 2, a.top()), a.bottom() - size) - m)
+        # its middle gap + half its size from the click, in the chosen direction (0°: its left edge gap px right of
+        # the click, centered on it, as before the setting)
+        x, y = bubble_offset(self.angle, self.gap, size)
+        self.move(min(max(round(p.x() + x - size / 2), a.left()), a.right() - size) - m,
+                  min(max(round(p.y() + y - size / 2), a.top()), a.bottom() - size) - m)
+
+    def enterEvent(self, e):
+        self._linger.stop()   # pointed at: it waits
+        super().enterEvent(e)
+
+    def leaveEvent(self, e):
+        super().leaveEvent(e)
+        if self.isVisible() and not self.leaving:
+            self._count()
+
+    def hideEvent(self, e):
+        self._linger.stop()
+        super().hideEvent(e)
+
+    def burst(self):
+        self._linger.stop()
+        super().burst()
 
     def _resized(self):
         self._place()
+
+
+def bubble_offset(angle: float, gap: float, size: float) -> tuple[float, float]:
+    """The bubble's middle from the click (logical px): gap from the click to its edge, angle clockwise from the
+    right. Shared with the settings card's dial."""
+    r = gap + size / 2
+    a = math.radians(angle)
+    return r * math.cos(a), r * math.sin(a)
 
 
 def _logical(x: int, y: int):
