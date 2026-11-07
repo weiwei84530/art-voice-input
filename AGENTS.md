@@ -100,6 +100,9 @@ automatically; read it before reviving or redesigning something). Module docstri
 - Version (`artvoiceinput.__version__`; the user's rule, 2026-11-01): every build the user asks for raises it one
   step before building, normally the third number (0.9.1 → 0.9.2) for small changes; raising the second number
   (0.9.x → 0.10.0) only after asking the user with options.
+  A build is both platforms (the user's rule, 2026-11-07): Windows here (`installer/build.py`), macOS by CI
+  (`mac.yml` runs on a push to main; the .dmg artifacts from both runners), so a build ends with a push; ask before
+  pushing unless the request already says so.
 - Fixed models, no model choice, no LLM (`models.py`; URL
   `https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/<dir>.tar.bz2`):
   recognition X-ASR int8 `sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03` (130MB, ~0.75s per
