@@ -164,10 +164,11 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
   only at the next click into a text box (2026-10-20). Placed at the click because UIA caret positions are wrong in Notion, LINE, web pages.
   Place and auto-hide (2026-11-07, the user's design B of the mockups, opened by a small 調整 button on the 語音氣泡
   row like the color picker; `ui/bubblepop.py`): `bubble_angle` (clockwise from the right) and `bubble_gap` (px from
-  the click to its edge, 0-60, default 10 = the old place) measured from the click, which is the I-beam's middle
-  (the user thinks of the whole cursor's middle; the card draws an I-beam, not an arrow); `bubble_hide` 0-15 s
-  (0 = 不收起, default), paused while the pointer is on it. The card's dial is real size, the bubble dragged sets
-  both; a faint gray arc counts down, the bubble fades out, waits, comes back (gray: orange read as the real UI).
+  the click to its edge, 0-60) measured from the click, which is the I-beam's middle (the user thinks of the whole
+  cursor's middle; the card draws an I-beam, not an arrow); `bubble_hide` 0-15 s (0 = 不收起), paused while the
+  pointer is on it. Defaults 0° / 20 px / 3 s (the user's choice). The card's dial is real size, the bubble dragged
+  sets angle and distance, sliders 角度 / 距離 / 自動收起 follow; 恢復預設 keeps its room when hidden; a faint gray arc
+  counts down, the bubble fades out, waits, comes back (gray: orange read as the real UI).
 - **Floating button** (2026-10-22, the user's design: three ticks, multi-select, any one turns it on, `show_float`
   derived): 未偵測到輸入區域時顯示 `float_away`, 偵測到輸入區域時顯示 `float_box`, 錄音時顯示 `float_rec` (old configs:
   show_float with float_text_only / float_keep migrated in `Config.from_data`); `float_pos`, [] until dragged: 24px in

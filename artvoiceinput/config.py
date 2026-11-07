@@ -71,9 +71,10 @@ class Config:
     # the direction from the click, degrees clockwise from the right; the gap between the click and the bubble's edge
     # in px (the click is the middle of the text cursor, the I-beam, so 0° reads as right of the cursor)
     bubble_angle: int = 0
-    bubble_gap: int = 10
-    # seconds the bubble stays when nobody points at it (0: until typing, the wheel or the focus moves it away)
-    bubble_hide: int = 0
+    bubble_gap: int = 20
+    # seconds the bubble stays when nobody points at it (0: until typing, the wheel or the focus moves it away;
+    # defaults 0° / 20 px / 3 s, the user's choice of 2026-11-07)
+    bubble_hide: int = 3
     # 點進輸入框時 自動開麥克風 (the 麥克風 page): a left click that puts the focus in a text box turns listening on,
     # at the moments the bubble would show (2026-10-20, the user's design; keyboard focus does nothing). One choice
     # with show_bubble (點進輸入框時: 不使用 / bubble / this), so at most one of them is on

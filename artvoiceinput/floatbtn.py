@@ -288,7 +288,7 @@ class Bubble(_OnTop):
     def __init__(self):
         super().__init__(self.SIZE)
         self._at = None   # the click it shows by (physical pixels)
-        self.angle, self.gap = 0, 10   # config.bubble_angle / bubble_gap (set by App.apply_settings)
+        self.angle, self.gap = 0, 20   # config.bubble_angle / bubble_gap (set by App.apply_settings)
         # bubble_hide: gone after that many seconds with the pointer not on it (2026-11-07, the user's request)
         self._linger = QTimer(self, singleShot=True, timeout=self.fade_out)
 

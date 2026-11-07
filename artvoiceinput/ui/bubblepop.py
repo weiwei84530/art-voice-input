@@ -4,7 +4,7 @@ color picker): where the bubble shows and when it goes by itself.
 - The dial is drawn at real size: the text cursor (I-beam) in the middle stands for the click, which is its middle,
   the bubble (the look picked on 外觀與聲音, at its size) sits gap px from it in its direction, on a ring that grows
   with the gap. Dragging the bubble (or pressing anywhere on the dial) sets direction and gap at once.
-- 距離 in px, 自動收起 0-15 seconds in steps of one (0: 不收起).
+- 角度 in degrees (0 right, clockwise; the drag moves it too), 距離 in px, 自動收起 0-15 seconds in steps of one (0: 不收起).
 - With a time set, a faint gray arc round the bubble empties over it, then the bubble fades out, stays away a moment
   and comes back (the user asked for gray and quiet: an orange arc read as part of the real bubble). Nothing moves
   with 節流模式.
@@ -25,6 +25,13 @@ WIDTH = 268           # the card
 DIAL_H = 184          # the widest ring (gap 60) with the bubble and its light fits
 _GONE_MS = 450        # how long the bubble stays away after its time ran out in the preview
 _FADE_MS = 160        # the real bubble's fade
+
+
+_DEFAULT = config.Config()   # 恢復預設 puts back its bubble_* values
+
+
+def _values(cfg) -> tuple:
+    return cfg.bubble_angle, cfg.bubble_gap, cfg.bubble_hide
 
 
 def hide_text(s: int) -> str:
@@ -82,7 +89,7 @@ class Dial(QWidget):
             for a, b in beam:
                 p.drawLine(a, b)
         if self.left < 1.0 or self.property("counting"):
-            o = self.orb_center()
+            o = QRectF(self.orb.geometry()).center()   # where it is drawn (its place is rounded to whole px)
             rr = self.size / 2 + 4
             p.setPen(QPen(T("muted", 0.35), 1.5, Qt.SolidLine, Qt.RoundCap))
             p.drawArc(QRectF(o.x() - rr, o.y() - rr, 2 * rr, 2 * rr), 90 * 16, round(-360 * 16 * self.left))
@@ -142,6 +149,9 @@ class BubblePop(QWidget):
         v.setSpacing(6)
         title = label("氣泡位置", b14=True)
         self.reset = theme_link("恢復預設", self._reset)
+        keep = self.reset.sizePolicy()
+        keep.setRetainSizeWhenHidden(True)   # shown or not, nothing under it moves (the user's report)
+        self.reset.setSizePolicy(keep)
         top = QHBoxLayout()
         top.addWidget(title)
         top.addStretch(1)
@@ -154,6 +164,15 @@ class BubblePop(QWidget):
         self.dial.moved.connect(self._dial_moved)
         self.dial.released.connect(self.done)
         v.addWidget(self.dial)
+
+        self.angle_value = value_label()
+        self.angle = slider(0, 359, cfg.bubble_angle, "氣泡在游標的哪個方向（角度，0 是右邊，順時針）")
+        self.angle.setPageStep(15)
+        self.angle.valueChanged.connect(self._angle_moved)
+        self.angle.sliderReleased.connect(self.done)
+        v.addLayout(row(label("角度"), self.angle_value))
+        v.addWidget(self.angle)
+        v.addSpacing(2)
 
         lo, hi = config.BUBBLE_GAP_RANGE
         self.gap_value = value_label()
@@ -187,39 +206,42 @@ class BubblePop(QWidget):
 
     # --- values
     def _show_values(self):
-        self.gap_value.setText(f"{self.cfg.bubble_gap} px")
-        self.hide_value.setText(hide_text(self.cfg.bubble_hide))
-        self.reset.setVisible((self.cfg.bubble_angle, self.cfg.bubble_gap) != (0, 10))
+        """Sliders and the dial from the config (the one being moved too: setting it again changes nothing)."""
+        cfg = self.cfg
+        for s, value in ((self.angle, cfg.bubble_angle), (self.gap, cfg.bubble_gap),
+                         (self.hide_slider, cfg.bubble_hide)):
+            s.blockSignals(True)
+            s.setValue(value)
+            s.blockSignals(False)
+        self.dial.angle, self.dial.gap = cfg.bubble_angle, cfg.bubble_gap
+        self.dial.place_orb()
+        self.angle_value.setText(f"{cfg.bubble_angle}°")
+        self.gap_value.setText(f"{cfg.bubble_gap} px")
+        self.hide_value.setText(hide_text(cfg.bubble_hide))
+        self.reset.setVisible(_values(cfg) != _values(_DEFAULT))
+
+    def _set(self, **values):
+        for k, value in values.items():
+            setattr(self.cfg, "bubble_" + k, value)
+        self._show_values()
+        self.changed.emit()
 
     def _dial_moved(self):
-        self.cfg.bubble_angle, self.cfg.bubble_gap = self.dial.angle, self.dial.gap
-        self.gap.blockSignals(True)
-        self.gap.setValue(self.dial.gap)
-        self.gap.blockSignals(False)
-        self._show_values()
-        self.changed.emit()
+        self._set(angle=self.dial.angle, gap=self.dial.gap)
+
+    def _angle_moved(self, value: int):
+        self._set(angle=value)
 
     def _gap_moved(self, value: int):
-        self.cfg.bubble_gap = self.dial.gap = value
-        self.dial.place_orb()
-        self._show_values()
-        self.changed.emit()
+        self._set(gap=value)
 
     def _hide_moved(self, value: int):
-        self.cfg.bubble_hide = value
-        self._show_values()
-        self.changed.emit()
+        self._set(hide=value)
         self._restart()
 
     def _reset(self):
-        self.cfg.bubble_angle, self.cfg.bubble_gap = 0, 10
-        self.dial.angle, self.dial.gap = 0, 10
-        self.gap.blockSignals(True)
-        self.gap.setValue(10)
-        self.gap.blockSignals(False)
-        self.dial.place_orb()
-        self._show_values()
-        self.changed.emit()
+        self._set(**dict(zip(("angle", "gap", "hide"), _values(_DEFAULT))))
+        self._restart()
         self.done.emit()
 
     # --- the countdown preview
