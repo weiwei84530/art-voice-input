@@ -198,7 +198,10 @@ Listening is a switch: on, it takes text, spoken commands and mouse edits until 
   front. Windows Terminal reports a wide character 3 cells wide (it takes 2).
 - **Pastes** (`output.paste_text`): Win32 clipboard owned by a hidden window (Qt's lazy clipboard let a following
   paste replace the data before Windows Terminal read it); wait 0.15s after the last Ctrl+V; clipboard (all formats)
-  restored 0.4s after a run's last paste, or at once before a copy (`output.restore_now`).
+  restored 0.4s after a run's last paste, or at once before a copy (`output.restore_now`), unless something else
+  was copied meanwhile (clipboard sequence number differs; 2026-11-07, the user's report: their copy was thrown
+  away). Our pastes and a plain-text restore carry Windows' no-history formats (not in Win+V or cloud clipboard;
+  macOS: the transient type); an image / rich-text restore goes through Qt unmarked.
 - **Mute** (`mute_while_recording`, Core Audio): only a mute we set is undone; a `.muted` marker lets the next launch
   unmute after a kill (`mute.recover`).
 

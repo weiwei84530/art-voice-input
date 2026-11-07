@@ -43,9 +43,39 @@ def set_clipboard(text: str) -> bool:
         if not _u32.SetClipboardData(13, h):   # CF_UNICODETEXT; the clipboard owns h once this succeeds
             _k32.GlobalFree(h)
             return False
+        for name, value in _NO_HISTORY:
+            _set_bytes(_format(name), value)
         return True
     finally:
         _u32.CloseClipboard()
+
+
+# Formats telling Windows' clipboard history (Win+V), cloud clipboard and clipboard managers to leave this out: every
+# dictated piece used to land in Win+V's list, and the clipboard put back after it a second time (2026-11-07)
+_NO_HISTORY = (("ExcludeClipboardContentFromMonitorProcessing", b"\0"),
+               ("CanIncludeInClipboardHistory", b"\0\0\0\0"), ("CanUploadToCloudClipboard", b"\0\0\0\0"))
+_u32.RegisterClipboardFormatW.argtypes = [wt.LPCWSTR]
+_u32.RegisterClipboardFormatW.restype = wt.UINT
+_u32.GetClipboardSequenceNumber.restype = wt.DWORD
+
+
+def _format(name: str) -> int:
+    return _u32.RegisterClipboardFormatW(name)
+
+
+def _set_bytes(fmt: int, value: bytes) -> None:
+    """While the clipboard is open."""
+    h = _k32.GlobalAlloc(0x0002, len(value))
+    p = _k32.GlobalLock(h)
+    ctypes.memmove(p, value, len(value))
+    _k32.GlobalUnlock(h)
+    if not _u32.SetClipboardData(fmt, h):
+        _k32.GlobalFree(h)
+
+
+def clipboard_seq() -> int:
+    """A number that changes whenever anything puts something on the clipboard."""
+    return _u32.GetClipboardSequenceNumber()
 
 
 def send_paste() -> None:

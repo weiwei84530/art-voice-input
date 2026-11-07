@@ -22,6 +22,16 @@ _lock = threading.Lock()
 _pasted_at = 0.0
 _original = None          # the clipboard before a run of pastes, put back after the last one
 _restore_timer = None
+# the clipboard's sequence number right after our text went on it: a different one at restore time means the user
+# copied something within the 0.4s, and putting the older clipboard back used to throw their copy away (2026-11-07;
+# while talking every pause retypes the draft, so the 0.4s came again and again)
+_ours = -1
+
+
+def _borrowed() -> bool:
+    """The clipboard still holds a paste's text, to be put back."""
+    return (_restore_timer is not None and _restore_timer.isActive()
+            and _keys.clipboard_seq() == _ours)
 
 # the clipboard's last texts, oldest first, without what a paste borrowed it for (watch_clipboard): Claude Code copies
 # a mouse selection as it is made, so selecting the text to paste over replaced what 複製 had copied (2026-10-17)
@@ -52,14 +62,16 @@ def _snapshot(cb) -> QMimeData | None:
 
 def paste_text(text: str) -> None:
     """Must be called on the Qt main thread."""
-    global _pasted_at, _original, _restore_timer
+    global _pasted_at, _original, _restore_timer, _ours
     if not text:
         return
     _settle()
     cb = QGuiApplication.clipboard()
-    if _restore_timer is not None and _restore_timer.isActive():
+    if _borrowed():
         _restore_timer.stop()   # pasted again before the clipboard was put back: it still holds our text
     else:
+        if _restore_timer is not None:
+            _restore_timer.stop()   # the user copied something meanwhile: that is what to put back now
         try:
             snap = _snapshot(cb)
         except Exception:
@@ -67,15 +79,20 @@ def paste_text(text: str) -> None:
         _original = (snap, cb.text())
     if not _keys.set_clipboard(text):
         cb.setText(text)
+    _ours = _keys.clipboard_seq()
     time.sleep(0.03)  # let the clipboard settle before pasting
     _keys.send_paste()
     with _lock:
         _pasted_at = time.monotonic()
 
     def restore():
+        if _keys.clipboard_seq() != _ours:
+            return   # copied by the user (or an app) since our paste: theirs stays, not the older one
         previous, previous_text = _original
-        if previous is not None and previous.formats():
-            cb.setMimeData(previous)
+        if previous is not None and set(previous.formats()) - {"text/plain"}:
+            cb.setMimeData(previous)   # an image, rich text …: Qt writes them (Win+V may list it once more)
+        elif previous_text and _keys.set_clipboard(previous_text):
+            pass   # plain text written as our pastes are, left out of Win+V's list (it is there from the copy)
         else:
             cb.setText(previous_text)
     # Restore after the target app has had time to read the clipboard
@@ -94,7 +111,7 @@ def watch_clipboard() -> None:
     cb = QGuiApplication.clipboard()
 
     def changed():
-        if _restore_timer is not None and _restore_timer.isActive():
+        if _borrowed():
             return   # a paste's text, put back soon
         note_clipboard(cb.text())
     cb.dataChanged.connect(changed)

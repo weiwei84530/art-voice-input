@@ -69,10 +69,22 @@ def _click(vk: int, down: bool) -> None:
     _post(e)
 
 
+# nspasteboard.org's marker: clipboard managers leave out what a paste only borrowed the clipboard for
+TRANSIENT = "org.nspasteboard.TransientType"
+
+
 def set_clipboard(text: str) -> bool:
     pb = NSPasteboard.generalPasteboard()
     pb.clearContents()
-    return bool(pb.setString_forType_(text, NSPasteboardTypeString))
+    ok = bool(pb.setString_forType_(text, NSPasteboardTypeString))
+    if ok:
+        pb.setString_forType_("", TRANSIENT)
+    return ok
+
+
+def clipboard_seq() -> int:
+    """A number that changes whenever anything puts something on the clipboard."""
+    return int(NSPasteboard.generalPasteboard().changeCount())
 
 
 def send_paste() -> None:
